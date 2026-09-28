@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kaasu — Expense Tracker</title>
+  <meta name="description" content="Type a few words, scan bills, and let Kaasu organise your money.">
+  <meta name="theme-color" content="#3f3cbb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- ============ Top bar ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="28" height="28">
+      <h1 id="view-title">Kaasu</h1>
+    </div>
+    <button id="sync-pill" class="pill" hidden aria-live="polite">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a5 5 0 0 1-.6-9.96A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9H7z"/></svg>
+      <span>Drive</span>
+    </button>
+  </header>
+
+  <main id="main">
+    <!-- ============ HOME ============ -->
+    <section id="view-home" class="view" data-title="Kaasu">
+      <div class="card quick">
+        <label for="quick" class="quick-label">What did you spend or get?</label>
+        <div class="quick-row">
+          <textarea id="quick" rows="1" placeholder="chai 20, petrol 500 upi…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"></textarea>
+          <button id="btn-mic" class="icon-btn" title="Speak" aria-label="Speak">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button id="btn-scan" class="icon-btn" title="Scan a bill" aria-label="Scan a bill">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+          </button>
+        </div>
+        <div id="preview" class="preview" aria-live="polite"></div>
+        <button id="btn-add" class="btn primary block" disabled>Add</button>
+        <div id="examples" class="examples">
+          <span>Try:</span>
+          <button>chai 20</button><button>petrol 500 upi</button><button>salary 55000</button>
+          <button>gave ravi 2000</button><button>ravi returned 1000</button><button>sip 5000</button>
+          <button>lunch 150 yesterday</button><button>took 500 from kumar</button>
+        </div>
+      </div>
+
+      <div class="card hero">
+        <div class="hero-head">
+          <span class="muted" id="hero-month">This month</span>
+          <span class="muted small" id="hero-sub"></span>
+        </div>
+        <div class="hero-label">Money left</div>
+        <div class="hero-value" id="hero-left">₹0</div>
+        <div class="tiles">
+          <div class="tile"><span class="dot" style="background:var(--c-spend)"></span><span class="tile-label">Spent</span><span class="tile-value" id="t-spent">₹0</span></div>
+          <div class="tile"><span class="dot" style="background:var(--c-income)"></span><span class="tile-label">Income</span><span class="tile-value" id="t-income">₹0</span></div>
+          <div class="tile"><span class="dot" style="background:var(--c-save)"></span><span class="tile-label">Saved</span><span class="tile-value" id="t-saved">₹0</span></div>
+        </div>
+        <div id="budget-box" class="budget" hidden>
+          <div class="budget-head"><span>Budget</span><span id="budget-text"></span></div>
+          <div class="meter"><span id="budget-fill"></span></div>
+        </div>
+        <button id="set-budget" class="link small">Set a monthly budget</button>
+      </div>
+
+      <button id="people-card" class="card people-card" hidden>
+        <div><span class="muted small">Others owe you</span><strong id="pc-owe-me" class="pos">₹0</strong></div>
+        <div><span class="muted small">You owe others</span><strong id="pc-i-owe">₹0</strong></div>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+
+      <div class="section-head"><h2>Recent</h2><button class="link" data-go="history">See all</button></div>
+      <div id="recent" class="list"></div>
+    </section>
+
+    <!-- ============ HISTORY ============ -->
+    <section id="view-history" class="view" data-title="History" hidden>
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Search: food, ravi, 500…" autocomplete="off">
+        <div class="month-nav">
+          <button class="icon-btn sm" id="h-prev" aria-label="Previous month"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+          <span id="h-month"></span>
+          <button class="icon-btn sm" id="h-next" aria-label="Next month"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+      </div>
+      <div class="chips" id="h-filters">
+        <button class="chip on" data-f="all">All</button>
+        <button class="chip" data-f="expense">Spent</button>
+        <button class="chip" data-f="income">Income</button>
+        <button class="chip" data-f="saving">Saved</button>
+        <button class="chip" data-f="people">Given / Taken</button>
+      </div>
+      <div id="h-summary" class="muted small h-summary"></div>
+      <div id="history" class="list"></div>
+    </section>
+
+    <!-- ============ PEOPLE ============ -->
+    <section id="view-people" class="view" data-title="Given & Taken" hidden>
+      <div class="tiles two">
+        <div class="tile big"><span class="tile-label">Others owe you</span><span class="tile-value pos" id="p-owe-me">₹0</span></div>
+        <div class="tile big"><span class="tile-label">You owe others</span><span class="tile-value" id="p-i-owe">₹0</span></div>
+      </div>
+      <p class="hint">Type <b>gave ravi 2000</b>, <b>took 500 from kumar</b>, <b>ravi returned 1000</b> or <b>paid back kumar 500</b> on the Home screen.</p>
+      <div id="people" class="list"></div>
+    </section>
+
+    <!-- ============ REPORTS ============ -->
+    <section id="view-reports" class="view" data-title="Reports" hidden>
+      <div class="chips" id="r-range">
+        <button class="chip on" data-r="month">Month</button>
+        <button class="chip" data-r="3m">3 months</button>
+        <button class="chip" data-r="year">Year</button>
+        <button class="chip" data-r="all">All time</button>
+      </div>
+      <div class="month-nav center">
+        <button class="icon-btn sm" id="r-prev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <span id="r-label"></span>
+        <button class="icon-btn sm" id="r-next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+
+      <div class="tiles four" id="r-tiles"></div>
+
+      <div class="card">
+        <h3>Quick insights</h3>
+        <ul id="r-insights" class="insights"></ul>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Where your money went</h3><button class="link small" data-table="r-cat-table">Table</button></div>
+        <div id="r-cats"></div>
+        <div id="r-cat-table" class="table-wrap" hidden></div>
+      </div>
+
+      <div class="card" id="r-daily-card">
+        <h3 id="r-daily-title">Spending each day</h3>
+        <div id="r-daily"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Income, spent &amp; saved — last 6 months</h3><button class="link small" data-table="r-trend-table">Table</button></div>
+        <div id="r-trend"></div>
+        <div id="r-trend-table" class="table-wrap" hidden></div>
+      </div>
+
+      <div class="card">
+        <h3>How you paid</h3>
+        <div id="r-modes"></div>
+      </div>
+
+      <div class="card">
+        <h3>Download this report</h3>
+        <div class="btn-grid">
+          <button class="btn" id="dl-csv">Excel (CSV)</button>
+          <button class="btn" id="dl-pdf">PDF report</button>
+          <button class="btn" id="dl-drive">Save to Google Drive</button>
+          <button class="btn" id="dl-json">Full backup</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section id="view-settings" class="view" data-title="Settings" hidden>
+      <div class="card">
+        <h3>Google Drive backup</h3>
+        <p id="drive-status" class="muted small"></p>
+        <div id="drive-setup">
+          <label class="field"><span>Google Client ID</span>
+            <input id="client-id" type="text" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+          </label>
+          <button class="btn" id="save-client">Save Client ID</button>
+          <details class="howto">
+            <summary>How do I get a Client ID? (free, 10 minutes, one time)</summary>
+            <ol>
+              <li>Open <b>console.cloud.google.com</b> and sign in with your Gmail.</li>
+              <li>Top bar → <b>Select a project</b> → <b>New project</b> → name it <i>Kaasu</i> → Create.</li>
+              <li>Search bar → <b>Google Drive API</b> → <b>Enable</b>.</li>
+              <li>Menu → <b>Google Auth Platform</b> (or "OAuth consent screen") → <b>Get started</b>. App name <i>Kaasu</i>, your email, Audience <b>External</b> → Create.</li>
+              <li><b>Audience</b> → <b>Test users</b> → <b>Add users</b> → add your own Gmail → Save.</li>
+              <li><b>Clients</b> (or "Credentials") → <b>Create client</b> → type <b>Web application</b>.</li>
+              <li>Under <b>Authorised JavaScript origins</b> add: <code id="origin-hint"></code> → Create.</li>
+              <li>Copy the <b>Client ID</b> (ends with <i>.apps.googleusercontent.com</i>) and paste it above.</li>
+            </ol>
+            <p class="small muted">When Google says "Google hasn't verified this app", tap <b>Continue</b> — it's your own app.</p>
+          </details>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="drive-connect">Connect Google Drive</button>
+          <button class="btn" id="drive-sync" hidden>Sync now</button>
+          <button class="btn ghost" id="drive-disconnect" hidden>Disconnect</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Preferences</h3>
+        <label class="field"><span>Monthly budget (₹)</span><input id="budget" type="number" inputmode="numeric" min="0" placeholder="e.g. 25000"></label>
+        <label class="field"><span>Theme</span>
+          <select id="theme"><option value="">Same as phone</option><option value="light">Light</option><option value="dark">Dark</option></select>
+        </label>
+      </div>
+
+      <div class="card" id="install-card">
+        <h3>Install on your phone</h3>
+        <p class="muted small" id="install-text">In Chrome, tap ⋮ → <b>Add to Home screen</b> → <b>Install</b>.</p>
+        <button class="btn primary" id="btn-install" hidden>Install app</button>
+      </div>
+
+      <div class="card">
+        <h3>Words you taught Kaasu</h3>
+        <p class="muted small">When you change a category, Kaasu remembers it for next time.</p>
+        <div id="learned" class="learned"></div>
+      </div>
+
+      <div class="card">
+        <h3>Backup &amp; restore</h3>
+        <div class="btn-row">
+          <button class="btn" id="backup-dl">Download backup</button>
+          <button class="btn" id="backup-restore">Restore from file</button>
+        </div>
+        <button class="btn danger block" id="erase">Erase everything on this phone</button>
+      </div>
+
+      <div class="card">
+        <h3>Typing tips</h3>
+        <ul class="tips">
+          <li><b>Spent:</b> chai 20 · petrol 500 upi · rent 12,000 on 5th</li>
+          <li><b>Income:</b> salary 55000 · bonus 10k · cashback 50</li>
+          <li><b>Saved:</b> sip 5000 · fd 1 lakh · gold 3000 · ppf 2000</li>
+          <li><b>Gave:</b> gave ravi 2000 · lent 500 to anu</li>
+          <li><b>Took:</b> took 500 from kumar · borrowed 2k from anand</li>
+          <li><b>Returned:</b> ravi returned 1000 · paid back kumar 500</li>
+          <li><b>Dates:</b> yesterday · 2 days ago · last monday · 5/9 · 5 sep</li>
+          <li><b>Many at once:</b> chai 20, auto 60, milk 30</li>
+        </ul>
+      </div>
+      <p class="muted small center" id="version"></p>
+    </section>
+  </main>
+
+  <!-- ============ Bottom tabs ============ -->
+  <nav class="tabs" aria-label="Main">
+    <button data-go="home" class="on"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg><span>Home</span></button>
+    <button data-go="history"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg><span>History</span></button>
+    <button data-go="people"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 5.5a3 3 0 0 1 0 5.8M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/></svg><span>People</span></button>
+    <button data-go="reports"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Reports</span></button>
+    <button data-go="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></button>
+  </nav>
+
+  <!-- ============ Edit / add sheet ============ -->
+  <dialog id="sheet" class="sheet">
+    <form id="edit-form" method="dialog">
+      <div class="sheet-head">
+        <h2 id="sheet-title">Edit</h2>
+        <button type="button" class="icon-btn sm" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div id="bill-info" class="bill-info" hidden></div>
+      <label class="field"><span>Type</span>
+        <select id="f-type">
+          <option value="expense">💸 Spent</option>
+          <option value="income">💰 Income</option>
+          <option value="saving">🐷 Saved / invested</option>
+          <option value="lent">🤝 Gave money (they owe me)</option>
+          <option value="borrowed">🙏 Took money (I owe them)</option>
+          <option value="got_back">✅ Got money back</option>
+          <option value="paid_back">↪️ Paid money back</option>
+        </select>
+      </label>
+      <label class="field"><span>Amount (₹)</span><input id="f-amount" type="number" inputmode="decimal" step="0.01" min="0" required></label>
+      <label class="field" id="f-cat-wrap"><span>Category</span><select id="f-category"></select></label>
+      <label class="field" id="f-person-wrap" hidden><span>Person</span><input id="f-person" list="people-list" autocomplete="off" autocapitalize="words"></label>
+      <datalist id="people-list"></datalist>
+      <label class="field"><span>Description</span><input id="f-note" autocomplete="off"></label>
+      <div class="field-row">
+        <label class="field"><span>Date</span><input id="f-date" type="date" required></label>
+        <label class="field"><span>Paid by</span>
+          <select id="f-mode"><option value="">—</option><option>UPI</option><option>Cash</option><option>Card</option><option>Bank</option></select>
+        </label>
+      </div>
+      <details id="ocr-text-wrap" class="howto" hidden><summary>Text read from the bill</summary><pre id="ocr-text"></pre></details>
+      <div class="sheet-actions">
+        <button type="button" class="btn danger ghost" id="f-delete">Delete</button>
+        <button type="submit" class="btn primary" id="f-save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============ Person sheet ============ -->
+  <dialog id="person-sheet" class="sheet">
+    <div class="sheet-head">
+      <h2 id="ps-name">Person</h2>
+      <button type="button" class="icon-btn sm" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <p id="ps-balance" class="ps-balance"></p>
+    <div class="btn-row"><button class="btn primary" id="ps-settle">Record payment</button><button class="btn" id="ps-add">Add entry</button></div>
+    <div id="ps-list" class="list"></div>
+  </dialog>
+
+  <!-- ============ Scan sheet ============ -->
+  <dialog id="scan-sheet" class="sheet">
+    <div class="sheet-head">
+      <h2>Scan a bill</h2>
+      <button type="button" class="icon-btn sm" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div id="scan-choose" class="btn-grid">
+      <button class="btn primary" id="scan-camera">📷 Take photo</button>
+      <button class="btn" id="scan-gallery">🖼️ Choose from gallery</button>
+    </div>
+    <p class="muted small" id="scan-tip">Tip: lay the bill flat, good light, fill the screen with it.</p>
+    <div id="scan-progress" hidden>
+      <img id="scan-preview" alt="Bill photo">
+      <div class="meter"><span id="scan-fill"></span></div>
+      <p id="scan-msg" class="muted small">Reading…</p>
+    </div>
+  </dialog>
+
+  <input type="file" id="file-camera" accept="image/*" capture="environment" hidden>
+  <input type="file" id="file-gallery" accept="image/*" hidden>
+  <input type="file" id="file-restore" accept=".json,application/json" hidden>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="print-report" class="print-only"></div>
+
+  <script src="js/parser.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/ocr.js"></script>
+  <script src="js/drive.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
