@@ -289,6 +289,11 @@
     if (!raw) return { ok: false, error: 'Empty', raw };
     let t = ' ' + raw.toLowerCase().replace(/[“”"]/g, ' ').replace(/\s+/g, ' ') + ' ';
 
+    // "rent 12000 every month on 5th" / "salary 55000 monthly" -> a monthly auto entry
+    const REPEAT = /\b(every\s*month|each\s*month|per\s*month|monthly|every\s*mnth|maasam|maatham)\b/;
+    const repeat = REPEAT.test(t);
+    if (repeat) t = t.replace(REPEAT, ' ');
+
     const dateRes = extractDate(t, ctx.today);
     t = dateRes.text;
     const amtRes = extractAmount(t);
@@ -359,6 +364,7 @@
       note,
       date: dateRes.date,
       mode: modeRes.mode,
+      repeat: repeat && (type === 'expense' || type === 'income' || type === 'saving'),
       raw,
     };
   }

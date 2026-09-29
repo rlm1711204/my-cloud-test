@@ -338,3 +338,11 @@ td.num, th.num { text-align: right; }
   .barrow { break-inside: avoid; }
   tr { break-inside: avoid; }
 }
+
+/* ---------- Monthly auto entries ---------- */
+.auto-card { display: flex; align-items: center; gap: 12px; }
+.auto-ico { font-size: 22px; }
+.auto-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.check { display: flex; align-items: center; gap: 10px; margin: 2px 0 14px; font-size: 14px; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.row.paused { opacity: .55; }

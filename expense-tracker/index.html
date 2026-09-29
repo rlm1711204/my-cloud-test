@@ -74,6 +74,12 @@
         <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
 
+      <button id="auto-card" class="card auto-card" hidden>
+        <span class="auto-ico">🔁</span>
+        <span class="auto-text"><b id="auto-title">Monthly auto entries</b><span id="auto-sub" class="muted small"></span></span>
+        <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+
       <div class="section-head"><h2>Recent</h2><button class="link" data-go="history">See all</button></div>
       <div id="recent" class="list"></div>
     </section>
@@ -195,6 +201,13 @@
         </div>
       </div>
 
+      <div class="card" id="rules-card">
+        <h3>🔁 Monthly auto entries</h3>
+        <p class="muted small">Rent, EMI, SIP, salary… set once and Kaasu adds them every month on that day. Tip: type <b>rent 12000 every month on 5th</b>.</p>
+        <div id="rules" class="list"></div>
+        <button class="btn block" id="rule-add">+ Add monthly entry</button>
+      </div>
+
       <div class="card">
         <h3>Preferences</h3>
         <label class="field"><span>Monthly budget (₹)</span><input id="budget" type="number" inputmode="numeric" min="0" placeholder="e.g. 25000"></label>
@@ -235,6 +248,7 @@
           <li><b>Returned:</b> ravi returned 1000 · paid back kumar 500</li>
           <li><b>Dates:</b> yesterday · 2 days ago · last monday · 5/9 · 5 sep</li>
           <li><b>Many at once:</b> chai 20, auto 60, milk 30</li>
+          <li><b>Every month:</b> rent 12000 every month on 5th · salary 55000 monthly on 1st</li>
         </ul>
       </div>
       <p class="muted small center" id="version"></p>
@@ -280,10 +294,44 @@
           <select id="f-mode"><option value="">—</option><option>UPI</option><option>Cash</option><option>Card</option><option>Bank</option></select>
         </label>
       </div>
+      <label class="check" id="f-repeat-wrap"><input type="checkbox" id="f-repeat"> <span id="f-repeat-label">🔁 Repeat every month on this date</span></label>
       <details id="ocr-text-wrap" class="howto" hidden><summary>Text read from the bill</summary><pre id="ocr-text"></pre></details>
       <div class="sheet-actions">
         <button type="button" class="btn danger ghost" id="f-delete">Delete</button>
         <button type="submit" class="btn primary" id="f-save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ============ Monthly auto entry sheet ============ -->
+  <dialog id="rule-sheet" class="sheet">
+    <form id="rule-form" method="dialog">
+      <div class="sheet-head">
+        <h2 id="rule-title">Monthly entry</h2>
+        <button type="button" class="icon-btn sm" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <label class="field"><span>Type</span>
+        <select id="r-type">
+          <option value="expense">💸 Spent (rent, EMI, bills…)</option>
+          <option value="income">💰 Income (salary…)</option>
+          <option value="saving">🐷 Saved / invested (SIP, RD…)</option>
+        </select>
+      </label>
+      <label class="field"><span>Amount (₹)</span><input id="r-amount" type="number" inputmode="decimal" step="0.01" min="0" required></label>
+      <label class="field"><span>Category</span><select id="r-category"></select></label>
+      <label class="field"><span>Description</span><input id="r-note" autocomplete="off" placeholder="e.g. House rent"></label>
+      <div class="field-row">
+        <label class="field"><span>Day of month</span><input id="r-day" type="number" inputmode="numeric" min="1" max="31" required></label>
+        <label class="field"><span>Paid by</span>
+          <select id="r-mode"><option value="">—</option><option>UPI</option><option>Cash</option><option>Card</option><option>Bank</option></select>
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" id="r-active" checked> <span>Active (untick to pause)</span></label>
+      <label class="check" id="r-now-wrap"><input type="checkbox" id="r-now" checked> <span id="r-now-label">Also add it for this month</span></label>
+      <p class="muted small" id="r-info"></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn danger ghost" id="r-delete">Delete</button>
+        <button type="submit" class="btn primary">Save</button>
       </div>
     </form>
   </dialog>

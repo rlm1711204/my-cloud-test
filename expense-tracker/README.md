@@ -28,6 +28,9 @@ see reports, download them, and back everything up to **your own Google Drive**.
 | `gave amma 3000` | Spent · Family (money given to family isn't counted as a loan) |
 | `chai 20, auto 60, milk 30` | 3 entries at once |
 
+| `rent 12000 every month on 5th` | 🔁 Monthly auto entry, added by itself every month on the 5th |
+| `salary 55000 monthly on 1st` | 🔁 Salary added by itself on the 1st of every month |
+
 - **Dates:** `yesterday`, `2 days ago`, `last monday`, `5/9`, `5 sep`, `on 5th`.
 - **Payment mode:** `upi`, `gpay`, `phonepe`, `cash`, `card`, `neft`.
 - **Voice:** tap the 🎤 button and say "lunch 150, auto 40".
@@ -107,6 +110,19 @@ My Drive/
 | **People** | Who owes you and whom you owe. Tap a person to see their history and record a repayment. |
 | **Reports** | Month, 3 months, financial year (Apr–Mar) or all time. Spending by category, daily chart, 6-month income/spent/saved chart, payment modes, and insights. Downloads: **Excel (CSV)**, **PDF**, **Save to Google Drive**, **Full backup**. |
 | **Settings** | Google Drive, monthly budget, light/dark theme, words Kaasu has learned, backup/restore, erase. |
+
+### Monthly auto entries 🔁 (rent, EMI, SIP, salary…)
+Set these up once, and Kaasu adds them by itself on that day every month. You can do it in any of three ways:
+- **Type it:** `rent 12000 every month on 5th`, `sip 5000 monthly on 10th`, `salary 55000 monthly on 1st`.
+- **Settings → Monthly auto entries → + Add monthly entry.** Choose the type, amount, category and day.
+- **Tick the box:** open any entry and tick **🔁 Repeat every month on this date**.
+
+**Changing things later:**
+- **Salary increased?** Go to Settings → Monthly auto entries, tap **Salary**, change the amount, and tap Save. Tick "Also change this month's entry" if you want the current month updated too.
+- **Only one month was different?** Tap that month's entry in History and edit it. The other months aren't affected.
+- **Pause** by unticking **Active**. **Stop** by tapping **Delete**. Entries that were already added stay in your history.
+
+Auto entries are added when you open the app on or after the due day. If you open it after a few days, any missed months are filled in. They are marked 🔁 in your lists and sync to Google Drive like everything else.
 
 ### Scanning a bill 📷
 1. Tap the scan button → **Take photo** (or **Choose from gallery**).

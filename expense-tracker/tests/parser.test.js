@@ -102,3 +102,11 @@ assert.strictEqual(hotel.amount, 315);
 assert.strictEqual(hotel.category, 'Food');
 assert.strictEqual(hotel.gst, 15);
 console.log('restaurant bill ok');
+
+// Monthly auto entries
+const rent = P.parseOne('rent 12000 every month on 5th', ctx);
+assert.strictEqual(rent.repeat, true); assert.strictEqual(rent.category, 'Rent'); assert.strictEqual(rent.date, '2026-09-05');
+const sal = P.parseOne('salary 55000 monthly', ctx);
+assert.strictEqual(sal.repeat, true); assert.strictEqual(sal.type, 'income'); assert.strictEqual(sal.note, 'Salary');
+assert.strictEqual(P.parseOne('chai 20', ctx).repeat, false);
+console.log('monthly phrases ok');

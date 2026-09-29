@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.1.0';
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const inr = (n) => (n < 0 ? '−' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -24,6 +24,9 @@
     return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
   };
   const INFLOW = new Set(['income', 'borrowed', 'got_back']);
+  const ordinal = (n) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
+  const shortDate = (s) => new Date(s + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const curYm = () => todayIso().slice(0, 7);
 
   /* ---------- Toast (small message at the bottom) ---------------------- */
   let toastTimer;
@@ -87,7 +90,7 @@
   }
   function rowHTML(t, opts) {
     const d = describe(t);
-    const sub = [d.sub, t.mode ? esc(t.mode) : '', opts && opts.showDate ? niceDate(t.date) : ''].filter(Boolean).join(' · ');
+    const sub = [d.sub, t.recurId ? '🔁 monthly' : '', t.mode ? esc(t.mode) : '', opts && opts.showDate ? niceDate(t.date) : ''].filter(Boolean).join(' · ');
     const inflow = INFLOW.has(t.type);
     return `<button class="row" data-id="${t.id}">
       <span class="ico">${Parser.iconFor(t.type, t.category)}</span>
@@ -127,7 +130,8 @@
       if (!p.ok) return `<div class="pv err"><span class="ico">⚠️</span><span class="what"><b>${esc(p.raw)}</b><span>${esc(p.error)}</span></span></div>`;
       const d = describe(p);
       const typeLabel = Parser.TYPES[p.type].label;
-      const bits = [p.type === 'expense' ? d.sub : typeLabel + (p.person ? '' : ' · ' + esc(p.category)), niceDate(p.date), p.mode].filter(Boolean).join(' · ');
+      const when = p.repeat ? '🔁 every month on the ' + ordinal(+p.date.slice(8)) : niceDate(p.date);
+      const bits = [p.type === 'expense' ? d.sub : typeLabel + (p.person ? '' : ' · ' + esc(p.category)), when, p.mode].filter(Boolean).join(' · ');
       return `<button class="pv" data-i="${i}"><span class="ico">${Parser.iconFor(p.type, p.category)}</span>
         <span class="what"><b>${d.title}</b><span>${bits}</span></span>
         <span class="amt">${inr(p.amount)}</span><span class="edit">Edit</span></button>`;
@@ -154,7 +158,21 @@
     const good = parsed.filter((p) => p.ok);
     if (!good.length) return;
     const bad = parsed.filter((p) => !p.ok);
-    const added = Store.addMany(good.map((p) => ({ type: p.type, amount: p.amount, category: p.category, person: p.person, note: p.note, date: p.date, mode: p.mode, raw: p.raw, source: p.source || 'text' })));
+    const monthly = good.filter((p) => p.repeat);
+    for (const p of monthly) {
+      Store.addRule({ type: p.type, amount: p.amount, category: p.category, note: p.note, mode: p.mode, day: +p.date.slice(8), startMonth: p.date.slice(0, 7) });
+    }
+    if (monthly.length) {
+      Store.applyRecurring(); Store.save();
+      if (monthly.length === good.length) {
+        quick.value = bad.map((p) => p.raw).join(', ');
+        autoGrow(); renderPreview();
+        const m = monthly[0];
+        toast(monthly.length === 1 ? '🔁 ' + (m.note || m.category) + ' ' + inr(m.amount) + ' will be added every month on the ' + ordinal(+m.date.slice(8)) : '🔁 ' + monthly.length + ' monthly entries set up');
+        return;
+      }
+    }
+    const added = Store.addMany(good.filter((p) => !p.repeat).map((p) => ({ type: p.type, amount: p.amount, category: p.category, person: p.person, note: p.note, date: p.date, mode: p.mode, raw: p.raw, source: p.source || 'text' })));
     quick.value = bad.map((p) => p.raw).join(', ');
     autoGrow(); renderPreview();
     const total = added.reduce((s, t) => s + t.amount, 0);
@@ -243,6 +261,7 @@
   function syncTypeFields() {
     const type = $('#f-type').value;
     const isPeople = PEOPLE_TYPES.has(type);
+    $('#f-repeat-wrap').hidden = isPeople;
     $('#f-cat-wrap').hidden = isPeople;
     $('#f-person-wrap').hidden = !isPeople;
     fillCategories(type, isPeople ? 'Personal loan' : (sheetState.rec.type === type ? sheetState.rec.category : ''));
@@ -264,6 +283,9 @@
     syncTypeFields();
     $('#f-category').value = r.category || $('#f-category').value;
     $('#f-delete').hidden = opts.mode !== 'edit';
+    const linked = r.recurId && Store.rules().some((x) => x.id === r.recurId);
+    $('#f-repeat').checked = !!(linked || r.repeat);
+    $('#f-repeat-label').textContent = linked ? '🔁 Monthly auto entry — untick to stop future months (change the monthly amount in Settings)' : '🔁 Repeat every month on this date';
     // Bill details
     const b = opts.bill;
     $('#bill-info').hidden = !b;
@@ -304,13 +326,25 @@
       const phrase = s.bill ? (s.bill.merchant || rec.note) : rec.note;
       Store.learn(phrase, type, rec.category);
     }
+    const wantRepeat = !PEOPLE_TYPES.has(type) && $('#f-repeat').checked;
+    const linkedRule = orig.recurId && Store.rules().find((x) => x.id === orig.recurId);
+    let saved;
     if (s.mode === 'edit') {
-      Store.update(orig.id, rec);
-      toast('Saved');
+      saved = Store.update(orig.id, rec);
     } else {
-      Store.add(Object.assign(rec, { source: orig.source || 'manual', raw: orig.raw || '' }));
+      saved = Store.add(Object.assign(rec, { source: orig.source || 'manual', raw: orig.raw || '' }));
       if (s.mode === 'draft') removeDraftPiece(s.draftIndex);
-      toast('Added ' + inr(amount));
+    }
+    if (wantRepeat && !linkedRule) {
+      const rule = Store.addRule({ type, amount, category: rec.category, note: rec.note, mode: rec.mode, day: +rec.date.slice(8), startMonth: rec.date.slice(0, 7) });
+      Store.linkToRule(saved.id, rule);
+      Store.applyRecurring(); Store.save();
+      toast('🔁 Will be added every month on the ' + ordinal(rule.day));
+    } else if (!wantRepeat && linkedRule) {
+      Store.removeRule(linkedRule.id); Store.save();
+      toast('Saved. Future months stopped.');
+    } else {
+      toast(s.mode === 'edit' ? 'Saved' : 'Added ' + inr(amount));
     }
     sheet.close();
     if (s.onSaved) s.onSaved();
@@ -358,11 +392,20 @@
     $('#pc-owe-me').textContent = inr(oweMe);
     $('#pc-i-owe').textContent = inr(iOwe);
 
+    const rules = Store.rules().filter((r) => r.active);
+    $('#auto-card').hidden = !rules.length;
+    if (rules.length) {
+      const upcoming = rules.map((r) => ({ r, d: Store.nextRun(r) })).filter((x) => x.d).sort((a, b) => a.d.localeCompare(b.d));
+      $('#auto-title').textContent = rules.length + ' monthly auto ' + (rules.length === 1 ? 'entry' : 'entries');
+      $('#auto-sub').textContent = upcoming.length ? 'Next: ' + (upcoming[0].r.note || upcoming[0].r.category) + ' ' + inr(upcoming[0].r.amount) + ' on ' + shortDate(upcoming[0].d) : '';
+    }
+
     const recent = Store.active().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 8);
     $('#recent').innerHTML = recent.length ? recent.map((t) => rowHTML(t, { showDate: true })).join('')
       : '<p class="empty">Nothing yet. Type <b>chai 20</b> above and tap Add — that\'s it!</p>';
   }
   $('#people-card').addEventListener('click', () => go('people'));
+  $('#auto-card').addEventListener('click', () => { go('settings'); setTimeout(() => $('#rules-card').scrollIntoView({ behavior: 'smooth' }), 250); });
   $('#set-budget').addEventListener('click', () => {
     const cur = Store.get().settings.budget || '';
     const v = prompt('Monthly spending budget in ₹ (0 to remove):', cur);
@@ -665,12 +708,92 @@
     $('#drive-status').innerHTML = !Drive.isConfigured() ? 'Not set up yet. Your records are saved on this phone only.'
       : !connected ? 'Client ID saved. Tap <b>Connect Google Drive</b> and choose your Google account.'
       : '✅ Connected. Your records are saved in <b>My Drive → Expense Tracker</b>.' + (Drive.lastSync() ? '<br>Last saved: ' + new Date(Drive.lastSync()).toLocaleString('en-IN') : '');
+    renderRules();
     $('#budget').value = Store.get().settings.budget || '';
     $('#theme').value = localStorage.getItem(THEME_KEY) || '';
     const learned = Object.entries(Store.get().learned);
     $('#learned').innerHTML = learned.length ? learned.map(([k, v]) => `<button data-forget="${esc(k)}" title="Tap to forget">${esc(k)} → ${esc(v.category)} ✕</button>`).join('') : '<span class="muted small">Nothing yet.</span>';
     $('#version').textContent = 'Kaasu v' + APP_VERSION + ' · ' + Store.active().length + ' entries on this phone';
   }
+  /* ---------- Monthly auto entries ------------------------------------- */
+  function renderRules() {
+    const list = Store.rules().sort((a, b) => (b.active - a.active) || a.day - b.day);
+    $('#rules').innerHTML = list.length ? list.map((r) => {
+      const next = r.active ? Store.nextRun(r) : '';
+      const inflow = r.type === 'income';
+      return `<button class="row ${r.active ? '' : 'paused'}" data-rule="${r.id}">
+        <span class="ico">${Parser.iconFor(r.type, r.category)}</span>
+        <span class="what"><b>${esc(r.note || r.category)}</b><span>${r.active ? 'Every month on the ' + ordinal(r.day) + (next ? ' · next ' + shortDate(next) : '') : '⏸ Paused'}</span></span>
+        <span class="amt ${inflow ? 'in' : ''}">${inflow ? '+' : '−'}${inr(r.amount)}</span>
+      </button>`;
+    }).join('') : '<p class="empty">None yet.</p>';
+  }
+  $('#rules').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rule]');
+    if (b) openRule(Store.rules().find((r) => r.id === b.dataset.rule));
+  });
+  $('#rule-add').addEventListener('click', () => openRule(null));
+
+  let ruleEditing = null;
+  function fillRuleCategories(type, selected) {
+    const names = Object.keys(Parser.categoriesFor(type));
+    if (selected && !names.includes(selected)) names.push(selected);
+    $('#r-category').innerHTML = names.map((n) => `<option ${n === selected ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  }
+  $('#r-type').addEventListener('change', (e) => fillRuleCategories(e.target.value, e.target.value === 'income' ? 'Salary' : e.target.value === 'saving' ? 'SIP / Mutual fund' : 'Rent'));
+  function thisMonthEntry(rule) {
+    return rule && Store.get().txns.find((t) => t.recurId === rule.id && t.recurMonth === curYm() && !t.deleted);
+  }
+  function openRule(rule) {
+    ruleEditing = rule;
+    const r = rule || { type: 'expense', amount: '', category: 'Rent', note: '', day: new Date().getDate(), mode: '', active: true };
+    $('#rule-title').textContent = rule ? 'Edit monthly entry' : 'New monthly entry';
+    $('#r-type').value = r.type;
+    fillRuleCategories(r.type, r.category);
+    $('#r-amount').value = r.amount;
+    $('#r-note').value = r.note || '';
+    $('#r-day').value = r.day;
+    $('#r-mode').value = r.mode || '';
+    $('#r-active').checked = r.active !== false;
+    $('#r-delete').hidden = !rule;
+    const cur = thisMonthEntry(rule);
+    $('#r-now-wrap').hidden = !!rule && !cur;
+    $('#r-now').checked = true;
+    $('#r-now-label').textContent = rule ? 'Also change this month\'s entry (' + inr(cur ? cur.amount : 0) + ')' : 'Also add it for this month (if the day has come)';
+    $('#r-info').textContent = rule ? 'Changes apply to future months. Past entries stay as they are — tap one in History to edit it.' : 'Kaasu adds it automatically when you open the app on or after that day.';
+    $('#rule-sheet').showModal();
+  }
+  $('#rule-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const amount = parseFloat($('#r-amount').value);
+    if (!(amount > 0)) { toast('Please enter an amount.'); return; }
+    const day = parseInt($('#r-day').value, 10);
+    if (!(day >= 1 && day <= 31)) { toast('Day must be between 1 and 31.'); return; }
+    const vals = { type: $('#r-type').value, amount, category: $('#r-category').value, note: $('#r-note').value.trim() || $('#r-category').value, day, mode: $('#r-mode').value, active: $('#r-active').checked };
+    if (ruleEditing) {
+      const cur = thisMonthEntry(ruleEditing);
+      Store.updateRule(ruleEditing.id, vals);
+      if (cur && $('#r-now').checked) Store.update(cur.id, { type: vals.type, amount, category: vals.category, note: vals.note, mode: vals.mode });
+      toast('Monthly entry updated');
+    } else {
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const startMonth = $('#r-now').checked ? curYm() : next.getFullYear() + '-' + String(next.getMonth() + 1).padStart(2, '0');
+      Store.addRule(Object.assign(vals, { startMonth }));
+      toast('🔁 ' + vals.note + ' ' + inr(amount) + ' every month on the ' + ordinal(day));
+    }
+    Store.applyRecurring();
+    Store.save();
+    $('#rule-sheet').close();
+  });
+  $('#r-delete').addEventListener('click', () => {
+    if (!confirm('Stop this monthly entry? Entries already added stay in your history.')) return;
+    Store.removeRule(ruleEditing.id);
+    Store.save();
+    $('#rule-sheet').close();
+    toast('Monthly entry removed');
+  });
+
   $('#save-client').addEventListener('click', () => {
     const v = $('#client-id').value.trim();
     if (v && !/\.apps\.googleusercontent\.com$/.test(v)) { toast('That doesn\'t look right — it should end with .apps.googleusercontent.com'); return; }
@@ -762,6 +885,7 @@
       const merged = await Drive.sync(Store.get(), Store.merge, (d) => Store.toCSV(null, null, d.txns));
       // Merge again in case something was added while we were uploading.
       Store.replaceAll(Store.merge(Store.get(), merged), { silent: true });
+      if (Store.applyRecurring().length) scheduleSync();
       setPill('ok');
       if (interactive) toast('Saved to Google Drive ✓');
       render();
@@ -775,6 +899,7 @@
     }
   }
   document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') Store.applyRecurring(); // e.g. app left open overnight into the 1st
     if (document.visibilityState === 'hidden' && dirty && Drive.hasToken()) { clearTimeout(syncTimer); doSync(false); }
   });
 
@@ -790,6 +915,8 @@
   }
 
   Store.load();
+  Store.applyRecurring(); // add any monthly entries that became due since last time
+  setInterval(() => Store.applyRecurring(), 60 * 60 * 1000);
   Store.onChange(() => { render(); scheduleSync(); if ($('#person-sheet').open) openPerson(personKey); });
   let resizeT;
   window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (current === 'reports') renderReports(); }, 200); });

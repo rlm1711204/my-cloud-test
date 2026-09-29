@@ -19,6 +19,7 @@
       version: 1,
       txns: [],          // every record
       learned: {},       // phrase -> {type, category, at}  (what you taught the app)
+      recurring: [],     // monthly auto entries (rent, salary, SIP…)
       settings: { budget: 0, name: '', updatedAt: '' },
       updatedAt: now(),
     };
@@ -115,13 +116,128 @@
     const learned = Object.assign({}, a.learned);
     for (const [k, v] of Object.entries(b.learned || {})) if (!learned[k] || (v.at || '') > (learned[k].at || '')) learned[k] = v;
     const settings = ((b.settings && b.settings.updatedAt) || '') > ((a.settings && a.settings.updatedAt) || '') ? b.settings : a.settings;
+    const rules = new Map();
+    for (const r of [...(a.recurring || []), ...(b.recurring || [])]) {
+      const cur = rules.get(r.id);
+      if (!cur || (r.updatedAt || '') > (cur.updatedAt || '')) rules.set(r.id, r);
+    }
     return {
       version: 1,
       txns: [...byId.values()].sort((x, y) => (x.createdAt || '').localeCompare(y.createdAt || '')),
       learned,
+      recurring: [...rules.values()],
       settings: Object.assign(emptyData().settings, settings),
       updatedAt: now(),
     };
+  }
+
+  /* ---------- Monthly auto entries (rent, salary, SIP…) ------------------
+   * A rule says "add this entry every month on day N". Each month's entry
+   * gets a fixed id (r_<rule>_<YYYY-MM>) so two phones never add it twice,
+   * and a timestamp at the scheduled date so any edit you make always wins. */
+
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const ymOf = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+  const instanceId = (ruleId, ym) => 'r_' + ruleId + '_' + ym;
+
+  function rules() { return (data.recurring || []).filter((r) => !r.deleted); }
+
+  /** The date a rule fires in a month: its day, or the month's last day (e.g. 31 -> 30 Sep). */
+  function ruleDate(rule, ym) {
+    const [y, m] = ym.split('-').map(Number);
+    const last = new Date(y, m, 0).getDate();
+    return ym + '-' + pad2(Math.min(rule.day, last));
+  }
+
+  /** Next date this rule will add an entry (for showing "next: 5 Oct"). */
+  function nextRun(rule, today) {
+    today = today || new Date();
+    const t = today.getFullYear() + '-' + pad2(today.getMonth() + 1) + '-' + pad2(today.getDate());
+    for (let i = 0; i < 3; i++) {
+      const ym = ymOf(new Date(today.getFullYear(), today.getMonth() + i, 1));
+      if (ym < rule.startMonth) continue;
+      const d = ruleDate(rule, ym);
+      if (d > t || (d === t && !hasInstance(rule.id, ym))) return d;
+    }
+    return '';
+  }
+
+  function hasInstance(ruleId, ym) {
+    return data.txns.some((t) => t.recurId === ruleId && t.recurMonth === ym); // deleted ones count: you removed it on purpose
+  }
+
+  function addRule(r) {
+    const rule = {
+      id: uid(),
+      type: r.type, amount: Math.abs(Number(r.amount) || 0), category: r.category || 'Other',
+      note: r.note || '', mode: r.mode || '',
+      day: Math.min(31, Math.max(1, parseInt(r.day, 10) || 1)),
+      startMonth: r.startMonth || ymOf(new Date()),
+      active: r.active !== false,
+      createdAt: now(), updatedAt: now(),
+    };
+    data.recurring = data.recurring || [];
+    data.recurring.push(rule);
+    save({ silent: true });
+    return rule;
+  }
+
+  function updateRule(id, changes) {
+    const r = (data.recurring || []).find((x) => x.id === id);
+    if (!r) return null;
+    Object.assign(r, changes, { updatedAt: now() });
+    if (changes.amount != null) r.amount = Math.abs(Number(changes.amount) || 0);
+    if (changes.day != null) r.day = Math.min(31, Math.max(1, parseInt(changes.day, 10) || 1));
+    save({ silent: true });
+    return r;
+  }
+
+  function removeRule(id) { return updateRule(id, { deleted: true, active: false }); }
+
+  /** Turn an existing entry into "this month's copy" of a rule. */
+  function linkToRule(txnId, rule) {
+    const t = data.txns.find((x) => x.id === txnId);
+    if (!t) return;
+    const ym = t.date.slice(0, 7);
+    const newId = instanceId(rule.id, ym);
+    if (t.id === newId) return;
+    t.deleted = true; t.updatedAt = now();
+    data.txns.push(Object.assign({}, t, { id: newId, deleted: false, recurId: rule.id, recurMonth: ym, source: 'auto', updatedAt: now() }));
+    save({ silent: true });
+  }
+
+  /**
+   * Add every monthly entry that is due (from the rule's start month up to
+   * today) and not yet added. Safe to call any number of times.
+   */
+  function applyRecurring(today) {
+    today = today || new Date();
+    const todayIso = today.getFullYear() + '-' + pad2(today.getMonth() + 1) + '-' + pad2(today.getDate());
+    const curYm = ymOf(today);
+    const created = [];
+    for (const r of rules()) {
+      if (!r.active) continue;
+      let [y, m] = r.startMonth.split('-').map(Number);
+      // never go back more than 24 months
+      const oldest = new Date(today.getFullYear(), today.getMonth() - 23, 1);
+      if (new Date(y, m - 1, 1) < oldest) { y = oldest.getFullYear(); m = oldest.getMonth() + 1; }
+      for (let d = new Date(y, m - 1, 1); ymOf(d) <= curYm; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+        const ym = ymOf(d);
+        const date = ruleDate(r, ym);
+        if (date > todayIso || hasInstance(r.id, ym)) continue;
+        // a day before the scheduled date (UTC), so it's always older than any real edit in any time zone
+        const stamp = new Date(Date.parse(date + 'T00:00:00.000Z') - 864e5).toISOString();
+        const t = {
+          id: instanceId(r.id, ym), type: r.type, amount: r.amount, category: r.category, person: '',
+          note: r.note, date, mode: r.mode, source: 'auto', raw: '',
+          recurId: r.id, recurMonth: ym, createdAt: stamp, updatedAt: stamp,
+        };
+        data.txns.push(t);
+        created.push(t);
+      }
+    }
+    if (created.length) save();
+    return created;
   }
 
   function replaceAll(newData, opts) { data = Object.assign(emptyData(), newData); save(opts); }
@@ -223,6 +339,7 @@
 
   const api = {
     load, save, onChange, get, active, add, addMany, update, remove, restore, learn, forget, setSetting,
+    rules, addRule, updateRule, removeRule, linkToRule, applyRecurring, nextRun, ruleDate,
     merge, replaceAll, totals, byCategory, byDay, byMonth, people, owesMe, toCSV, emptyData, TYPE_LABEL,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
