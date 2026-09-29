@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.2.0';
+  const APP_VERSION = '1.2.1';
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const inr = (n) => (n < 0 ? '−' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -768,7 +768,9 @@
     $('#drive-disconnect').hidden = !connected;
     $('#drive-status').innerHTML = !Drive.isConfigured() ? 'Not set up yet. Your records are saved on this phone only.'
       : !connected ? 'Client ID saved. Tap <b>Connect Google Drive</b> and choose your Google account.'
-      : '✅ Connected. Your records are saved in <b>My Drive → Expense Tracker</b>.' + (Drive.lastSync() ? '<br>Last saved: ' + new Date(Drive.lastSync()).toLocaleString('en-IN') : '');
+      : '✅ Connected' + (Drive.account() ? ' as <b>' + esc(Drive.account()) + '</b>' : '') + '. Records are saved in <b>My Drive → Expense Tracker</b>.' +
+        (Drive.lastSync() ? '<br>Last synced: ' + new Date(Drive.lastSync()).toLocaleString('en-IN') + ' · ' + Store.active().length + ' entries' : '') +
+        '<br><span class="muted">Client ID …' + esc(Drive.clientId().split('.')[0].slice(-6)) + ' — must be the same on all your phones.</span>';
     renderRules();
     renderPlanSettings();
     $('#budget').value = Store.get().settings.budget || '';

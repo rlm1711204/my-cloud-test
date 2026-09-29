@@ -110,7 +110,12 @@
   }
   function forget(phrase) { delete data.learned[phrase]; save(); }
 
-  function setSetting(k, v) { data.settings[k] = v; data.settings.updatedAt = now(); save(); }
+  function setSetting(k, v) {
+    data.settings[k] = v;
+    data.settings.updatedAt = now();
+    data.settings._ts = Object.assign({}, data.settings._ts, { [k]: now() }); // when THIS setting changed
+    save();
+  }
 
   /* ---------- Merge (phone <-> Google Drive) ----------------------------- */
 
@@ -124,7 +129,19 @@
     }
     const learned = Object.assign({}, a.learned);
     for (const [k, v] of Object.entries(b.learned || {})) if (!learned[k] || (v.at || '') > (learned[k].at || '')) learned[k] = v;
-    const settings = ((b.settings && b.settings.updatedAt) || '') > ((a.settings && a.settings.updatedAt) || '') ? b.settings : a.settings;
+    // Merge settings one by one: each setting keeps its most recent value,
+    // so changing a category on one phone and the split on another both survive.
+    const sa = a.settings || {}, sb = b.settings || {};
+    const tsOf = (st, k) => (st._ts && st._ts[k]) || '';
+    const settings = { _ts: {} };
+    for (const k of new Set([...Object.keys(sa), ...Object.keys(sb)])) {
+      if (k === '_ts' || k === 'updatedAt') continue;
+      const ta = tsOf(sa, k), tb = tsOf(sb, k);
+      const useB = tb > ta || (!ta && !tb && (sb.updatedAt || '') > (sa.updatedAt || '')) || !(k in sa);
+      settings[k] = useB && k in sb ? sb[k] : sa[k];
+      settings._ts[k] = (useB ? tb : ta) || '';
+    }
+    settings.updatedAt = (sa.updatedAt || '') > (sb.updatedAt || '') ? sa.updatedAt : sb.updatedAt;
     const rules = new Map();
     for (const r of [...(a.recurring || []), ...(b.recurring || [])]) {
       const cur = rules.get(r.id);

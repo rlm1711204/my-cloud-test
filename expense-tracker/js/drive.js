@@ -164,16 +164,39 @@
    * Two-way sync: download what's in Drive, merge with the phone's copy,
    * upload the result. Returns the merged data.
    */
+  /** Every copy of the data file this app can see (any folder), oldest first. */
+  async function allDataFiles() {
+    const q = "name = '" + DATA_FILE + "' and trashed = false";
+    const r = await call(API + '/files?spaces=drive&pageSize=50&fields=files(id,createdTime,modifiedTime)&orderBy=createdTime&q=' + encodeURIComponent(q));
+    return r.files || [];
+  }
+
+  async function loadAccount() {
+    try {
+      const r = await call(API + '/about?fields=user(emailAddress)');
+      if (r && r.user && r.user.emailAddress) { cfg.email = r.user.emailAddress; saveCfg(); }
+    } catch (e) { if (e.needsTap) throw e; }
+  }
+
   async function sync(localData, merge, csv) {
     const folder = await folderId();
-    let remote = null;
-    const f = cfg.dataId ? { id: cfg.dataId } : await findFile(DATA_FILE, folder);
-    if (f) {
-      try { remote = await readJSON(f.id); cfg.dataId = f.id; }
-      catch (e) { if (e.needsTap) throw e; cfg.dataId = null; const g = await findFile(DATA_FILE, folder); if (g) { remote = await readJSON(g.id); cfg.dataId = g.id; } }
+    if (!cfg.email) await loadAccount();
+    // Read EVERY copy in Drive (two phones may each have made one) and merge them all.
+    const files = await allDataFiles();
+    let merged = localData;
+    let readOk = [];
+    for (const f of files) {
+      try { merged = merge(merged, await readJSON(f.id)); readOk.push(f); }
+      catch (e) { if (e.needsTap) throw e; }
     }
-    const merged = remote ? merge(localData, remote) : localData;
-    cfg.dataId = await writeFile(DATA_FILE, JSON.stringify(merged), 'application/json', folder, cfg.dataId);
+    // Keep the oldest copy as "the" file; write the merged result there; bin the extras.
+    const keep = readOk[0] ? readOk[0].id : null;
+    cfg.dataId = await writeFile(DATA_FILE, JSON.stringify(merged), 'application/json', folder, keep);
+    for (const f of readOk.slice(1)) {
+      try { await call(API + '/files/' + f.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) }); }
+      catch (e) { /* not fatal: it'll be merged again next time */ }
+    }
+    cfg.copiesMerged = readOk.length;
     if (csv) cfg.csvId = await writeFile(CSV_FILE, csv(merged), 'text/csv', folder, cfg.csvId);
     cfg.lastSync = new Date().toISOString();
     saveCfg();
@@ -187,6 +210,6 @@
     await writeFile(name, content, mime || 'text/csv', reports);
   }
 
-  const api = { setClientId, isConfigured, hasToken, wasConnected, lastSync, account, connect, disconnect, sync, saveReport, clientId: () => cfg.clientId || '' };
+  const api = { copiesMerged: () => cfg.copiesMerged || 0, setClientId, isConfigured, hasToken, wasConnected, lastSync, account, connect, disconnect, sync, saveReport, clientId: () => cfg.clientId || '' };
   root.Drive = api;
 })(self);

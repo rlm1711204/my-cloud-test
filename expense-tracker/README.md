@@ -161,6 +161,7 @@ The first scan needs internet (about 10 MB, downloaded once). For best results, 
 | Pill says "Tap to sync" | Normal after about an hour. Tap it once. |
 | Bill total is wrong | Just correct it before saving. Retake the photo straight on, with less shadow. |
 | Voice button doesn't work | Allow the microphone for Chrome, or use the 🎤 on your keyboard. |
+| Two phones show different data | Both phones must be connected with the **same Gmail** and the **same Client ID**. Check Settings → Google Drive backup on each phone: it shows the Gmail and the last 6 characters of the Client ID. Then tap **Sync now** on phone A, then phone B, then phone A again. |
 | Changed phones or cleared Chrome data | If Drive was connected, reconnect and your data returns. Otherwise use **Settings → Restore from file** with a downloaded backup. |
 
 **Tip:** once a month, tap **Settings → Download backup** as an extra safety copy.
