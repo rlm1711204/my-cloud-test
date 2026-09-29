@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.2.0';
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const inr = (n) => (n < 0 ? '−' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -131,7 +131,8 @@
       const d = describe(p);
       const typeLabel = Parser.TYPES[p.type].label;
       const when = p.repeat ? '🔁 every month on the ' + ordinal(+p.date.slice(8)) : niceDate(p.date);
-      const bits = [p.type === 'expense' ? d.sub : typeLabel + (p.person ? '' : ' · ' + esc(p.category)), when, p.mode].filter(Boolean).join(' · ');
+      const headTag = p.type === 'expense' ? (Store.headOf(p) === 'need' ? '🧱 Need' : '🎈 Want') : '';
+      const bits = [p.type === 'expense' ? d.sub + ' · ' + headTag : typeLabel + (p.person ? '' : ' · ' + esc(p.category)), when, p.mode].filter(Boolean).join(' · ');
       return `<button class="pv" data-i="${i}"><span class="ico">${Parser.iconFor(p.type, p.category)}</span>
         <span class="what"><b>${d.title}</b><span>${bits}</span></span>
         <span class="amt">${inr(p.amount)}</span><span class="edit">Edit</span></button>`;
@@ -172,7 +173,7 @@
         return;
       }
     }
-    const added = Store.addMany(good.filter((p) => !p.repeat).map((p) => ({ type: p.type, amount: p.amount, category: p.category, person: p.person, note: p.note, date: p.date, mode: p.mode, raw: p.raw, source: p.source || 'text' })));
+    const added = Store.addMany(good.filter((p) => !p.repeat).map((p) => ({ type: p.type, amount: p.amount, category: p.category, person: p.person, note: p.note, date: p.date, mode: p.mode, bucket: p.bucket || '', raw: p.raw, source: p.source || 'text' })));
     quick.value = bad.map((p) => p.raw).join(', ');
     autoGrow(); renderPreview();
     const total = added.reduce((s, t) => s + t.amount, 0);
@@ -262,11 +263,18 @@
     const type = $('#f-type').value;
     const isPeople = PEOPLE_TYPES.has(type);
     $('#f-repeat-wrap').hidden = isPeople;
+    $('#f-bucket-wrap').hidden = type !== 'expense';
+    updateBucketAuto();
     $('#f-cat-wrap').hidden = isPeople;
     $('#f-person-wrap').hidden = !isPeople;
     fillCategories(type, isPeople ? 'Personal loan' : (sheetState.rec.type === type ? sheetState.rec.category : ''));
   }
   $('#f-type').addEventListener('change', syncTypeFields);
+  function updateBucketAuto() {
+    const h = Store.categoryHead($('#f-category').value);
+    $('#f-bucket').options[0].textContent = 'Auto (' + (h === 'need' ? 'Need' : 'Want') + ' for ' + $('#f-category').value + ')';
+  }
+  $('#f-category').addEventListener('change', updateBucketAuto);
 
   /** opts: { mode: 'edit'|'new'|'draft', rec, bill?, draftIndex?, onSaved? } */
   function openSheet(opts) {
@@ -282,6 +290,8 @@
     $('#people-list').innerHTML = Store.people().map((p) => `<option value="${esc(p.name)}">`).join('');
     syncTypeFields();
     $('#f-category').value = r.category || $('#f-category').value;
+    $('#f-bucket').value = r.bucket || '';
+    updateBucketAuto();
     $('#f-delete').hidden = opts.mode !== 'edit';
     const linked = r.recurId && Store.rules().some((x) => x.id === r.recurId);
     $('#f-repeat').checked = !!(linked || r.repeat);
@@ -318,6 +328,7 @@
       note: $('#f-note').value.trim(),
       date: $('#f-date').value || todayIso(),
       mode: $('#f-mode').value,
+      bucket: type === 'expense' ? $('#f-bucket').value : '',
     };
     // Teach the app: if you changed the category, remember it for this description/shop.
     const orig = s.rec;
@@ -367,15 +378,20 @@
     const day = now.getDate(), days = new Date(y, m + 1, 0).getDate();
     $('#hero-month').textContent = monthName(y, m);
     $('#hero-sub').textContent = t.expense ? 'avg ' + inr(Math.round(t.expense / day)) + '/day' : '';
-    $('#hero-left').textContent = inr(Math.round(t.left));
-    $('#hero-left').classList.toggle('neg', t.left < 0);
+    const plan = Store.budgetPlan(y, m);
+    $('#hero-left').textContent = inr(Math.round(plan.totalLeft));
+    $('#hero-left').classList.toggle('neg', plan.totalLeft < 0);
+    const prevName = new Date(y, m - 1, 1).toLocaleString('en-IN', { month: 'short' });
+    $('#hero-carry').hidden = !plan.carry;
+    $('#hero-carry').textContent = 'This month ' + inr(Math.round(plan.monthLeft)) + ' + carried from ' + prevName + ' ' + inr(Math.round(plan.carry));
+    renderPlan($('#plan-body'), plan, true);
+    $('#plan-title').textContent = 'Budget plan · ' + plan.split.join('/');
     $('#t-spent').textContent = inr(Math.round(t.expense));
     $('#t-income').textContent = inr(Math.round(t.income));
     $('#t-saved').textContent = inr(Math.round(t.saving));
 
     const budget = +Store.get().settings.budget || 0;
     $('#budget-box').hidden = !budget;
-    $('#set-budget').textContent = budget ? 'Change budget' : 'Set a monthly budget';
     if (budget) {
       const used = t.expense / budget;
       const left = budget - t.expense;
@@ -406,12 +422,47 @@
   }
   $('#people-card').addEventListener('click', () => go('people'));
   $('#auto-card').addEventListener('click', () => { go('settings'); setTimeout(() => $('#rules-card').scrollIntoView({ behavior: 'smooth' }), 250); });
-  $('#set-budget').addEventListener('click', () => {
-    const cur = Store.get().settings.budget || '';
-    const v = prompt('Monthly spending budget in ₹ (0 to remove):', cur);
-    if (v === null) return;
-    Store.setSetting('budget', Math.max(0, parseFloat(String(v).replace(/[^\d.]/g, '')) || 0));
-  });
+  $('#plan-edit').addEventListener('click', () => { go('settings'); setTimeout(() => $('#plan-settings').scrollIntoView({ behavior: 'smooth' }), 250); });
+
+  /** Draw the Needs / Wants / Savings rows (+ carried money) into el. */
+  function renderPlan(el, plan, isCurrent) {
+    const [y, m] = plan.month.split('-').map(Number);
+    const prevName = new Date(y, m - 2, 1).toLocaleString('en-IN', { month: 'long' });
+    const now = new Date();
+    const daysIn = new Date(y, m, 0).getDate();
+    const pace = isCurrent ? now.getDate() / daysIn : 1; // how far through the month we are
+    let html = '';
+    if (!plan.base) {
+      html += '<p class="muted small plan-base">Add your income (type <b>salary 55000</b>) or set a fixed amount in Settings to see how much you can spend under each head.</p>';
+    } else {
+      html += `<p class="muted small plan-base">Based on ${esc(plan.baseSource)}: <b>${inr(Math.round(plan.base))}</b></p>`;
+    }
+    const icons = { need: '🧱', want: '🎈', saving: '🐷' };
+    for (const h of plan.heads) {
+      const ratio = h.budget ? h.used / h.budget : (h.used ? 2 : 0);
+      let right, sub, cls;
+      if (h.key === 'saving') {
+        right = h.left > 0 ? inr(Math.round(h.left)) + ' to go' : '✓ target met';
+        sub = 'Saved ' + inr(Math.round(h.used)) + (h.budget ? ' of ' + inr(h.budget) + ' target' : '');
+        cls = 'save';
+      } else {
+        right = h.left >= 0 ? inr(Math.round(h.left)) + ' left' : 'Over by ' + inr(Math.round(-h.left));
+        sub = 'Spent ' + inr(Math.round(h.used)) + (h.budget ? ' of ' + inr(h.budget) : '');
+        cls = ratio > 1 ? 'danger' : ratio > pace + 0.1 ? 'warn' : '';
+        if (isCurrent && h.left > 0 && h.budget) {
+          const daysLeft = daysIn - now.getDate() + 1;
+          sub += ' · ' + inr(Math.round(h.left / daysLeft)) + '/day';
+        }
+      }
+      html += `<div class="head-row">
+        <div class="head-top"><span class="head-name">${icons[h.key]} ${h.label}<small>${h.pct}%</small></span><span class="head-left ${h.key !== 'saving' && h.left < 0 ? 'over' : ''}">${right}</span></div>
+        <div class="head-sub">${sub}</div>
+        <div class="meter"><span class="${cls}" style="width:${Math.min(100, ratio * 100)}%"></span></div>
+      </div>`;
+    }
+    if (plan.carry) html += `<div class="carry-row"><span>↪️ Carried forward from ${prevName}</span><b>${inr(Math.round(plan.carry))}</b></div>`;
+    el.innerHTML = html;
+  }
 
   /* =====================================================================
    * HISTORY
@@ -561,6 +612,15 @@
       <div class="tile big"><span class="dot" style="background:var(--c-save)"></span><span class="tile-label">Saved</span><span class="tile-value">${inr(Math.round(t.saving))}</span><span class="tile-delta">${t.income ? t.savingsRate + '% of income' : '&nbsp;'}</span></div>
       <div class="tile big"><span class="tile-label">Money left</span><span class="tile-value ${t.left < 0 ? '' : 'pos'}">${inr(Math.round(t.left))}</span><span class="tile-delta">${t.count} entries</span></div>`;
 
+    // Budget plan (monthly view only)
+    $('#r-plan-card').hidden = rep.range !== 'month';
+    if (rep.range === 'month') {
+      const plan = Store.budgetPlan(rep.y, rep.m);
+      $('#r-plan-title').textContent = 'Budget plan · ' + plan.split.join('/');
+      const now = new Date();
+      renderPlan($('#r-plan'), plan, rep.y === now.getFullYear() && rep.m === now.getMonth());
+    }
+
     // Categories
     const cats = Store.byCategory(r.from, r.to);
     Charts.barList($('#r-cats'), cats.map((c) => ({ label: c.category, icon: Parser.iconFor('expense', c.category), amount: c.amount })), { empty: 'No spending in this period.' });
@@ -680,6 +740,7 @@
         <div>Spent<b>${inr(Math.round(t.expense))}</b></div><div>Income<b>${inr(Math.round(t.income))}</b></div>
         <div>Saved<b>${inr(Math.round(t.saving))}</b></div><div>Money left<b>${inr(Math.round(t.left))}</b></div>
       </div>
+      ${rep.range === 'month' ? (() => { const pl = Store.budgetPlan(rep.y, rep.m); return `<h2>Budget plan (${pl.split.join('/')})${pl.base ? ' on ' + inr(Math.round(pl.base)) : ''}</h2><table><thead><tr><th>Head</th><th class="num">Budget</th><th class="num">Used</th><th class="num">Left</th></tr></thead><tbody>${pl.heads.map((h) => `<tr><td>${h.label} (${h.pct}%)</td><td class="num">${inr(h.budget)}</td><td class="num">${inr(Math.round(h.used))}</td><td class="num">${inr(Math.round(h.left))}</td></tr>`).join('')}${pl.carry ? `<tr><td>Carried forward</td><td></td><td></td><td class="num">${inr(Math.round(pl.carry))}</td></tr>` : ''}</tbody></table>`; })() : ''}
       <h2>Quick insights</h2><ul>${insights(r, t, r.prev ? Store.totals(r.prev.from, r.prev.to) : null, cats).map((s) => '<li>' + s + '</li>').join('')}</ul>
       <h2>Where the money went</h2>
       <div id="print-bars"></div>
@@ -709,12 +770,63 @@
       : !connected ? 'Client ID saved. Tap <b>Connect Google Drive</b> and choose your Google account.'
       : '✅ Connected. Your records are saved in <b>My Drive → Expense Tracker</b>.' + (Drive.lastSync() ? '<br>Last saved: ' + new Date(Drive.lastSync()).toLocaleString('en-IN') : '');
     renderRules();
+    renderPlanSettings();
     $('#budget').value = Store.get().settings.budget || '';
     $('#theme').value = localStorage.getItem(THEME_KEY) || '';
     const learned = Object.entries(Store.get().learned);
     $('#learned').innerHTML = learned.length ? learned.map(([k, v]) => `<button data-forget="${esc(k)}" title="Tap to forget">${esc(k)} → ${esc(v.category)} ✕</button>`).join('') : '<span class="muted small">Nothing yet.</span>';
     $('#version').textContent = 'Kaasu v' + APP_VERSION + ' · ' + Store.active().length + ' entries on this phone';
   }
+  /* ---------- Budget plan settings -------------------------------------- */
+  let customSplit = false; // you picked "Custom…" — keep the % boxes open
+  function renderPlanSettings() {
+    const st = Store.get().settings;
+    const split = st.split || [50, 30, 20];
+    const presets = Store.SPLIT_PRESETS;
+    const idx = presets.findIndex((p) => p.split.join() === split.join());
+    $('#split-preset').innerHTML = presets.map((p, i) => `<option value="${i}">${p.name}</option>`).join('') + '<option value="custom">Custom…</option>';
+    const custom = customSplit || idx < 0;
+    $('#split-preset').value = custom ? 'custom' : String(idx);
+    $('#split-custom').hidden = !custom;
+    $('#split-sum').hidden = !custom;
+    // don't overwrite a box you're typing in
+    [['#split-need', 0], ['#split-want', 1], ['#split-save', 2]].forEach(([id, i]) => { if (document.activeElement !== $(id)) $(id).value = split[i]; });
+    $('#base-mode').value = st.baseMode || 'income';
+    $('#base-amount-wrap').hidden = st.baseMode !== 'fixed';
+    $('#base-amount').value = st.baseAmount || '';
+    $('#carry').checked = st.carryForward !== false;
+    const cats = Object.keys(Parser.EXPENSE_CATEGORIES);
+    $('#cat-heads').innerHTML = cats.map((c) => {
+      const h = Store.categoryHead(c);
+      return `<button class="${h}" data-cat-head="${esc(c)}">${Parser.iconFor('expense', c)} ${esc(c)}: <b>${h === 'need' ? 'Need' : 'Want'}</b></button>`;
+    }).join('');
+  }
+  $('#split-preset').addEventListener('change', (e) => {
+    customSplit = e.target.value === 'custom';
+    if (customSplit) { $('#split-custom').hidden = false; $('#split-sum').hidden = false; checkCustom(); return; }
+    Store.setSetting('split', Store.SPLIT_PRESETS[+e.target.value].split.slice());
+    toast('Split set to ' + Store.get().settings.split.join(' / '));
+  });
+  function checkCustom() {
+    const v = [+$('#split-need').value || 0, +$('#split-want').value || 0, +$('#split-save').value || 0];
+    const sum = v.reduce((a, b) => a + b, 0);
+    $('#split-sum').textContent = sum === 100 ? '✓ Adds up to 100%' : 'Total is ' + sum + '% — make it 100%';
+    $('#split-sum').style.color = sum === 100 ? 'var(--pos)' : 'var(--danger)';
+    if (sum === 100 && v.join() !== (Store.get().settings.split || []).join()) Store.setSetting('split', v);
+  }
+  ['#split-need', '#split-want', '#split-save'].forEach((id) => $(id).addEventListener('input', checkCustom));
+  $('#base-mode').addEventListener('change', (e) => { Store.setSetting('baseMode', e.target.value); });
+  $('#base-amount').addEventListener('change', (e) => Store.setSetting('baseAmount', Math.max(0, +e.target.value || 0)));
+  $('#carry').addEventListener('change', (e) => Store.setSetting('carryForward', e.target.checked));
+  $('#cat-heads').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cat-head]'); if (!b) return;
+    const c = b.dataset.catHead;
+    const map = Object.assign({}, Store.get().settings.bucketMap);
+    const next = Store.categoryHead(c) === 'need' ? 'want' : 'need';
+    if ((next === 'need') === Store.NEED_CATEGORIES.has(c)) delete map[c]; else map[c] = next;
+    Store.setSetting('bucketMap', map);
+  });
+
   /* ---------- Monthly auto entries ------------------------------------- */
   function renderRules() {
     const list = Store.rules().sort((a, b) => (b.active - a.active) || a.day - b.day);

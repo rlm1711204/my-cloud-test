@@ -20,7 +20,14 @@
       txns: [],          // every record
       learned: {},       // phrase -> {type, category, at}  (what you taught the app)
       recurring: [],     // monthly auto entries (rent, salary, SIP…)
-      settings: { budget: 0, name: '', updatedAt: '' },
+      settings: {
+        budget: 0, name: '', updatedAt: '',
+        split: [50, 30, 20],   // Needs / Wants / Savings (% of income)
+        baseMode: 'income',    // 'income' = this month's income, 'fixed' = baseAmount
+        baseAmount: 0,
+        carryForward: true,    // add last month's leftover to this month
+        bucketMap: {},         // category -> 'need' | 'want' (your changes to the defaults)
+      },
       updatedAt: now(),
     };
   }
@@ -32,6 +39,7 @@
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) data = Object.assign(emptyData(), JSON.parse(raw));
+      data.settings = Object.assign(emptyData().settings, data.settings); // new settings get defaults
     } catch (e) { console.warn('Could not read saved data', e); }
     return data;
   }
@@ -59,6 +67,7 @@
       note: rec.note || '',
       date: rec.date,
       mode: rec.mode || '',
+      bucket: rec.bucket || '',       // '' = automatic (by category), or 'need' / 'want'
       source: rec.source || 'text',   // text | bill | voice | manual
       raw: rec.raw || '',
       createdAt: now(),
@@ -240,7 +249,7 @@
     return created;
   }
 
-  function replaceAll(newData, opts) { data = Object.assign(emptyData(), newData); save(opts); }
+  function replaceAll(newData, opts) { data = Object.assign(emptyData(), newData); data.settings = Object.assign(emptyData().settings, data.settings); save(opts); }
   function get() { return data; }
 
   /* ---------- Maths for screens and reports ------------------------------ */
@@ -320,18 +329,98 @@
     return !!(p && p.balance > 0);
   }
 
+  /* ---------- Budget plan: Needs / Wants / Savings ------------------------
+   * Every expense falls under Needs or Wants (by category, unless you chose
+   * otherwise on the entry). Savings entries fill the Savings head. */
+
+  const NEED_CATEGORIES = new Set(['Groceries', 'Transport', 'Fuel', 'Bills', 'Rent', 'Health', 'Education', 'Home', 'Family', 'EMI & Loans', 'Insurance', 'Tax']);
+  const HEADS = [
+    { key: 'need', label: 'Needs' },
+    { key: 'want', label: 'Wants' },
+    { key: 'saving', label: 'Savings' },
+  ];
+  const SPLIT_PRESETS = [
+    { name: '50 / 30 / 20 (most common)', split: [50, 30, 20] },
+    { name: '60 / 20 / 20 (big fixed costs)', split: [60, 20, 20] },
+    { name: '70 / 20 / 10 (tight month)', split: [70, 20, 10] },
+    { name: '40 / 30 / 30 (saver)', split: [40, 30, 30] },
+    { name: '50 / 20 / 30 (aggressive saver)', split: [50, 20, 30] },
+  ];
+
+  /** Default head for a category (your overrides in Settings win). */
+  function categoryHead(category) {
+    const m = data.settings.bucketMap || {};
+    return m[category] || (NEED_CATEGORIES.has(category) ? 'need' : 'want');
+  }
+
+  /** Which head an entry belongs to: 'need' | 'want' | 'saving' | null (not budgeted). */
+  function headOf(t) {
+    if (t.type === 'saving') return 'saving';
+    if (t.type !== 'expense') return null;
+    return t.bucket || categoryHead(t.category);
+  }
+
+  const ymKey = (y, m0) => { const d = new Date(y, m0, 1); return d.getFullYear() + '-' + pad2(d.getMonth() + 1); };
+  const monthRange = (y, m0) => { const d = new Date(y, m0 + 1, 0); const k = ymKey(y, m0); return [k + '-01', k + '-' + pad2(d.getDate())]; };
+
+  /**
+   * Money carried into a month = everything left over from earlier months
+   * (from your first entry onwards). Only a positive leftover is carried.
+   */
+  function carryInto(y, m0) {
+    if (!data.settings.carryForward) return 0;
+    const first = active().map((t) => t.date).sort()[0];
+    if (!first) return 0;
+    let carry = 0;
+    let fy = +first.slice(0, 4), fm = +first.slice(5, 7) - 1;
+    const target = ymKey(y, m0);
+    for (let d = new Date(fy, fm, 1); ymKey(d.getFullYear(), d.getMonth()) < target; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+      const [from, to] = monthRange(d.getFullYear(), d.getMonth());
+      carry = Math.max(0, carry + totals(from, to).left);
+    }
+    return Math.round(carry * 100) / 100;
+  }
+
+  /** The full budget picture for one month. */
+  function budgetPlan(y, m0) {
+    const st = data.settings;
+    const [from, to] = monthRange(y, m0);
+    const t = totals(from, to);
+    let base = 0, baseSource = '';
+    if (st.baseMode === 'fixed' && st.baseAmount > 0) { base = +st.baseAmount; baseSource = 'fixed amount'; }
+    else if (t.income > 0) { base = t.income; baseSource = 'this month\'s income'; }
+    else {
+      const expected = rules().filter((r) => r.active && r.type === 'income').reduce((s, r) => s + r.amount, 0);
+      if (expected) { base = expected; baseSource = 'expected salary'; }
+    }
+    const split = (st.split && st.split.length === 3) ? st.split : [50, 30, 20];
+    const used = { need: 0, want: 0, saving: 0 };
+    for (const x of active()) {
+      if (x.date < from || x.date > to) continue;
+      const h = headOf(x);
+      if (h) used[h] += x.amount;
+    }
+    const heads = HEADS.map((h, i) => {
+      const budget = Math.round(base * split[i] / 100);
+      return { key: h.key, label: h.label, pct: split[i], budget, used: Math.round(used[h.key] * 100) / 100, left: Math.round((budget - used[h.key]) * 100) / 100 };
+    });
+    const carry = carryInto(y, m0);
+    return { base, baseSource, split, heads, carry, monthLeft: t.left, totalLeft: t.left + carry, month: ymKey(y, m0) };
+  }
+
   /* ---------- Export ------------------------------------------------------ */
 
   const TYPE_LABEL = { expense: 'Expense', income: 'Income', saving: 'Saving', lent: 'Money given', borrowed: 'Money taken', got_back: 'Got back', paid_back: 'Paid back' };
 
   /** CSV that opens directly in Excel / Google Sheets. */
   function toCSV(from, to, txns) {
-    const rows = [['Date', 'Type', 'Category', 'Person', 'Description', 'Amount (INR)', 'In/Out', 'Payment mode', 'Added by']];
+    const rows = [['Date', 'Type', 'Category', 'Budget head', 'Person', 'Description', 'Amount (INR)', 'In/Out', 'Payment mode', 'Added by']];
     const src = txns ? txns.filter((t) => !t.deleted) : active();
     const list = src.filter((t) => (!from || inRange(t, from, to))).sort((a, b) => a.date.localeCompare(b.date));
     for (const t of list) {
       const inflow = ['income', 'borrowed', 'got_back'].includes(t.type);
-      rows.push([t.date, TYPE_LABEL[t.type] || t.type, t.category, t.person, t.note, t.amount.toFixed(2), inflow ? 'In' : 'Out', t.mode, t.source || '']);
+      const h = headOf(t);
+      rows.push([t.date, TYPE_LABEL[t.type] || t.type, t.category, h ? { need: 'Need', want: 'Want', saving: 'Saving' }[h] : '', t.person, t.note, t.amount.toFixed(2), inflow ? 'In' : 'Out', t.mode, t.source || '']);
     }
     const esc = (v) => { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     return '﻿' + rows.map((r) => r.map(esc).join(',')).join('\r\n'); // ﻿ = Excel reads ₹ and Tamil correctly
@@ -339,6 +428,7 @@
 
   const api = {
     load, save, onChange, get, active, add, addMany, update, remove, restore, learn, forget, setSetting,
+    budgetPlan, carryInto, headOf, categoryHead, HEADS, SPLIT_PRESETS, NEED_CATEGORIES,
     rules, addRule, updateRule, removeRule, linkToRule, applyRecurring, nextRun, ruleDate,
     merge, replaceAll, totals, byCategory, byDay, byMonth, people, owesMe, toCSV, emptyData, TYPE_LABEL,
   };

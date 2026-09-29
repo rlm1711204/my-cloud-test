@@ -346,3 +346,19 @@ td.num, th.num { text-align: right; }
 .check { display: flex; align-items: center; gap: 10px; margin: 2px 0 14px; font-size: 14px; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .row.paused { opacity: .55; }
+
+/* ---------- Budget plan ---------- */
+.hero-carry { margin: -10px 0 14px; }
+.plan-base { margin: -4px 0 10px; }
+.head-row { padding: 10px 0; border-top: 1px solid var(--line); }
+.head-row:first-of-type { border-top: 0; }
+.head-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.head-name { font-weight: 600; }
+.head-name small { color: var(--ink-3); font-weight: 500; margin-left: 4px; }
+.head-left { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.head-left.over { color: var(--danger); }
+.head-sub { font-size: 12.5px; color: var(--ink-2); margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+.meter span.save { background: var(--c-save); }
+.carry-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface-2); border-radius: 12px; padding: 10px 12px; margin-top: 8px; font-size: 14px; }
+.carry-row b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.learned button.need { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }

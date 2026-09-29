@@ -293,6 +293,11 @@
     const REPEAT = /\b(every\s*month|each\s*month|per\s*month|monthly|every\s*mnth|maasam|maatham)\b/;
     const repeat = REPEAT.test(t);
     if (repeat) t = t.replace(REPEAT, ' ');
+    // "shopping 800 need" / "course 2000 want" -> put it under that budget head
+    const HEADW = /\b(needs?|wants?)\b/;
+    const hm = HEADW.exec(t);
+    const bucket = hm ? (hm[1].startsWith('need') ? 'need' : 'want') : '';
+    if (hm) t = t.replace(HEADW, ' ');
 
     const dateRes = extractDate(t, ctx.today);
     t = dateRes.text;
@@ -365,6 +370,7 @@
       date: dateRes.date,
       mode: modeRes.mode,
       repeat: repeat && (type === 'expense' || type === 'income' || type === 'saving'),
+      bucket: type === 'expense' ? bucket : '',
       raw,
     };
   }

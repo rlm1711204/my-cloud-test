@@ -56,6 +56,7 @@
         </div>
         <div class="hero-label">Money left</div>
         <div class="hero-value" id="hero-left">₹0</div>
+        <div class="hero-carry muted small" id="hero-carry" hidden></div>
         <div class="tiles">
           <div class="tile"><span class="dot" style="background:var(--c-spend)"></span><span class="tile-label">Spent</span><span class="tile-value" id="t-spent">₹0</span></div>
           <div class="tile"><span class="dot" style="background:var(--c-income)"></span><span class="tile-label">Income</span><span class="tile-value" id="t-income">₹0</span></div>
@@ -65,7 +66,11 @@
           <div class="budget-head"><span>Budget</span><span id="budget-text"></span></div>
           <div class="meter"><span id="budget-fill"></span></div>
         </div>
-        <button id="set-budget" class="link small">Set a monthly budget</button>
+      </div>
+
+      <div class="card" id="plan-card">
+        <div class="card-head"><h3 id="plan-title">Budget plan</h3><button class="link small" id="plan-edit">Change</button></div>
+        <div id="plan-body"></div>
       </div>
 
       <button id="people-card" class="card people-card" hidden>
@@ -130,6 +135,11 @@
       </div>
 
       <div class="tiles four" id="r-tiles"></div>
+
+      <div class="card" id="r-plan-card">
+        <h3 id="r-plan-title">Budget plan</h3>
+        <div id="r-plan"></div>
+      </div>
 
       <div class="card">
         <h3>Quick insights</h3>
@@ -208,9 +218,29 @@
         <button class="btn block" id="rule-add">+ Add monthly entry</button>
       </div>
 
+      <div class="card" id="plan-settings">
+        <h3>📊 Budget plan: Needs · Wants · Savings</h3>
+        <p class="muted small">Your money is split into three heads. Every expense goes to Needs or Wants by its category, and savings entries fill Savings.</p>
+        <label class="field"><span>Split</span><select id="split-preset"></select></label>
+        <div class="field-row" id="split-custom" hidden>
+          <label class="field"><span>Needs %</span><input id="split-need" type="number" inputmode="numeric" min="0" max="100"></label>
+          <label class="field"><span>Wants %</span><input id="split-want" type="number" inputmode="numeric" min="0" max="100"></label>
+          <label class="field"><span>Savings %</span><input id="split-save" type="number" inputmode="numeric" min="0" max="100"></label>
+        </div>
+        <p class="small" id="split-sum" hidden></p>
+        <label class="field"><span>Plan based on</span>
+          <select id="base-mode"><option value="income">This month's income (salary + other income)</option><option value="fixed">A fixed amount every month</option></select>
+        </label>
+        <label class="field" id="base-amount-wrap" hidden><span>Fixed monthly amount (₹)</span><input id="base-amount" type="number" inputmode="numeric" min="0" placeholder="e.g. 50000"></label>
+        <label class="check"><input type="checkbox" id="carry"> <span>Carry last month's leftover money into the next month</span></label>
+        <div class="field"><span>Which head each category goes to <small class="muted">(tap to switch)</small></span>
+          <div id="cat-heads" class="learned"></div>
+        </div>
+      </div>
+
       <div class="card">
         <h3>Preferences</h3>
-        <label class="field"><span>Monthly budget (₹)</span><input id="budget" type="number" inputmode="numeric" min="0" placeholder="e.g. 25000"></label>
+        <label class="field"><span>Overall spending limit (₹, optional)</span><input id="budget" type="number" inputmode="numeric" min="0" placeholder="e.g. 25000"></label>
         <label class="field"><span>Theme</span>
           <select id="theme"><option value="">Same as phone</option><option value="light">Light</option><option value="dark">Dark</option></select>
         </label>
@@ -248,6 +278,7 @@
           <li><b>Returned:</b> ravi returned 1000 · paid back kumar 500</li>
           <li><b>Dates:</b> yesterday · 2 days ago · last monday · 5/9 · 5 sep</li>
           <li><b>Many at once:</b> chai 20, auto 60, milk 30</li>
+          <li><b>Budget head:</b> add <b>need</b> or <b>want</b>, e.g. shopping 800 need</li>
           <li><b>Every month:</b> rent 12000 every month on 5th · salary 55000 monthly on 1st</li>
         </ul>
       </div>
@@ -285,6 +316,9 @@
       </label>
       <label class="field"><span>Amount (₹)</span><input id="f-amount" type="number" inputmode="decimal" step="0.01" min="0" required></label>
       <label class="field" id="f-cat-wrap"><span>Category</span><select id="f-category"></select></label>
+      <label class="field" id="f-bucket-wrap"><span>Budget head</span>
+        <select id="f-bucket"><option value="">Auto</option><option value="need">🧱 Need</option><option value="want">🎈 Want</option></select>
+      </label>
       <label class="field" id="f-person-wrap" hidden><span>Person</span><input id="f-person" list="people-list" autocomplete="off" autocapitalize="words"></label>
       <datalist id="people-list"></datalist>
       <label class="field"><span>Description</span><input id="f-note" autocomplete="off"></label>

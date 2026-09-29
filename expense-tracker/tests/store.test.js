@@ -58,3 +58,39 @@ const mm = Store.merge(p1, p2);
 assert.strictEqual(mm.txns.filter((t) => t.id === id).length, 1);
 assert.strictEqual(mm.txns.find((t) => t.id === id).amount, 61000);
 console.log('monthly auto entries ok');
+
+// Budget plan: Needs / Wants / Savings + carry forward
+Store.replaceAll(Store.emptyData());
+const add = (type, amount, category, date, extra) => Store.add(Object.assign({ type, amount, category, date }, extra || {}));
+add('income', 50000, 'Salary', '2026-08-01');
+add('expense', 12000, 'Rent', '2026-08-05');      // need
+add('expense', 3000, 'Food', '2026-08-10');       // want
+add('saving', 5000, 'SIP / Mutual fund', '2026-08-10');
+// August left = 50000 - 12000 - 3000 - 5000 = 30000 -> carried into Sept
+add('income', 50000, 'Salary', '2026-09-01');
+add('expense', 20000, 'Rent', '2026-09-05');
+add('expense', 4000, 'Shopping', '2026-09-12');
+add('expense', 1500, 'Shopping', '2026-09-13', { bucket: 'need' }); // you marked it a need
+add('saving', 6000, 'Gold', '2026-09-15');
+const plan = Store.budgetPlan(2026, 8);
+const H = Object.fromEntries(plan.heads.map((h) => [h.key, h]));
+assert.strictEqual(plan.base, 50000);
+assert.deepStrictEqual([H.need.budget, H.want.budget, H.saving.budget], [25000, 15000, 10000]);
+assert.deepStrictEqual([H.need.used, H.want.used, H.saving.used], [21500, 4000, 6000]);
+assert.deepStrictEqual([H.need.left, H.want.left, H.saving.left], [3500, 11000, 4000]);
+assert.strictEqual(plan.carry, 30000);
+assert.strictEqual(plan.totalLeft, 30000 + (50000 - 20000 - 4000 - 1500 - 6000));
+// custom split and category override
+Store.setSetting('split', [60, 20, 20]);
+Store.setSetting('bucketMap', { Shopping: 'need' });
+const plan2 = Store.budgetPlan(2026, 8);
+assert.strictEqual(plan2.heads[0].budget, 30000);
+assert.strictEqual(plan2.heads[0].used, 25500);
+// carry off
+Store.setSetting('carryForward', false);
+assert.strictEqual(Store.budgetPlan(2026, 8).carry, 0);
+// overspending isn't carried as a negative
+Store.setSetting('carryForward', true);
+add('expense', 90000, 'Travel', '2026-08-20');
+assert.strictEqual(Store.carryInto(2026, 8), 0);
+console.log('budget plan ok');

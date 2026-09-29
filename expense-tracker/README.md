@@ -25,6 +25,7 @@ see reports, download them, and back everything up to **your own Google Drive**.
 | `took 500 from kumar` / `borrowed 2k from anand` | Money taken (you owe Kumar) |
 | `ravi returned 1000` | Ravi paid you back |
 | `paid back kumar 500` | You paid Kumar back |
+| `shoes 2500 need` / `headphones 1800 want` | Spent, under the Needs / Wants head you said |
 | `gave amma 3000` | Spent · Family (money given to family isn't counted as a loan) |
 | `chai 20, auto 60, milk 30` | 3 entries at once |
 
@@ -110,6 +111,19 @@ My Drive/
 | **People** | Who owes you and whom you owe. Tap a person to see their history and record a repayment. |
 | **Reports** | Month, 3 months, financial year (Apr–Mar) or all time. Spending by category, daily chart, 6-month income/spent/saved chart, payment modes, and insights. Downloads: **Excel (CSV)**, **PDF**, **Save to Google Drive**, **Full backup**. |
 | **Settings** | Google Drive, monthly budget, light/dark theme, words Kaasu has learned, backup/restore, erase. |
+
+### Budget plan: Needs 🧱 · Wants 🎈 · Savings 🐷
+Kaasu splits your monthly income into three heads. The default is **50 / 30 / 20**. Home shows how much is **left under each head** and how much you can spend per day.
+
+- **Automatic sorting:** every expense goes into a head by its category.
+  - **Needs:** rent, groceries, bills, fuel, transport, EMI, health, education, insurance, family, home, tax.
+  - **Wants:** eating out, shopping, movies, travel, personal care, gifts.
+  - **Savings:** your savings entries (SIP, FD, gold, PPF…).
+- **One entry is different?** Add `need` or `want` when typing (`shoes 2500 need`), or open the entry and change **Budget head**.
+- **A whole category should switch?** Go to Settings → Budget plan and tap the category (e.g. make *Food* a Need).
+- **Change the split:** Settings → Budget plan → **Split**. Choose 50/30/20, 60/20/20, 70/20/10, 40/30/30, 50/20/30, or **Custom** (the three numbers must add up to 100).
+- **Plan based on:** this month's income (the default), or a fixed amount you choose. If this month's salary isn't in yet, Kaasu uses your monthly salary auto entry.
+- **Carry forward:** money left at the end of a month is added to the next month and shown as **"Carried forward from August"**. You can turn this off in Settings. Only leftover money is carried; an overspent month isn't carried as a minus.
 
 ### Monthly auto entries 🔁 (rent, EMI, SIP, salary…)
 Set these up once, and Kaasu adds them by itself on that day every month. You can do it in any of three ways:

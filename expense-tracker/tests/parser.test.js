@@ -110,3 +110,7 @@ const sal = P.parseOne('salary 55000 monthly', ctx);
 assert.strictEqual(sal.repeat, true); assert.strictEqual(sal.type, 'income'); assert.strictEqual(sal.note, 'Salary');
 assert.strictEqual(P.parseOne('chai 20', ctx).repeat, false);
 console.log('monthly phrases ok');
+assert.strictEqual(P.parseOne('shopping 800 need', ctx).bucket, 'need');
+assert.strictEqual(P.parseOne('course 2000 want', ctx).bucket, 'want');
+assert.strictEqual(P.parseOne('course 2000 want', ctx).amount, 2000);
+console.log('need/want words ok');
