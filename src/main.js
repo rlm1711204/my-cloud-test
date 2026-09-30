@@ -3,7 +3,7 @@ import * as store from "./lib/store.js";
 import * as drive from "./lib/drive.js";
 import { DEFAULT_MODEL, EXAMS } from "./lib/ai.js";
 import { AllProvidersFailed, aiEnrichAll, aiList, fallbackNote, hasAI } from "./lib/engine.js";
-import { GEMINI_AUTO, geminiKeysOf, keyStatus } from "./lib/gemini.js";
+import { GEMINI_AUTO, geminiKeysOf, keyStatus, looksLikeGeminiKey, testKey } from "./lib/gemini.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
@@ -551,7 +551,7 @@ function viewSettings() {
     <article class="card">
       <h3>✨ Google Gemini <span class="badge">free tier</span></h3>
       <p class="muted">Free AI word cards with exam tips. Get a free key (no card needed) at
-      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <i>Create API key</i>.
+      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <i>Create API key</i> (new keys start with <code>AQ.</code>).
       The free tier has daily limits; when they run out the app switches to Claude (if set) or free dictionaries.
       Google may use free-tier inputs to improve its products — fine for textbook pages, avoid personal documents.</p>
       <div class="field">Gemini API keys (tried in order; when one hits its limit the next is used)
@@ -570,7 +570,7 @@ function viewSettings() {
               })
               .join("")}</ul>`
           : ""}
-        <div class="row"><input type="password" id="newGeminiKey" placeholder="Paste a key: AIza…" autocomplete="off" />
+        <div class="row"><input type="password" id="newGeminiKey" placeholder="Paste a key: AQ.… or AIza…" autocomplete="off" />
           <button class="btn small primary" type="button" data-action="add-gemini-key">Add</button></div>
       </div>
       <label class="field">Model
@@ -1379,11 +1379,16 @@ const actions = {
   "add-gemini-key": () => {
     const input = $("#newGeminiKey");
     const key = input.value.trim();
-    if (!/^[A-Za-z0-9_-]{20,}$/.test(key)) return toast("That doesn't look like a Gemini key (they start with AIza…).");
+    if (!looksLikeGeminiKey(key)) return toast("That doesn't look like a Gemini key (they start with AQ. or AIza…).");
     if (geminiKeysOf(settings()).includes(key)) return toast("That key is already added.");
     store.update((s) => (s.settings.geminiKeys = [...geminiKeysOf(s.settings), key]), { touchesData: false });
-    toast(`Gemini key ${geminiKeysOf(settings()).length} added ✓`);
+    const n = geminiKeysOf(settings()).length;
+    toast(`Gemini key ${n} added — testing it…`);
     render();
+    testKey(key).then((r) => {
+      toast(`Gemini key ${n}: ${r.message}`, 7000);
+      render();
+    });
   },
   "remove-gemini-key": (el) => {
     const i = Number(el.dataset.i);

@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { geminiEnrich, geminiKeysOf, keyStatus } from "../src/lib/gemini.js";
+import { geminiEnrich, geminiKeysOf, keyStatus, looksLikeGeminiKey, testKey } from "../src/lib/gemini.js";
 
 const ok = (words) => ({ ok: true, status: 200, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ words }) }] } }] }) });
 const fail = (status, message = "x") => ({ ok: false, status, json: async () => ({ error: { message } }) });
-const keyOf = (url) => new URL(url).searchParams.get("key");
+// Keys must travel in the x-goog-api-key header (AQ. keys fail as ?key=).
+const keyOf = (url, opts) => {
+  expect(new URL(url).searchParams.get("key")).toBeNull();
+  return opts?.headers?.["x-goog-api-key"];
+};
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -19,9 +23,9 @@ describe("multiple Gemini keys", () => {
 
   it("moves to the next key when one hits its free limit, and rests the exhausted key", async () => {
     const calls = [];
-    vi.stubGlobal("fetch", async (url) => {
-      calls.push(keyOf(url));
-      return keyOf(url) === "KEY_ONE_aaaaaaaaaaaaaaaa" ? fail(429) : ok([{ word: "abate" }]);
+    vi.stubGlobal("fetch", async (url, opts) => {
+      calls.push(keyOf(url, opts));
+      return keyOf(url, opts) === "KEY_ONE_aaaaaaaaaaaaaaaa" ? fail(429) : ok([{ word: "abate" }]);
     });
     const s = { ...S, geminiKeys: ["KEY_ONE_aaaaaaaaaaaaaaaa", "KEY_TWO_bbbbbbbbbbbbbbbb"] };
     const res = await geminiEnrich(s, ["abate"], []);
@@ -36,9 +40,30 @@ describe("multiple Gemini keys", () => {
   });
 
   it("skips an invalid key and reports a limit only when every key is exhausted", async () => {
-    vi.stubGlobal("fetch", async (url) => (keyOf(url) === "BAD_KEY_cccccccccccccccc" ? fail(400, "API key not valid") : fail(429)));
+    vi.stubGlobal("fetch", async (url, opts) => (keyOf(url, opts) === "BAD_KEY_cccccccccccccccc" ? fail(400, "API key not valid") : fail(429)));
     const s = { ...S, geminiKeys: ["BAD_KEY_cccccccccccccccc", "LIMITED_dddddddddddddddd"] };
     await expect(geminiEnrich(s, ["abate"], [])).rejects.toMatchObject({ quota: true, message: /All Gemini keys/ });
     expect(keyStatus("BAD_KEY_cccccccccccccccc").state).toBe("invalid");
+  });
+});
+
+describe("AQ. auth keys", () => {
+  it("accepts both key formats", () => {
+    expect(looksLikeGeminiKey("AQ.Ab8RN6K36hfeGrY3MGGZwhpUClvIsJpO4KDNGxd-5-1PhYq5")).toBe(true);
+    expect(looksLikeGeminiKey("AIzaSyA1234567890abcdefghijklmnop")).toBe(true);
+    expect(looksLikeGeminiKey("short")).toBe(false);
+    expect(looksLikeGeminiKey("has space in the middle of it....")).toBe(false);
+  });
+  it("tests a key on add and explains Google's 401 for unsupported AQ. keys", async () => {
+    vi.stubGlobal("fetch", async (url, opts) =>
+      keyOf(url, opts).startsWith("AQ.good")
+        ? { ok: true, status: 200, json: async () => ({ models: [] }) }
+        : fail(401, "Request had invalid authentication credentials. ACCESS_TOKEN_TYPE_UNSUPPORTED"),
+    );
+    expect(await testKey("AQ.good-xxxxxxxxxxxxxxxxxxxx")).toMatchObject({ ok: true });
+    const bad = await testKey("AQ.blocked-xxxxxxxxxxxxxxxx");
+    expect(bad.ok).toBe(false);
+    expect(bad.message).toMatch(/known Google issue/);
+    expect(keyStatus("AQ.blocked-xxxxxxxxxxxxxxxx").state).toBe("invalid");
   });
 });

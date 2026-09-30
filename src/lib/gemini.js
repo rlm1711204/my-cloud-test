@@ -53,6 +53,31 @@ export function rankModels(models) {
 /** All Gemini keys in Settings, in order (older versions stored a single `geminiKey`). */
 export const geminiKeysOf = (s) => [...new Set([...(s.geminiKeys || []), s.geminiKey].map((k) => String(k || "").trim()).filter(Boolean))];
 
+/**
+ * Keys go in the x-goog-api-key header. Google's newer "AQ." auth keys (issued since May 2026) only work
+ * there, not as a ?key= URL parameter; older "AIza" keys work either way.
+ */
+const authHeaders = (key) => ({ "x-goog-api-key": key });
+
+/** Loose shape check: "AIza…" (classic) or "AQ.…" (auth key); anything long without spaces is allowed. */
+export const looksLikeGeminiKey = (k) => /^\S{20,}$/.test(String(k || "").trim());
+
+/** Try a key right away (lists models). Resolves {ok, message}. */
+export async function testKey(key) {
+  try {
+    const res = await fetch(`${BASE}/models?pageSize=5`, { headers: authHeaders(key) });
+    if (res.ok) {
+      badKeys.delete(key);
+      return { ok: true, message: "Key works ✓" };
+    }
+    const err = await toError(res);
+    if (err.status === 400 || err.status === 401 || err.status === 403) badKeys.add(key);
+    return { ok: err.quota, message: err.message };
+  } catch {
+    return { ok: true, message: "Saved — couldn't test it now (no internet?)." };
+  }
+}
+
 const KEY_REST_MS = 10 * 60 * 1000;
 const keyRest = new Map(); // key -> time it may be used again (after hitting its free limit)
 const badKeys = new Set(); // keys Google rejected as invalid, until the app is reopened
@@ -72,7 +97,7 @@ async function candidateModels(settings, key) {
   }
   if (modelCache.has(key)) return modelCache.get(key);
   try {
-    const res = await fetch(`${BASE}/models?pageSize=200&key=${encodeURIComponent(key)}`);
+    const res = await fetch(`${BASE}/models?pageSize=200`, { headers: authHeaders(key) });
     if (res.ok) {
       const ranked = rankModels((await res.json()).models || []);
       // Best Flash plus best Flash-Lite is enough: Lite is the quota fallback.
@@ -81,7 +106,7 @@ async function candidateModels(settings, key) {
         modelCache.set(key, best);
         return best;
       }
-    } else if (res.status === 400 || res.status === 403) {
+    } else if (res.status === 400 || res.status === 401 || res.status === 403) {
       throw await toError(res);
     }
   } catch (e) {
@@ -100,6 +125,14 @@ async function toError(res) {
   }
   if (res.status === 429) return new GeminiError("Gemini free limit reached for now.", { status: 429, quota: true });
   if (res.status === 400 && /API key/i.test(msg)) return new GeminiError("Gemini API key is not valid. Check it in Settings.", { status: 400 });
+  if (res.status === 401) {
+    return new GeminiError(
+      /ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(msg)
+        ? "Google rejected this key type for your account (a known Google issue with some new AQ. keys). Try a key from another Google account."
+        : "Gemini key not accepted (401). Check the key or create a new one.",
+      { status: 401 },
+    );
+  }
   if (res.status === 403) return new GeminiError("Gemini refused this key (API not enabled or region not supported).", { status: 403 });
   if (res.status >= 500) return new GeminiError("Gemini is busy right now.", { status: res.status });
   return new GeminiError(`Gemini error ${res.status}: ${msg.slice(0, 160)}`, { status: res.status });
@@ -132,9 +165,9 @@ async function runWithKey(settings, key, body, onProgress, label) {
     onProgress?.(`Gemini${label} (${model}) is working…`);
     let res;
     try {
-      res = await fetch(`${BASE}/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+      res = await fetch(`${BASE}/models/${model}:generateContent`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders(key) },
         body: JSON.stringify(body),
       });
     } catch {
@@ -180,7 +213,7 @@ async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
       if (e.quota) {
         anyQuota = true;
         keyRest.set(key, Date.now() + KEY_REST_MS);
-      } else if (e.status === 400 || e.status === 403) {
+      } else if (e.status === 400 || e.status === 401 || e.status === 403) {
         badKeys.add(key);
       } else if (!e.status || e.status < 500) {
         throw e; // network or content problem: another key won't help
