@@ -14,8 +14,11 @@ Every day you get a **Word of the Day** plus **10 words to memorise** (you can c
 | 🔁 **Duplicate check** | Every word is checked against your master list, including forms like *mitigated* ↔ *mitigate*. Duplicates are never added twice |
 | 🗂️ **Word card** | Word, part of speech, simple meaning, **Hindi meaning**, optional **Tamil meaning**, IPA + easy pronunciation (*uh-BAYT*) with a 🔊 button, **2 example sentences**, synonyms, antonyms, an **exam tip** (root, mnemonic or confusable word), and the sentence where you found it |
 | ☀️ **Daily plan** | Word of the Day (never repeats until all words have been featured) plus N words mixing due reviews and new words |
+| 📚 **Built-in Word Bank** | 1267 exam words, idioms and one-word substitutions with Hindi, synonyms, antonyms and an example, kept separate from your own list (copy any word into your list with one tap) |
+| 🔀 **Choose your source** | Today's words and Practice can use **My words**, the **Word Bank** or **Mixed** |
+| 🔔 **Daily notification** | "Your 2 words for today", rotating through every word of the chosen source (Chrome on Android, app installed to the home screen) |
 | 🃏 **Flashcards** | Forgot / Hard / Knew it / Easy. Words come back after 1 → 3 → 7 → 14 → 30 → 60 days |
-| 🎯 **Quiz** | Word → meaning, Word → Hindi, Meaning → word (one-word substitution), fill in the blank (cloze), synonyms |
+| 🎯 **Practice** | Word → meaning, Word → Hindi, Meaning → word, fill in the blank, synonyms, antonyms. Every word is asked once per round before any repeats; wrong answers come back a few questions later and in later sessions until answered right twice in a row |
 | ☁️ **Google Drive** | `VocabVault/vocab-master.json` (the app's data) plus a **"Vocab Master List" Google Sheet** you can open, filter or print. Syncs across phone and laptop |
 | 📤 **Extras** | Share the Word of the Day to WhatsApp, 🔥 streak counter, CSV export for Excel, backup/restore, dark mode, works offline |
 
@@ -105,6 +108,9 @@ src/
   lib/difficulty.js  Offline difficulty filter using SCOWL word-frequency levels
   lib/words.js       Word records, duplicate/inflection detection, merge logic, CSV
   lib/srs.js         Spaced repetition (Leitner boxes), daily plan, streaks
+  lib/practice.js    Practice rounds (cover every word) and weak-word repetition
+  lib/bank.js        Built-in Word Bank loader (data in src/data/bank1-6.js)
+  lib/notify.js      Daily 2-word notification schedule (shown by public/sw.js)
   lib/store.js       Local storage (offline-first)
   lib/drive.js       Google Drive sync (JSON + Google Sheet mirror)
 ```

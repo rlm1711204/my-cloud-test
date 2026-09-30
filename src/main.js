@@ -8,6 +8,9 @@ import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
 import { review, stage, stats, streak } from "./lib/srs.js";
+import { isBankId, loadBank } from "./lib/bank.js";
+import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
+import * as notify from "./lib/notify.js";
 import {
   buildIndex,
   cleanHeadword,
@@ -91,6 +94,8 @@ const ui = {
   sort: "newest",
   syncState: "idle",
   syncError: "",
+  wordsTab: "mine", // Words screen: "mine" | "bank"
+  notifyStatus: "",
 };
 
 // ---------- shared word rendering ----------
@@ -126,10 +131,16 @@ function wordDetails(w) {
 }
 
 // ---------- views ----------
+const sourceSelect = (setting, value, extra = "") =>
+  `<select data-setting="${setting}" ${extra}>${Object.entries(store.SOURCES)
+    .map(([k, l]) => `<option value="${k}" ${value === k ? "selected" : ""}>${l} (${store.wordsFor(k).length})</option>`)
+    .join("")}</select>`;
+
 function viewToday() {
   const s = store.get();
-  const words = store.liveWords();
-  if (!words.length) {
+  const source = s.settings.dailySource;
+  const pool = store.wordsFor(source);
+  if (!pool.length) {
     return `
       <section class="hero">
         <h1>Build your exam vocabulary, one page at a time.</h1>
@@ -138,17 +149,20 @@ function viewToday() {
         daily revision set.</p>
         <div class="stack">
           <button class="btn primary" data-nav="add" type="button">➕ Add your first words</button>
+          <button class="btn" type="button" data-action="use-bank">📚 Start with the built-in Word Bank (${store.bankWords().length} words)</button>
           ${!hasAI(s.settings) ? `<p class="muted small">Works free out of the box. Word cards come from free online dictionaries.</p>` : ""}
         </div>
       </section>`;
   }
   const plan = store.todaysPlan();
-  const st = stats(s.words);
+  const st = stats(pool);
   const wotd = store.byId(plan.wotd);
   const planWords = plan.ids.map(store.byId).filter(Boolean);
   const done = planWords.filter((w) => plan.done[w.id]).length;
   const pct = planWords.length ? Math.round((done / planWords.length) * 100) : 0;
   const date = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+  const n = s.settings.notify;
+  const two = n.enabled ? notify.wordsForDay(store.wordsFor(n.source)) : [];
 
   return `
     <section class="today-head">
@@ -158,6 +172,7 @@ function viewToday() {
       </div>
       <div class="streak" title="Days in a row with revision">🔥 ${streak(s.activity)}</div>
     </section>
+    <label class="source-line">Words from ${sourceSelect("dailySource", source, 'aria-label="Today\'s words from"')}</label>
 
     <section class="stats">
       <div><b>${st.total}</b><span>words</span></div>
@@ -167,9 +182,23 @@ function viewToday() {
     </section>
 
     ${
+      two.length
+        ? `<article class="card two-words">
+            <p class="eyebrow">🔔 Today’s 2 words</p>
+            ${two
+              .map(
+                (w) => `<div class="tw" data-action="open-word" data-id="${w.id}"><b>${esc(w.word)}</b>
+                  <span>${esc(w.meaning)}</span><span class="ph" lang="hi">${esc(w.hindi)}</span></div>`,
+              )
+              .join("")}
+          </article>`
+        : ""
+    }
+
+    ${
       wotd
         ? `<article class="card wotd">
-            <p class="eyebrow">✨ Word of the Day</p>
+            <p class="eyebrow">✨ Word of the Day${wotd.bank ? ` <span class="badge bank">Word Bank</span>` : ""}</p>
             ${wordHead(wotd, { big: true })}
             ${wordDetails(wotd)}
             <div class="row">
@@ -206,7 +235,7 @@ function viewToday() {
             </button>`
           : `<p class="muted">Add a few more words to get a daily set.</p>`
       }
-      ${done && done === planWords.length ? `<p class="done-msg">🎉 Done for today! Try a quick <a href="#" data-nav="practice">quiz</a> to lock it in.</p>` : ""}
+      ${done && done === planWords.length ? `<p class="done-msg">🎉 Done for today! Lock it in with a quick <a href="#" data-nav="practice">practice</a>.</p>` : ""}
     </article>`;
 }
 
@@ -301,56 +330,90 @@ function viewCandidates() {
     </div>`;
 }
 
+const PRACTICE_KINDS = [
+  ["mixed", "🎲", "Mixed", "A bit of everything"],
+  ["meaning", "📖", "Word → Meaning", "Pick the right meaning"],
+  ["hindi", "🇮🇳", "Word → Hindi", "Pick the Hindi meaning"],
+  ["reverse", "🔁", "Meaning → Word", "One-word substitution"],
+  ["blank", "✏️", "Fill in the blank", "Cloze test practice"],
+  ["synonym", "🔗", "Synonyms", "Closest in meaning"],
+  ["antonym", "↔️", "Antonyms", "Opposite in meaning"],
+];
+
 function viewPractice() {
-  const pool = store.liveWords().filter((w) => w.meaning);
   if (ui.quiz) return viewQuiz();
+  const st = settings();
+  const source = st.practiceSource;
+  const pool = store.wordsFor(source).filter((w) => w.meaning);
+  const cov = coverage(pool, store.get().practice, source);
+  const weak = weakWords(pool, store.get().practice);
+  const pct = cov.total ? Math.round((cov.covered / cov.total) * 100) : 0;
   return `
-    <h1>Quiz</h1>
-    <p class="muted">Exam-style questions from your own list. Wrong answers go back into tomorrow’s revision.</p>
+    <h1>Practice</h1>
+    <p class="muted">Random questions that still cover <b>every</b> word before any repeats. Wrong answers come back a few
+    questions later — and in later sessions until you get them right twice in a row.</p>
+
+    <article class="card">
+      <label class="field">Practise words from ${sourceSelect("practiceSource", source)}</label>
+      ${
+        pool.length >= 4
+          ? `<p class="small">Round ${cov.round}: <b>${cov.covered}</b> of ${cov.total} words covered</p>
+             <div class="progress"><span style="width:${pct}%"></span></div>
+             <p class="small">${
+               weak.length
+                 ? `⚠️ <b>${plural(weak.length, "weak word")}</b> to fix: ${esc(weak.slice(0, 8).map((w) => w.word).join(", "))}${weak.length > 8 ? "…" : ""}`
+                 : "✅ No weak words right now."
+             }</p>`
+          : `<p>You need at least 4 words with meanings here (found ${pool.length}). Try the <b>Word Bank</b> or <b>Mixed</b>.</p>`
+      }
+      <label class="field">Questions per session
+        <select data-setting="practiceSize">${[10, 20, 30, 50]
+          .map((n) => `<option value="${n}" ${Number(st.practiceSize) === n ? "selected" : ""}>${n}</option>`)
+          .join("")}</select>
+      </label>
+    </article>
+
     ${
-      pool.length < 4
-        ? `<article class="card"><p>You need at least 4 words with meanings to start a quiz (you have ${pool.length}).</p>
-           <button class="btn primary" data-nav="add" type="button">Add words</button></article>`
-        : `<div class="quiz-grid">
-            ${[
-              ["mixed", "🎲", "Mixed", "A bit of everything"],
-              ["meaning", "📖", "Word → Meaning", "Pick the right meaning"],
-              ["hindi", "🇮🇳", "Word → Hindi", "Pick the Hindi meaning"],
-              ["reverse", "🔁", "Meaning → Word", "Like one-word substitution"],
-              ["blank", "✏️", "Fill in the blank", "Cloze test practice"],
-              ["synonym", "🔗", "Synonyms", "Find the closest word"],
-            ]
-              .map(([k, ico, t, d]) => `<button class="quiz-tile" type="button" data-action="start-quiz" data-kind="${k}"><span class="big-ico">${ico}</span><b>${t}</b><span>${d}</span></button>`)
-              .join("")}
-          </div>`
+      pool.length >= 4
+        ? `<div class="quiz-grid">
+            ${PRACTICE_KINDS.map(
+              ([k, ico, t, d]) =>
+                `<button class="quiz-tile" type="button" data-action="start-quiz" data-kind="${k}"><span class="big-ico">${ico}</span><b>${t}</b><span>${d}</span></button>`,
+            ).join("")}
+          </div>
+          ${weak.length ? `<button class="btn block" type="button" data-action="start-quiz" data-kind="mixed" data-weak="1">🎯 Fix my ${plural(weak.length, "weak word")}</button>` : ""}`
+        : ""
     }`;
 }
 
 function viewQuiz() {
   const q = ui.quiz;
-  if (q.i >= q.qs.length) {
-    const wrong = q.wrong.map(store.byId).filter(Boolean);
+  if (q.i >= q.queue.length) {
+    const wrong = [...new Set(q.wrong)].map(store.byId).filter(Boolean);
+    const pool = store.wordsFor(q.source).filter((w) => w.meaning);
+    const cov = coverage(pool, store.get().practice, q.source);
     return `
       <article class="card center">
-        <p class="eyebrow">Quiz complete</p>
-        <p class="score">${q.score}/${q.qs.length}</p>
-        <p>${q.score === q.qs.length ? "Perfect! 🏆" : q.score >= q.qs.length * 0.7 ? "Great work 💪" : "Keep going — revision fixes this 📈"}</p>
-        ${wrong.length ? `<p class="muted">To revise: ${wrong.map((w) => `<a href="#" data-action="open-word" data-id="${w.id}">${esc(w.word)}</a>`).join(", ")}</p>` : ""}
+        <p class="eyebrow">Session complete</p>
+        <p class="score">${q.score}/${q.answered}</p>
+        <p>${q.score === q.answered ? "Perfect! 🏆" : q.score >= q.answered * 0.7 ? "Great work 💪" : "Keep going — the weak words will come back 📈"}</p>
+        <p class="small muted">Round ${cov.round}: ${cov.covered} of ${cov.total} words covered</p>
+        ${wrong.length ? `<p class="muted">Will come back: ${wrong.map((w) => `<a href="#" data-action="open-word" data-id="${w.id}">${esc(w.word)}</a>`).join(", ")}</p>` : ""}
         <div class="row center">
-          <button class="btn primary" type="button" data-action="start-quiz" data-kind="${q.kind}">Play again</button>
+          <button class="btn primary" type="button" data-action="start-quiz" data-kind="${q.kind}">Next session</button>
           <button class="btn" type="button" data-action="end-quiz">Done</button>
         </div>
       </article>`;
   }
-  const cur = q.qs[q.i];
+  const cur = q.current;
   return `
     <div class="row between">
-      <span class="muted">Question ${q.i + 1} of ${q.qs.length}</span>
-      <button class="btn small ghost" type="button" data-action="end-quiz">Quit</button>
+      <span class="muted">Question ${q.i + 1} of ${q.queue.length} · ${esc(store.SOURCES[q.source])}</span>
+      <button class="btn small ghost" type="button" data-action="end-quiz">Finish</button>
     </div>
-    <div class="progress"><span style="width:${(q.i / q.qs.length) * 100}%"></span></div>
+    <div class="progress"><span style="width:${(q.i / q.queue.length) * 100}%"></span></div>
     <article class="card quiz-card">
-      <p class="eyebrow">${esc(cur.label)}</p>
+      <p class="eyebrow">${esc(cur.label)}${cur.retry ? ` <span class="badge learning">again</span>` : ""}</p>
       <div class="quiz-prompt">${cur.prompt}</div>
       <div class="options">
         ${cur.options
@@ -361,12 +424,24 @@ function viewQuiz() {
           })
           .join("")}
       </div>
-      ${q.picked != null ? `<button class="btn primary block" type="button" data-action="next-q">${q.i + 1 < q.qs.length ? "Next →" : "See score"}</button>` : ""}
+      ${
+        q.picked != null
+          ? `${
+              q.picked !== cur.answer
+                ? `<p class="small explain"><b>${esc(cur.word)}</b> — ${esc(cur.meaning)}${cur.hindi ? ` · <span lang="hi">${esc(cur.hindi)}</span>` : ""}</p>`
+                : ""
+            }
+             <button class="btn primary block" type="button" data-action="next-q">${q.i + 1 < q.queue.length ? "Next →" : "See score"}</button>`
+          : ""
+      }
     </article>`;
 }
 
+const WORDS_SHOWN = 150; // keep the page light: search narrows the Word Bank
+
 function viewWords() {
-  const all = store.liveWords();
+  const bankTab = ui.wordsTab === "bank";
+  const all = bankTab ? store.bankWords() : store.liveWords();
   const needs = all.filter(needsEnrichment).length;
   const term = ui.search.trim().toLowerCase();
   let list = all.filter((w) => {
@@ -382,7 +457,9 @@ function viewWords() {
     hardest: (a, b) => b.difficulty - a.difficulty || b.lapses - a.lapses,
     weakest: (a, b) => a.box - b.box || b.lapses - a.lapses,
   };
-  list = [...list].sort(sorters[ui.sort]);
+  list = [...list].sort(sorters[bankTab && ui.sort === "newest" ? "az" : ui.sort]);
+  const total = list.length;
+  list = list.slice(0, WORDS_SHOWN);
   const filters = [
     ["all", "All"],
     ["new", "New"],
@@ -392,10 +469,15 @@ function viewWords() {
     ["incomplete", "Needs details"],
   ];
   return `
-    <div class="row between">
-      <h1>Master list <span class="muted">(${all.length})</span></h1>
-      <button class="btn small" type="button" data-action="new-word">＋ New</button>
+    <div class="seg" role="tablist">
+      <button type="button" class="${bankTab ? "" : "active"}" data-action="words-tab" data-tab="mine">My words (${store.liveWords().length})</button>
+      <button type="button" class="${bankTab ? "active" : ""}" data-action="words-tab" data-tab="bank">📚 Word Bank (${store.bankWords().length})</button>
     </div>
+    <div class="row between">
+      <h1>${bankTab ? "Word Bank" : "Master list"} <span class="muted">(${all.length})</span></h1>
+      ${bankTab ? "" : `<button class="btn small" type="button" data-action="new-word">＋ New</button>`}
+    </div>
+    ${bankTab ? `<p class="muted small">Built-in exam words for learning and practice. They stay separate from your own list — tap “＋ Add to my words” on any word to copy it.</p>` : ""}
     <input id="search" type="search" placeholder="Search word, meaning, Hindi…" value="${esc(ui.search)}" autocomplete="off" />
     <div class="filter-row">
       ${filters.map(([k, l]) => `<button type="button" class="fchip ${ui.filter === k ? "active" : ""}" data-action="filter" data-f="${k}">${l}</button>`).join("")}
@@ -422,11 +504,16 @@ function viewWords() {
             .join("")}</ul>`
         : `<p class="muted center">${all.length ? "No words match." : "Your master list is empty."}</p>`
     }
-    <div class="row wrap">
+    ${total > list.length ? `<p class="muted small center">Showing ${list.length} of ${total} — type in the search box to find any word.</p>` : ""}
+    ${
+      bankTab
+        ? ""
+        : `<div class="row wrap">
       <button class="btn small" type="button" data-action="export-csv">⬇ CSV (Excel)</button>
       <button class="btn small" type="button" data-action="export-json">⬇ Backup</button>
       <label class="btn small">⬆ Restore backup<input type="file" accept="application/json,.json" data-input="import" hidden /></label>
-    </div>`;
+    </div>`
+    }`;
 }
 
 function viewSettings() {
@@ -512,6 +599,7 @@ function viewSettings() {
       <label class="field">Words to memorise per day
         <input type="number" min="3" max="50" data-setting="dailyCount" value="${st.dailyCount}" />
       </label>
+      <label class="field">Today’s words come from ${sourceSelect("dailySource", st.dailySource)}</label>
       <label class="field">Pronunciation voice
         <select data-setting="voice">
           ${[
@@ -524,6 +612,26 @@ function viewSettings() {
         </select>
       </label>
       <button class="btn small" type="button" data-action="speak" data-text="Perspicacious">🔊 Test voice</button>
+    </article>
+
+    <article class="card">
+      <h3>🔔 Daily notification</h3>
+      <p class="muted">Get <b>2 words for today</b> as a phone notification, rotating through every word of the chosen source.</p>
+      <label class="toggle"><input type="checkbox" data-notify="enabled" ${st.notify.enabled ? "checked" : ""} /> Send me 2 words every day</label>
+      <div class="two">
+        <label class="field">After
+          <select data-notify="hour">${Array.from({ length: 17 }, (_, i) => i + 6)
+            .map((h) => `<option value="${h}" ${Number(st.notify.hour) === h ? "selected" : ""}>${h <= 12 ? h : h - 12}:00 ${h < 12 ? "am" : "pm"}</option>`)
+            .join("")}</select>
+        </label>
+        <label class="field">Words from
+          <select data-notify="source">${Object.entries(store.SOURCES)
+            .map(([k, l]) => `<option value="${k}" ${st.notify.source === k ? "selected" : ""}>${l}</option>`)
+            .join("")}</select>
+        </label>
+      </div>
+      <p class="small" id="notifyStatus">${esc(ui.notifyStatus || "")}</p>
+      <button class="btn small" type="button" data-action="test-notify">🔔 Send test notification</button>
     </article>
 
     <article class="card">
@@ -579,8 +687,20 @@ function showWord(id) {
     <div class="sheet-bar"><span class="badge ${stage(w)}">${STAGE_LABEL[stage(w)]}</span><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
     ${wordHead(w, { big: true })}
     ${wordDetails(w)}
-    <p class="muted small">Next review: ${esc(next)} · Reviewed ${plural(w.reviews, "time")} · Difficulty ${w.difficulty}/5 · Added ${esc(w.addedAt.slice(0, 10))}</p>
-    <div class="row wrap">
+    <p class="muted small">Next review: ${esc(next)} · Reviewed ${plural(w.reviews, "time")} · ${
+      w.bank ? "From the built-in Word Bank" : `Difficulty ${w.difficulty}/5 · Added ${esc(w.addedAt.slice(0, 10))}`
+    }</p>
+    ${
+      w.bank
+        ? `<div class="row wrap">
+            <button class="btn small" type="button" data-action="star" data-id="${w.id}">${w.starred ? "★ Unstar" : "☆ Star"}</button>
+            ${
+              buildIndex(store.liveWords()).has(wordKey(w.word))
+                ? `<span class="badge mastered">In your list</span>`
+                : `<button class="btn small primary" type="button" data-action="add-to-mine" data-id="${w.id}">＋ Add to my words</button>`
+            }
+          </div>`
+        : `<div class="row wrap">
       <button class="btn small" type="button" data-action="star" data-id="${w.id}">${w.starred ? "★ Unstar" : "☆ Star"}</button>
       <button class="btn small" type="button" data-action="edit-word" data-id="${w.id}">✎ Edit</button>
       ${
@@ -591,7 +711,8 @@ function showWord(id) {
             : ""
       }
       <button class="btn small danger" type="button" data-action="delete-word" data-id="${w.id}">Delete</button>
-    </div>`);
+    </div>`
+    }`);
 }
 
 function showEditor(id) {
@@ -679,6 +800,7 @@ const QUIZ_LABELS = {
   reverse: "Which word means…",
   blank: "Fill in the blank",
   synonym: "Choose the closest synonym",
+  antonym: "Choose the opposite (antonym)",
 };
 
 function shuffle(a) {
@@ -690,8 +812,10 @@ function shuffle(a) {
   return arr;
 }
 
+/** Build one multiple-choice question; wrong options come from the same pool, same part of speech first. */
 function makeQuestion(w, kind, pool) {
-  const others = shuffle(pool.filter((o) => o.id !== w.id));
+  const pos = (x) => String(x.pos || "").toLowerCase().split(/[ ,/]/)[0];
+  const others = shuffle(pool.filter((o) => o.id !== w.id)).sort((a, b) => Number(pos(b) === pos(w)) - Number(pos(a) === pos(w)));
   const pick = (field, n = 3) => [...new Set(others.map((o) => o[field]).filter((x) => x && x !== w[field]))].slice(0, n);
   const build = (correct, wrongs) => {
     if (!correct || wrongs.length < 3) return null;
@@ -699,48 +823,64 @@ function makeQuestion(w, kind, pool) {
     return { options, answer: options.indexOf(correct) };
   };
   const head = `<span class="qword">${esc(w.word)}</span>${w.pos ? ` <span class="pos">${esc(w.pos)}</span>` : ""}`;
-  let q = null;
-  if (kind === "meaning") {
-    const b = build(w.meaning, pick("meaning"));
-    q = b && { prompt: head, ...b };
-  }
-  if (kind === "hindi") {
-    const b = build(w.hindi, pick("hindi"));
-    q = b && { prompt: head, ...b };
-  }
+  const own = new Set([w.word, ...w.synonyms, ...w.antonyms].map((x) => x.toLowerCase()));
+  const outsiders = () => [...new Set(others.flatMap((o) => [o.word, ...o.synonyms]).filter((x) => !own.has(x.toLowerCase())))];
+  let b = null;
+  let prompt = head;
+  if (kind === "meaning") b = build(w.meaning, pick("meaning"));
+  if (kind === "hindi") b = build(w.hindi, pick("hindi"));
   if (kind === "reverse") {
-    const b = build(w.word, pick("word"));
-    q = b && { prompt: `<span class="qmeaning">${esc(w.meaning)}</span>`, ...b };
+    b = build(w.word, pick("word"));
+    prompt = `<span class="qmeaning">${esc(w.meaning)}</span>`;
   }
   if (kind === "blank") {
-    const sentence = w.sentences.map((s) => blankOut(s, w.word)).find(Boolean);
-    const b = sentence && build(w.word, pick("word"));
-    q = b && { prompt: `<span class="qsentence">${sentence}</span>`, ...b };
+    const sentence = w.sentences.map((x) => blankOut(x, w.word)).find(Boolean);
+    if (sentence) {
+      b = build(w.word, pick("word"));
+      prompt = `<span class="qsentence">${sentence}</span>`;
+    }
   }
-  if (kind === "synonym" && w.synonyms.length) {
-    const correct = w.synonyms[0];
-    const own = new Set([...w.synonyms, w.word].map((s) => s.toLowerCase()));
-    const wrongs = [...new Set(others.flatMap((o) => [o.word, ...o.synonyms]).filter((s) => !own.has(s.toLowerCase())))].slice(0, 3);
-    const b = build(correct, wrongs);
-    q = b && { prompt: head, ...b };
-  }
-  return q && { ...q, kind, label: QUIZ_LABELS[kind], wordId: w.id };
+  if (kind === "synonym" && w.synonyms.length) b = build(shuffle(w.synonyms)[0], outsiders());
+  if (kind === "antonym" && w.antonyms.length) b = build(shuffle(w.antonyms)[0], [...w.synonyms, ...outsiders()]);
+  return b && { ...b, prompt, kind, label: QUIZ_LABELS[kind], wordId: w.id, word: w.word, meaning: w.meaning, hindi: w.hindi };
 }
 
-function startQuiz(kind) {
-  const pool = store.liveWords().filter((w) => w.meaning);
-  // Favour words being learnt and words often forgotten.
-  const weighted = shuffle(pool).sort((a, b) => b.lapses - a.lapses + (a.box - b.box) * 0.5 + (Math.random() - 0.5) * 3);
-  const kinds = ["meaning", "hindi", "reverse", "blank", "synonym"];
-  const qs = [];
-  for (const w of weighted) {
-    if (qs.length >= 10) break;
-    const order = kind === "mixed" ? shuffle(kinds) : [kind];
-    const q = order.map((k) => makeQuestion(w, k, pool)).find(Boolean);
-    if (q) qs.push(q);
+const ALL_KINDS = ["meaning", "hindi", "reverse", "blank", "synonym", "antonym"];
+
+/** Question for the word at the current position (tries other types when a word lacks the data). */
+function questionFor(q, pool, retry = false) {
+  while (q.i < q.queue.length) {
+    const w = pool.find((x) => x.id === q.queue[q.i]) || store.byId(q.queue[q.i]);
+    const kinds = q.kind === "mixed" || retry ? shuffle(ALL_KINDS) : [q.kind, ...shuffle(ALL_KINDS)];
+    const made = w && kinds.map((k) => makeQuestion(w, k, pool)).find(Boolean);
+    if (made) return { ...made, retry };
+    q.queue.splice(q.i, 1); // not enough details for any question: skip
   }
-  if (!qs.length) return toast("Not enough words with the needed details for this quiz type yet.");
-  ui.quiz = { kind, qs, i: 0, picked: null, score: 0, wrong: [] };
+  return null;
+}
+
+function startQuiz(kind, { weakOnly = false } = {}) {
+  const st = settings();
+  const source = st.practiceSource;
+  const pool = store.wordsFor(source).filter((w) => w.meaning);
+  if (pool.length < 4) return toast("Need at least 4 words with meanings for practice.");
+  const size = Number(st.practiceSize) || 20;
+  let ids;
+  let roundOf = {};
+  if (weakOnly) {
+    ids = shuffle(weakWords(pool, store.get().practice).map((w) => w.id)).slice(0, size);
+  } else {
+    const picked = pickSession(pool, store.get().practice, source, size);
+    ids = picked.ids;
+    roundOf = picked.roundOf;
+    store.update((s) => (s.practice = picked.practice));
+  }
+  ui.quiz = { kind, source, queue: ids, roundOf, i: 0, picked: null, score: 0, answered: 0, wrong: [], requeued: new Set(), pool };
+  ui.quiz.current = questionFor(ui.quiz, pool);
+  if (!ui.quiz.current) {
+    ui.quiz = null;
+    return toast("Not enough word details for this question type yet.");
+  }
   render();
 }
 
@@ -1075,7 +1215,8 @@ const actions = {
   "edit-word": (el) => showEditor(el.dataset.id),
   star: (el) => {
     const w = store.byId(el.dataset.id);
-    store.saveWord({ ...w, starred: !w.starred });
+    if (w.bank) store.updateWord(w.id, (x) => ({ ...x, starred: !x.starred }));
+    else store.saveWord({ ...w, starred: !w.starred });
     showWord(w.id);
   },
   "delete-word": (el) => {
@@ -1133,9 +1274,8 @@ const actions = {
     const id = ss.ids[ss.i];
     const g = el.dataset.g;
     const today = todayISO();
+    store.updateWord(id, (w) => review(w, g, today));
     store.update((s) => {
-      const i = s.words.findIndex((w) => w.id === id);
-      if (i >= 0) s.words[i] = review(s.words[i], g, today);
       if (s.daily?.date === today) s.daily.done[id] = g;
       if (!s.activity.includes(today)) s.activity.push(today);
     });
@@ -1144,30 +1284,43 @@ const actions = {
     ss.revealed = false;
     renderSession();
   },
-  "start-quiz": (el) => startQuiz(el.dataset.kind),
+  "start-quiz": (el) => startQuiz(el.dataset.kind, { weakOnly: el.dataset.weak === "1" }),
   "end-quiz": () => {
+    const q = ui.quiz;
+    // Finishing early still shows the summary for the questions answered.
+    if (q && q.answered && q.i < q.queue.length) {
+      q.queue = q.queue.slice(0, q.picked != null ? q.i + 1 : q.i);
+      q.i = q.queue.length;
+      return render();
+    }
     ui.quiz = null;
     render();
   },
   pick: (el) => {
     const q = ui.quiz;
-    const cur = q.qs[q.i];
+    const cur = q.current;
     q.picked = Number(el.dataset.i);
-    if (q.picked === cur.answer) q.score += 1;
+    q.answered += 1;
+    const correct = q.picked === cur.answer;
+    if (correct) q.score += 1;
     else {
       q.wrong.push(cur.wordId);
-      store.update((s) => {
-        const i = s.words.findIndex((w) => w.id === cur.wordId);
-        if (i >= 0) s.words[i] = review(s.words[i], "again");
-      });
+      q.queue = requeue(q.queue, q.i, cur.wordId, q.requeued); // ask again a few questions later
+      store.updateWord(cur.wordId, (w) => review(w, "again"));
     }
-    const today = todayISO();
-    if (!store.get().activity.includes(today)) store.update((s) => s.activity.push(today));
+    store.update((s) => {
+      s.practice = recordAnswer(s.practice, q.source, cur.wordId, correct, { round: q.roundOf[cur.wordId] });
+      const today = todayISO();
+      if (!s.activity.includes(today)) s.activity.push(today);
+    });
     render();
   },
   "next-q": () => {
-    ui.quiz.i += 1;
-    ui.quiz.picked = null;
+    const q = ui.quiz;
+    q.i += 1;
+    q.picked = null;
+    // A word already asked earlier in this session is a retry of a wrong answer.
+    q.current = q.i < q.queue.length ? questionFor(q, q.pool, q.queue.slice(0, q.i).includes(q.queue[q.i])) : null;
     render();
   },
   typed: () => handleTyped(),
@@ -1193,6 +1346,32 @@ const actions = {
     if (!confirm(`Remove Gemini key ${i + 1}?`)) return;
     store.update((s) => (s.settings.geminiKeys = geminiKeysOf(s.settings).filter((_, j) => j !== i)), { touchesData: false });
     render();
+  },
+  "use-bank": () => {
+    store.update((s) => (s.settings.dailySource = "bank"), { touchesData: false });
+    toast("Today’s words now come from the Word Bank. Change it any time on Today or in Settings.", 5000);
+    render();
+  },
+  "add-to-mine": (el) => {
+    const n = store.addBankWordToMine(el.dataset.id);
+    toast(n ? "Added to your words ✓" : "Already in your words.");
+    showWord(el.dataset.id);
+  },
+  "words-tab": (el) => {
+    ui.wordsTab = el.dataset.tab;
+    ui.filter = "all";
+    render();
+  },
+  "test-notify": async () => {
+    try {
+      if (!("Notification" in window)) throw new Error("This browser can't show notifications.");
+      if (Notification.permission !== "granted" && (await Notification.requestPermission()) !== "granted") {
+        throw new Error("Notifications are blocked. Allow them for this site in your browser settings.");
+      }
+      await notify.showNow(notify.wordsForDay(store.wordsFor(settings().notify.source)));
+    } catch (err) {
+      toast(err.message, 6000);
+    }
   },
   "select-hard": () => {
     for (const it of ui.candidates.items) it.selected = it.status === "new" && (it.rec.difficulty ?? 3) >= 3;
@@ -1284,14 +1463,37 @@ document.addEventListener("change", async (e) => {
     btn.textContent = `Add ${plural(n, "word")} to master list`;
     return;
   }
+  if (t.dataset.notify) {
+    const k = t.dataset.notify;
+    const v = t.type === "checkbox" ? t.checked : k === "hour" ? Number(t.value) : t.value;
+    store.update((s) => (s.settings.notify = { ...s.settings.notify, [k]: v }), { touchesData: false });
+    if (k === "enabled") {
+      if (v) {
+        try {
+          const res = await notify.enable();
+          toast(res === "scheduled" ? "Daily words notification is on ✓" : "Notifications allowed ✓ (see the note below)");
+        } catch (err) {
+          store.update((s) => (s.settings.notify.enabled = false), { touchesData: false });
+          toast(err.message, 6000);
+        }
+      } else {
+        await notify.disable();
+        toast("Daily notification turned off.");
+      }
+    } else toast("Saved");
+    await refreshNotify();
+    render();
+    return;
+  }
   if (t.dataset.setting) {
     const k = t.dataset.setting;
     let v = t.type === "checkbox" ? t.checked : t.value.trim();
     if (k === "dailyCount") v = Math.min(50, Math.max(3, Number(v) || 10));
+    if (k === "practiceSize") v = Number(v) || 20;
     store.update((s) => (s.settings[k] = v), { touchesData: false });
     if (k === "googleClientId") drive.disconnect();
     toast("Saved");
-    if (["dailyCount", "googleClientId", "voice", "apiKey"].includes(k)) render();
+    if (["dailyCount", "googleClientId", "voice", "apiKey", "dailySource", "practiceSource"].includes(k)) render();
     return;
   }
   if (t.id === "sort") {
@@ -1350,15 +1552,48 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ---------- daily notification schedule ----------
+let notifyTimer;
+async function refreshNotify() {
+  const n = settings().notify;
+  try {
+    await notify.writeSchedule(store.wordsFor(n.source), n);
+    const cap = await notify.capability();
+    ui.notifyStatus = !n.enabled
+      ? ""
+      : cap.permission !== "granted"
+        ? "⚠️ Notifications are not allowed for this site yet."
+        : cap.periodic && cap.periodicAllowed
+          ? "✅ On. Your phone will show today's 2 words once a day, some time after the chosen hour (the exact time is decided by Chrome)."
+          : "ℹ️ Allowed, but background delivery needs the app installed to your home screen (Chrome on Android: ⋮ → Add to Home screen / Install app). Until then you'll see the 2 words on the Today screen.";
+  } catch {
+    ui.notifyStatus = "";
+  }
+  const el = document.getElementById("notifyStatus");
+  if (el) el.textContent = ui.notifyStatus;
+}
+const scheduleNotifyRefresh = () => {
+  clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(refreshNotify, 1500);
+};
+
 store.subscribe(() => {
   updateSyncChip();
   scheduleAutoSync();
+  scheduleNotifyRefresh();
 });
 
 // ---------- start ----------
 const initial = location.hash.slice(1);
 if (VIEWS[initial]) view = initial;
-render();
+$("#view").innerHTML = `<section class="card center busy"><div class="spinner" aria-hidden="true"></div><p>Loading…</p></section>`;
+// The Word Bank (1000+ words) loads as a separate chunk; the app renders once it's ready.
+loadBank()
+  .catch(() => toast("Couldn't load the built-in Word Bank. Check your connection and reopen the app."))
+  .finally(() => {
+    render();
+    refreshNotify();
+  });
 if (drive.isConnected()) sync();
 window.addEventListener("online", () => scheduleAutoSync());
 window.speechSynthesis?.getVoices(); // warm up the voice list

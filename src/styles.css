@@ -326,3 +326,16 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .key-list li .icon-btn { margin-left: auto; }
 .icon-btn.small { width: 32px; height: 32px; font-size: .85rem; }
 .field .row input { flex: 1; }
+/* ---------- word bank, sources, practice ---------- */
+.source-line { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: .9rem; color: var(--ink-2); }
+.source-line select { width: auto; padding: 5px 8px; font-size: .88rem; }
+.badge.bank { background: var(--primary-soft); color: var(--primary); }
+.two-words .tw { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.two-words .tw:last-child { border-bottom: 0; }
+.two-words .tw b { font: 700 1.15rem var(--serif); }
+.two-words .tw span { font-size: .92rem; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface-2); border-radius: 12px; padding: 4px; margin: 4px 0 8px; }
+.seg button { border: 0; background: transparent; color: var(--ink-2); border-radius: 9px; padding: 8px 6px; font: 600 .88rem var(--sans); cursor: pointer; }
+.seg button.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.explain { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; margin: 10px 0 0; text-align: left; }
+.quiz-grid .quiz-tile:first-child { grid-column: 1 / -1; }
