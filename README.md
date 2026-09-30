@@ -42,7 +42,7 @@ Your API key is stored only in your browser on that device. The app sends it onl
 
 1. On GitHub, open this repo's **Settings → Pages**. Under **Build and deployment → Source**, choose **GitHub Actions**.
 2. Merge this code into `main`. The workflow in `.github/workflows/deploy.yml` tests, builds and publishes the app to
-   **https://rlm1711204.github.io/my-cloud-test/**.
+   **https://rlm1711204.github.io/vocab-vault/**.
 3. On your phone, open that link in Chrome, tap **⋮ → Add to Home screen**, and it opens like a normal app.
 
 ### 2. Google Drive setup (one time, about 5 minutes)
@@ -53,6 +53,8 @@ Google requires every app that saves to Drive to have its own OAuth Client ID:
 2. **APIs & Services → Library**: search **Google Drive API** and click **Enable**.
 3. **Google Auth Platform** (called *OAuth consent screen* in older versions): click **Get started**. Choose app name *VocabVault*,
    your email, audience **External**. Under **Audience → Test users**, add your own Gmail address.
+   *Already set up a Client ID for another app on `rlm1711204.github.io` (e.g. your expense tracker)? You can reuse it:
+   it's the same site origin, so skip to step 5.*
 4. **Clients → Create client**: choose type **Web application**. Under **Authorised JavaScript origins**, add
    - `https://rlm1711204.github.io`
    - `http://localhost:5173` (only needed if you run it on a computer)
