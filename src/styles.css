@@ -339,3 +339,14 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .seg button.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
 .explain { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; margin: 10px 0 0; text-align: left; }
 .quiz-grid .quiz-tile:first-child { grid-column: 1 / -1; }
+/* ---------- ⓘ word details layer (stacks above flashcards/practice) ---------- */
+#info { position: fixed; inset: 0; z-index: 25; display: none; background: rgb(10 10 20 / 50%); }
+#info.open { display: flex; align-items: flex-end; justify-content: center; }
+@media (min-width: 720px) { #info.open { align-items: center; } }
+.whead-btns { display: flex; gap: 8px; flex: none; }
+.info-btn { font-size: 1.2rem; font-weight: 700; color: var(--primary); }
+.info-inline { color: var(--primary); font: 700 .95rem var(--sans); }
+.explain { display: flex; align-items: center; gap: 10px; }
+.explain p { margin: 0; flex: 1; }
+.explain.ok { background: var(--ok-soft); }
+.explain.bad { background: var(--bad-soft); }

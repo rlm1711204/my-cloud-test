@@ -99,7 +99,11 @@ const ui = {
 };
 
 // ---------- shared word rendering ----------
-function wordHead(w, { big = false } = {}) {
+/** Small ⓘ button that opens the full card for a word on top of the current screen. */
+const infoBtn = (id, label = "Full details") =>
+  `<button class="icon-btn info-btn" type="button" data-action="info" data-id="${esc(id)}" aria-label="${esc(label)}" title="${esc(label)}">ⓘ</button>`;
+
+function wordHead(w, { big = false, info = false } = {}) {
   return `
     <div class="whead ${big ? "big" : ""}">
       <div>
@@ -110,7 +114,10 @@ function wordHead(w, { big = false } = {}) {
           ${w.ipa ? `<span class="ipa">${esc(w.ipa)}</span>` : ""}
         </div>
       </div>
-      <button class="icon-btn" type="button" data-action="speak" data-text="${esc(w.word)}" data-audio="${esc(w.audio)}" aria-label="Pronounce ${esc(w.word)}">🔊</button>
+      <div class="whead-btns">
+        ${info ? infoBtn(w.id) : ""}
+        <button class="icon-btn" type="button" data-action="speak" data-text="${esc(w.word)}" data-audio="${esc(w.audio)}" aria-label="Pronounce ${esc(w.word)}">🔊</button>
+      </div>
     </div>`;
 }
 
@@ -187,7 +194,7 @@ function viewToday() {
             <p class="eyebrow">🔔 Today’s 2 words</p>
             ${two
               .map(
-                (w) => `<div class="tw" data-action="open-word" data-id="${w.id}"><b>${esc(w.word)}</b>
+                (w) => `<div class="tw" data-action="info" data-id="${w.id}"><b>${esc(w.word)} <span class="info-inline">ⓘ</span></b>
                   <span>${esc(w.meaning)}</span><span class="ph" lang="hi">${esc(w.hindi)}</span></div>`,
               )
               .join("")}
@@ -199,7 +206,7 @@ function viewToday() {
       wotd
         ? `<article class="card wotd">
             <p class="eyebrow">✨ Word of the Day${wotd.bank ? ` <span class="badge bank">Word Bank</span>` : ""}</p>
-            ${wordHead(wotd, { big: true })}
+            ${wordHead(wotd, { big: true, info: true })}
             ${wordDetails(wotd)}
             <div class="row">
               <button class="btn small" type="button" data-action="share-wotd">📤 Share</button>
@@ -403,7 +410,7 @@ function viewQuiz() {
         <p class="score">${q.score}/${q.answered}</p>
         <p>${q.score === q.answered ? "Perfect! 🏆" : q.score >= q.answered * 0.7 ? "Great work 💪" : "Keep going — the weak words will come back 📈"}</p>
         <p class="small muted">Round ${cov.round}: ${cov.covered} of ${cov.total} words covered</p>
-        ${wrong.length ? `<p class="muted">Will come back: ${wrong.map((w) => `<a href="#" data-action="open-word" data-id="${w.id}">${esc(w.word)}</a>`).join(", ")}</p>` : ""}
+        ${wrong.length ? `<p class="muted">Will come back (tap for details): ${wrong.map((w) => `<a href="#" data-action="info" data-id="${w.id}">${esc(w.word)} ⓘ</a>`).join(", ")}</p>` : ""}
         <div class="row center">
           <button class="btn primary" type="button" data-action="start-quiz" data-kind="${q.kind}">Next session</button>
           <button class="btn" type="button" data-action="end-quiz">Done</button>
@@ -431,11 +438,10 @@ function viewQuiz() {
       </div>
       ${
         q.picked != null
-          ? `${
-              q.picked !== cur.answer
-                ? `<p class="small explain"><b>${esc(cur.word)}</b> — ${esc(cur.meaning)}${cur.hindi ? ` · <span lang="hi">${esc(cur.hindi)}</span>` : ""}</p>`
-                : ""
-            }
+          ? `<div class="explain ${q.picked === cur.answer ? "ok" : "bad"}">
+               <p class="small"><b>${q.picked === cur.answer ? "✓" : "✗"} ${esc(cur.word)}</b> — ${esc(cur.meaning)}${cur.hindi ? ` · <span lang="hi">${esc(cur.hindi)}</span>` : ""}</p>
+               ${infoBtn(cur.wordId)}
+             </div>
              <button class="btn primary block" type="button" data-action="next-q">${q.i + 1 < q.queue.length ? "Next →" : "See score"}</button>`
           : ""
       }
@@ -720,6 +726,39 @@ function showWord(id) {
     }`);
 }
 
+/** Full card for one word in a layer above everything (flashcards, practice…); closing returns to where you were. */
+function showInfo(id) {
+  const w = store.byId(id);
+  if (!w) return toast("That word is no longer in your list.");
+  const layer = $("#info");
+  const next = stage(w) === "new" ? "not started" : new Date(`${w.due}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const inMine = buildIndex(store.liveWords()).has(wordKey(w.word));
+  const weak = store.get().practice.weak[w.id];
+  layer.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="Details for ${esc(w.word)}">
+    <div class="sheet-bar">
+      <span>${w.bank ? `<span class="badge bank">Word Bank</span> ` : ""}<span class="badge ${stage(w)}">${STAGE_LABEL[stage(w)]}</span></span>
+      <button class="icon-btn" type="button" data-action="close-info" aria-label="Close">✕</button>
+    </div>
+    ${wordHead(w, { big: true })}
+    ${wordDetails(w)}
+    <p class="muted small">Next review: ${esc(next)} · Reviewed ${plural(w.reviews, "time")}${
+      weak ? ` · Practice: ${weak.right} right, ${weak.wrong} wrong${weak.need ? " (still weak)" : ""}` : ""
+    }</p>
+    <div class="row wrap">
+      ${w.bank && !inMine ? `<button class="btn small primary" type="button" data-action="info-add" data-id="${esc(w.id)}">＋ Add to my words</button>` : ""}
+      ${w.bank && inMine ? `<span class="badge mastered">In your list</span>` : ""}
+      <button class="btn small" type="button" data-action="close-info">Back</button>
+    </div>
+  </div>`;
+  layer.classList.add("open");
+}
+
+function closeInfo() {
+  const layer = $("#info");
+  layer.classList.remove("open");
+  layer.innerHTML = "";
+}
+
 function showEditor(id) {
   const w = id ? store.byId(id) : null;
   const v = (k) => esc(w?.[k] ?? "");
@@ -775,7 +814,7 @@ function renderSession() {
     </div>
     <div class="progress"><span style="width:${(ss.i / ss.ids.length) * 100}%"></span></div>
     <div class="flashcard ${ss.revealed ? "revealed" : ""}">
-      ${wordHead(w, { big: true })}
+      ${wordHead(w, { big: true, info: ss.revealed })}
       ${
         ss.revealed
           ? wordDetails(w)
@@ -1352,6 +1391,13 @@ const actions = {
     store.update((s) => (s.settings.geminiKeys = geminiKeysOf(s.settings).filter((_, j) => j !== i)), { touchesData: false });
     render();
   },
+  info: (el) => showInfo(el.dataset.id),
+  "close-info": () => closeInfo(),
+  "info-add": (el) => {
+    const n = store.addBankWordToMine(el.dataset.id);
+    toast(n ? "Added to your words ✓" : "Already in your words.");
+    showInfo(el.dataset.id);
+  },
   "set-daily-source": (el) => {
     store.update((s) => (s.settings.dailySource = el.dataset.src), { touchesData: false });
     toast(`Today's words now come from ${store.SOURCES[el.dataset.src]}.`);
@@ -1442,6 +1488,7 @@ document.addEventListener("click", (e) => {
     actions[el.dataset.action](el, e);
     return;
   }
+  if (e.target.id === "info") return closeInfo();
   if (e.target.id === "overlay") actions.close();
 });
 
@@ -1554,6 +1601,7 @@ document.addEventListener("submit", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("#info").classList.contains("open")) return closeInfo();
   if (e.key === "Escape" && $("#overlay").classList.contains("open")) actions.close();
   if (ui.session && !e.target.closest("input,textarea")) {
     if (e.key === " " && !ui.session.revealed) (e.preventDefault(), actions.reveal());
