@@ -251,6 +251,7 @@ function viewCandidates() {
     <p class="muted">Found ${plural(c.items.length, "word")}${dups ? ` · ${dups} already in your list` : ""}. Untick any you already know.</p>
     <div class="row">
       <button class="btn small" type="button" data-action="select-all">Select all new</button>
+      <button class="btn small" type="button" data-action="select-hard">Only hard (●●●+)</button>
       <button class="btn small" type="button" data-action="select-none">Clear</button>
     </div>
     <ul class="cand-list">
@@ -517,7 +518,8 @@ function viewSettings() {
         <button class="btn small danger" type="button" data-action="reset">Erase data on this device</button>
       </div>
     </article>
-    <p class="muted small center">VocabVault · word frequency data from SCOWL (© Kevin Atkinson)</p>`;
+    <p class="muted small center">VocabVault · version ${esc(typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev")}<br />
+    Word frequency data from SCOWL (© Kevin Atkinson)</p>`;
 }
 
 // ---------- overlays (word details, editor, flashcards) ----------
@@ -747,6 +749,7 @@ async function handleFiles(files) {
         const sources = await filesToSources(files);
         const listed = await aiList(s, sources, setBusy);
         noteFallback(listed);
+        if (!listed.words.length) throw new AllProvidersFailed([{ name: listed.provider, reason: "found no words" }]);
         const index = buildIndex(store.liveWords());
         const seen = new Set();
         const items = listed.words.filter((w) => {
@@ -1120,6 +1123,10 @@ const actions = {
   },
   "select-all": () => {
     for (const it of ui.candidates.items) it.selected = it.status !== "dup";
+    render();
+  },
+  "select-hard": () => {
+    for (const it of ui.candidates.items) it.selected = it.status !== "dup" && (it.rec.difficulty ?? 3) >= 3;
     render();
   },
   "select-none": () => {
