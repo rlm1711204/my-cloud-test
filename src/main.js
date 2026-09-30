@@ -11,6 +11,7 @@ import { review, stage, stats, streak } from "./lib/srs.js";
 import { isBankId, loadBank } from "./lib/bank.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import * as notify from "./lib/notify.js";
+import * as install from "./lib/install.js";
 import {
   buildIndex,
   cleanHeadword,
@@ -143,12 +144,46 @@ const sourceSelect = (setting, value, extra = "") =>
     .map(([k, l]) => `<option value="${k}" ${value === k ? "selected" : ""}>${l} (${store.wordsFor(k).length})</option>`)
     .join("")}</select>`;
 
+// ---------- install as an app ----------
+/** Slim "Install app" banner on Today, until installed or dismissed. */
+function installBanner() {
+  const state = install.state();
+  if (state === "standalone" || state === "installed" || install.dismissed()) return "";
+  const ready = state === "ready";
+  return `
+    <article class="card install-banner">
+      <img src="./icon-192.png" alt="" width="44" height="44" />
+      <div>
+        <b>Install VocabVault</b>
+        <p class="small muted">${ready ? "Opens like a normal app, works offline and sends your daily words." : install.manualSteps()}</p>
+      </div>
+      <div class="ib-actions">
+        ${ready ? `<button class="btn primary small" type="button" data-action="install">📲 Install</button>` : ""}
+        <button class="icon-btn" type="button" data-action="dismiss-install" aria-label="Hide">✕</button>
+      </div>
+    </article>`;
+}
+
+/** Settings card: always there, so the option can be found again after hiding the banner. */
+function installCard() {
+  const state = install.state();
+  const body = {
+    standalone: `<p>✅ You're using the installed app.</p>`,
+    installed: `<p>✅ Installed. Open <b>VocabVault</b> from your home screen or app drawer.</p>`,
+    ready: `<p class="muted">Add VocabVault to your home screen. It opens full-screen like a normal app, works offline, and is needed for the daily notification.</p>
+      <button class="btn primary" type="button" data-action="install">📲 Install app</button>`,
+    manual: `<p class="muted">${install.manualSteps()}</p>
+      <p class="muted small">Already installed? Open it from your home screen. Chrome only shows an Install button in a normal Chrome tab.</p>`,
+  }[state];
+  return `<article class="card"><h3>📲 Install on your phone</h3>${body}</article>`;
+}
+
 function viewToday() {
   const s = store.get();
   const source = s.settings.dailySource;
   const pool = store.wordsFor(source);
   if (!pool.length) {
-    return `
+    return `${installBanner()}
       <section class="hero">
         <h1>Build your exam vocabulary, one page at a time.</h1>
         <p>Snap a newspaper editorial, upload a PDF or type words. VocabVault keeps only the hard words,
@@ -171,7 +206,7 @@ function viewToday() {
   const n = s.settings.notify;
   const two = n.enabled ? notify.wordsForDay(store.wordsFor(n.source)) : [];
 
-  return `
+  return `${installBanner()}
     <section class="today-head">
       <div>
         <p class="eyebrow">${esc(date)}</p>
@@ -534,6 +569,7 @@ function viewSettings() {
   const last = s.drive.lastSync ? new Date(s.drive.lastSync).toLocaleString("en-IN") : "never";
   return `
     <h1>Settings</h1>
+    ${installCard()}
 
     <article class="card">
       <h3>📖 Word cards</h3>
@@ -1243,6 +1279,14 @@ function go(v) {
 }
 
 const actions = {
+  install: async () => {
+    if (await install.prompt()) toast("Installing… VocabVault will appear on your home screen.");
+  },
+  "dismiss-install": () => {
+    install.dismiss();
+    toast("Hidden. You can still install from Settings.");
+    render();
+  },
   speak: (el) => speak(el.dataset.text, el.dataset.audio),
   sync: () => sync({ interactive: true }),
   disconnect: () => {
@@ -1649,17 +1693,24 @@ store.subscribe(() => {
 // ---------- start ----------
 const initial = location.hash.slice(1);
 if (VIEWS[initial]) view = initial;
+let booted = false;
 $("#view").innerHTML = `<section class="card center busy"><div class="spinner" aria-hidden="true"></div><p>Loading…</p></section>`;
 // The Word Bank (1000+ words) loads as a separate chunk; the app renders once it's ready.
 loadBank()
   .catch(() => toast("Couldn't load the built-in Word Bank. Check your connection and reopen the app."))
   .finally(() => {
+    booted = true;
     render();
     refreshNotify();
   });
 if (drive.isConnected()) sync();
 window.addEventListener("online", () => scheduleAutoSync());
 window.speechSynthesis?.getVoices(); // warm up the voice list
+
+// Show/hide the Install option when Chrome offers it (only on screens that have it, and after the first render).
+install.init(() => {
+  if (booted && (view === "today" || view === "settings")) render();
+});
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   navigator.serviceWorker.register("./sw.js").catch(() => {});

@@ -63,7 +63,9 @@ app switched and why. Keys are stored only on your device.
 1. On GitHub, open this repo's **Settings → Pages**. Under **Build and deployment → Source**, choose **GitHub Actions**.
 2. Merge this code into `main`. The workflow in `.github/workflows/deploy.yml` tests, builds and publishes the app to
    **https://rlm1711204.github.io/vocab-vault/**.
-3. On your phone, open that link in Chrome, tap **⋮ → Add to Home screen**, and it opens like a normal app.
+3. On your phone, open that link **in Chrome** and tap **📲 Install** on the banner on Today (or in **Settings → Install on your phone**).
+   If there's no Install button, tap **⋮ → Add to Home screen → Install**. A link opened from another app (WhatsApp, Claude…)
+   opens in a mini-browser that can't install: tap **⋮ → Open in Chrome** first.
 
 ### 2. Google Drive setup (one time, about 5 minutes)
 
@@ -111,6 +113,7 @@ src/
   lib/practice.js    Practice rounds (cover every word) and weak-word repetition
   lib/bank.js        Built-in Word Bank loader (data in src/data/bank1-6.js)
   lib/notify.js      Daily 2-word notification schedule (shown by public/sw.js)
+  lib/install.js     "Install app" button (Chrome's install prompt) and manual install steps
   lib/store.js       Local storage (offline-first)
   lib/drive.js       Google Drive sync (JSON + Google Sheet mirror)
 ```

@@ -350,3 +350,10 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .explain p { margin: 0; flex: 1; }
 .explain.ok { background: var(--ok-soft); }
 .explain.bad { background: var(--bad-soft); }
+
+/* Install banner (Today) */
+.install-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; }
+.install-banner img { border-radius: 10px; flex: none; }
+.install-banner > div:nth-child(2) { flex: 1 1 170px; min-width: 0; }
+.install-banner p { margin: 2px 0 0; }
+.install-banner .ib-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
