@@ -67,6 +67,7 @@ function load() {
 }
 
 function save() {
+  if (typeof localStorage === "undefined") return; // e.g. unit tests
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch (e) {
@@ -150,25 +151,45 @@ export function deleteWord(id) {
   });
 }
 
-/** Today's plan — created once per day (or when it's empty and words have since been added). */
+/**
+ * Today's plan — created once per day, then topped up: if it has fewer words than the daily count
+ * (e.g. it was made when the list had only one word) and more words are now available, new words
+ * are added while finished ones and the Word of the Day stay as they are.
+ */
 export function todaysPlan() {
   const today = todayISO();
   const d = state.daily;
   const source = state.settings.dailySource;
+  const count = state.settings.dailyCount;
   const pool = wordsFor(source);
-  const stale = !d || d.date !== today || d.count !== state.settings.dailyCount || (d.source || "mine") !== source;
-  const empty = d && d.date === today && !d.ids.length && !d.wotd && pool.length > 0;
-  if (stale || empty) {
-    const plan = buildDailyPlan(pool, { count: state.settings.dailyCount, date: today, featured: state.featured });
+  const stale = !d || d.date !== today || d.count !== count || (d.source || "mine") !== source;
+  const build = () => buildDailyPlan(pool, { count, date: today, featured: state.featured });
+  const feature = (s, id) => {
+    const w = pool.find((x) => x.id === id);
+    if (w && !s.featured.includes(w.word)) s.featured.push(w.word);
+  };
+  if (stale) {
+    const plan = build();
     const keepDone = d && d.date === today ? d.done : {};
-    update(
-      (s) => {
-        s.daily = { ...plan, count: s.settings.dailyCount, source, done: keepDone };
-        const wotd = pool.find((w) => w.id === plan.wotd);
-        if (wotd && !s.featured.includes(wotd.word)) s.featured.push(wotd.word);
-      },
-      { touchesData: true },
-    );
+    update((s) => {
+      s.daily = { ...plan, count, source, done: keepDone };
+      feature(s, plan.wotd);
+    });
+    return state.daily;
+  }
+  const ids = new Set(pool.map((w) => w.id));
+  const kept = d.ids.filter((id) => ids.has(id)); // drop deleted words
+  const wotdOk = Boolean(d.wotd && ids.has(d.wotd));
+  const spare = pool.length - (wotdOk ? 1 : 0) - kept.length;
+  if (!wotdOk || kept.length !== d.ids.length || (kept.length < count && spare > 0)) {
+    const plan = build();
+    const wotd = wotdOk ? d.wotd : plan.wotd;
+    // The fresh plan's own Word-of-the-Day pick is also a usable word when we keep the old one.
+    const topUp = [...plan.ids, plan.wotd].filter((id) => id && id !== wotd && !kept.includes(id));
+    update((s) => {
+      s.daily = { ...d, wotd, ids: [...kept, ...topUp].slice(0, Math.max(count, kept.length)) };
+      if (!wotdOk) feature(s, wotd);
+    });
   }
   return state.daily;
 }

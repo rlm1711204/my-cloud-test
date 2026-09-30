@@ -233,7 +233,12 @@ function viewToday() {
             <button class="btn primary block" type="button" data-action="start-session">
               ${done === 0 ? "▶ Start flashcards" : done < planWords.length ? "▶ Continue" : "↻ Revise again"}
             </button>`
-          : `<p class="muted">Add a few more words to get a daily set.</p>`
+          : `<p class="muted">Only ${plural(pool.length, "word")} in <b>${esc(store.SOURCES[source])}</b> — it's today's Word of the Day.
+             Add more words, or take today's words from:</p>
+             <div class="row wrap">
+               <button class="btn small primary" type="button" data-action="set-daily-source" data-src="mixed">🔀 Mixed (my words + Word Bank)</button>
+               <button class="btn small" type="button" data-action="set-daily-source" data-src="bank">📚 Word Bank</button>
+             </div>`
       }
       ${done && done === planWords.length ? `<p class="done-msg">🎉 Done for today! Lock it in with a quick <a href="#" data-nav="practice">practice</a>.</p>` : ""}
     </article>`;
@@ -1345,6 +1350,11 @@ const actions = {
     const i = Number(el.dataset.i);
     if (!confirm(`Remove Gemini key ${i + 1}?`)) return;
     store.update((s) => (s.settings.geminiKeys = geminiKeysOf(s.settings).filter((_, j) => j !== i)), { touchesData: false });
+    render();
+  },
+  "set-daily-source": (el) => {
+    store.update((s) => (s.settings.dailySource = el.dataset.src), { touchesData: false });
+    toast(`Today's words now come from ${store.SOURCES[el.dataset.src]}.`);
     render();
   },
   "use-bank": () => {
