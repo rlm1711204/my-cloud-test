@@ -53,6 +53,27 @@ export const RESULT_SCHEMA = {
   properties: { words: { type: "array", items: WORD_SCHEMA } },
 };
 
+/** Step 1 output: just the words found and the line each came from (small, so long lists fit). */
+export const LIST_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["words"],
+  properties: {
+    words: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["word", "context"],
+        properties: {
+          word: { type: "string", description: "The word/idiom exactly as the headword, in dictionary base form." },
+          context: { type: "string", description: "The source line or sentence it came from (include any meaning given there)." },
+        },
+      },
+    },
+  },
+};
+
 export function systemPrompt({ exam, tamil }) {
   return [
     `You are a vocabulary coach for an Indian aspirant preparing for ${EXAMS[exam] ?? EXAMS.general}.`,
@@ -75,14 +96,14 @@ function makeClient(apiKey) {
   return new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 }
 
-async function run(settings, content, onProgress) {
+async function run(settings, content, onProgress, schema = RESULT_SCHEMA) {
   const client = makeClient(settings.apiKey);
   const stream = client.beta.messages.stream({
     model: settings.model || DEFAULT_MODEL,
     max_tokens: 64000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    output_config: { effort: "medium", format: { type: "json_schema", schema: RESULT_SCHEMA } },
+    output_config: { effort: "medium", format: { type: "json_schema", schema } },
     system: systemPrompt(settings),
     messages: [{ role: "user", content }],
   });
@@ -103,30 +124,22 @@ async function run(settings, content, onProgress) {
   return Array.isArray(parsed.words) ? parsed.words : [];
 }
 
-const skipNote = (known) =>
-  known.length
-    ? `\n\nThe learner ALREADY HAS these words saved — do not return them or their inflections:\n${known.join(", ")}`
-    : "";
-
 /** Task text shared by every AI provider. */
-export const extractInstruction = (known) =>
+export const listInstruction = () =>
   "Read all the material above (it may be a screenshot, a photographed book page, handwritten notes or a PDF). " +
-  "List every DIFFICULT word, idiom or phrasal verb in it, following the definition in your instructions. " +
-  "If the material is itself a vocabulary list, include every entry. Use the dictionary base form. " +
-  "Fill every field for each word; put the original sentence from the material in `context`." +
-  skipNote(known);
+  "If it is a VOCABULARY LIST, glossary or word table: list EVERY headword/idiom in it, in order, including easy ones — " +
+  "do not skip, merge or summarise any entry (use the words in the word column only, not words from the explanations). " +
+  "Otherwise (an article, editorial, notes): list every DIFFICULT word, idiom or phrasal verb, following the definition in " +
+  "your instructions. Put the source line or sentence in `context`, written correctly (fix garbled text).";
 
-export const enrichInstruction = (words) =>
-  "Create a complete word card for EACH of these words/phrases, in the same order. Keep every one of " +
-  "them even if it seems easy, and correct obvious spelling mistakes in `word`. Leave `context` empty.\n\n" +
-  words.map((w, i) => `${i + 1}. ${w}`).join("\n");
+export const enrichInstruction = (words, notes = []) =>
+  "Create a complete word card for EACH of these words/phrases, in the same order. Keep every one of them even if it " +
+  "seems easy, and correct obvious spelling mistakes in `word`. Where a source line is given, the card must match that " +
+  "sense (reuse a Hindi meaning given there) and `context` must be that line; otherwise leave `context` empty.\n\n" +
+  words.map((w, i) => `${i + 1}. ${w}${notes[i] ? `   [source: ${String(notes[i]).slice(0, 300)}]` : ""}`).join("\n");
 
-/**
- * Extract difficult words from images and/or PDFs (or plain text) and return enriched cards.
- * @param {{kind: "image"|"pdf"|"text", mediaType?: string, data?: string, text?: string, name: string}[]} sources
- * @param {string[]} known - words already in the master list (skipped by the model)
- */
-export async function claudeExtract(settings, sources, known, onProgress) {
+/** Step 1: list the words in images/PDFs (or plain text). Resolves [{word, context}]. */
+export async function claudeList(settings, sources, onProgress) {
   const content = [];
   for (const s of sources) {
     if (s.kind === "image") content.push({ type: "image", source: { type: "base64", media_type: s.mediaType, data: s.data } });
@@ -134,15 +147,15 @@ export async function claudeExtract(settings, sources, known, onProgress) {
       content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: s.data } });
     else content.push({ type: "text", text: `Source "${s.name}":\n${s.text}` });
   }
-  content.push({ type: "text", text: extractInstruction(known) });
+  content.push({ type: "text", text: listInstruction() });
   onProgress?.("Claude is reading your material…");
-  return run(settings, content, onProgress);
+  return run(settings, content, onProgress, LIST_SCHEMA);
 }
 
 /** Build full word cards for words the learner typed (or saved without details). */
-export async function claudeEnrich(settings, words, onProgress) {
+export async function claudeEnrich(settings, words, notes, onProgress) {
   onProgress?.(`Claude is preparing ${words.length} word card${words.length === 1 ? "" : "s"}…`);
-  return run(settings, [{ type: "text", text: enrichInstruction(words) }], onProgress);
+  return run(settings, [{ type: "text", text: enrichInstruction(words, notes) }], onProgress);
 }
 
 /** Friendlier messages for the Claude errors people actually hit. */

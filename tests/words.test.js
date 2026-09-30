@@ -77,3 +77,30 @@ describe("needsEnrichment", () => {
     expect(needsEnrichment(makeWord({ word: "a", meaning: "m", hindi: "ह" }))).toBe(true);
   });
 });
+
+describe("parseVocabList", () => {
+  it("reads every headword of a numbered table, including idioms and hyphenated words", async () => {
+    const { parseVocabList } = await import("../src/lib/words.js");
+    // Same shape as pdf.js text from a bilingual vocab table (columns separated by runs of spaces).
+    const text = [
+      "MASTER VOCABULARY",
+      "Total Vocabulary Records Tracked: 213 Words/Idioms",
+      "#   WORD / IDIOM   PRONUNCIATION   HINDI MEANING   ENGLISH EXPLANATION ",
+      "180   Play it by ear   PLAY it by EER   स्थिति अनुसार काम करना   Deal with a situation as it develops",
+      "rather than following a fixed plan;",
+      "181   Vile   VYLE   घृणास्पद   Extremely unpleasant.",
+      "182   Vestige   VES-tij   अवशेष   A trace of something.",
+      "183   Bad-mouth   BAD-mouth   बुराई करना   To criticize someone.",
+      "184 Mundane muhn-DAYN साधारण Lacking excitement.",
+      "185. Banal – boring and trivial",
+      "186) Acerbic: sharp and forthright",
+    ].join("\n");
+    expect(parseVocabList(text).map((e) => e.word)).toEqual([
+      "Play it by ear", "Vile", "Vestige", "Bad-mouth", "Mundane", "Banal", "Acerbic",
+    ]);
+  });
+  it("ignores ordinary prose with a few numbers", async () => {
+    const { parseVocabList } = await import("../src/lib/words.js");
+    expect(parseVocabList("2024 was busy.\n15 officers met.\n3 cases closed.\n40 notices went out.\n7 appeals filed.")).toEqual([]);
+  });
+});

@@ -11,19 +11,46 @@ const blobToBase64 = (blob) =>
     r.readAsDataURL(blob);
   });
 
-/** Downscale and re-encode an image file as JPEG. Returns a Blob. */
+/** Pixel size of an image without decoding it at full resolution. */
+function imageSize(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => (URL.revokeObjectURL(url), resolve({ w: img.naturalWidth, h: img.naturalHeight }));
+    img.onerror = () => (URL.revokeObjectURL(url), reject(new Error(`${file.name}: this image format isn't supported. Use JPG or PNG.`)));
+    img.src = url;
+  });
+}
+
+/** Canvas -> Blob, then shrink the canvas to 0×0 so the phone frees its memory straight away. */
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve) =>
+    canvas.toBlob((blob) => {
+      canvas.width = canvas.height = 0;
+      resolve(blob);
+    }, type, quality),
+  );
+}
+
+/**
+ * Downscale and re-encode an image as JPEG. The photo is decoded straight at the reduced size, so a
+ * 50-megapixel camera photo never sits in memory at full resolution (the cause of "low memory" on phones).
+ */
 async function normaliseImage(file) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
+  const { w, h } = await imageSize(file);
+  const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(w, h));
+  const width = Math.max(1, Math.round(w * scale));
+  const height = Math.max(1, Math.round(h * scale));
+  const bitmap = await createImageBitmap(file, { resizeWidth: width, resizeHeight: height, resizeQuality: "high" });
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(bitmap, 0, 0);
   bitmap.close?.();
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.88));
+  return canvasToBlob(canvas, "image/jpeg", 0.88);
 }
 
 export const isPdf = (file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
@@ -47,70 +74,88 @@ export async function filesToSources(files) {
 }
 
 async function openPdf(file) {
-  const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
+  // The "legacy" build includes polyfills: the modern build needs very new browser features
+  // (e.g. Math.sumPrecise) that many phone browsers lack, and then silently fails to read text.
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url")).default;
   return pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
 }
 
 /** Extract the text layer of a PDF. Returns "" for scanned PDFs with no text layer. */
-export async function pdfText(file, onProgress) {
-  const doc = await openPdf(file);
+async function pdfDocText(doc, onProgress) {
   const pages = [];
   for (let i = 1; i <= doc.numPages; i++) {
     onProgress?.(`Reading PDF page ${i} of ${doc.numPages}…`);
     const page = await doc.getPage(i);
     const tc = await page.getTextContent();
     pages.push(tc.items.map((it) => it.str + (it.hasEOL ? "\n" : " ")).join(""));
+    page.cleanup();
   }
   return pages.join("\n");
 }
 
-/** Render PDF pages to images (for scanned PDFs without a text layer). */
-async function pdfPagesAsImages(file, onProgress) {
-  const doc = await openPdf(file);
-  const blobs = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    onProgress?.(`Rendering scanned page ${i} of ${doc.numPages}…`);
-    const page = await doc.getPage(i);
-    const viewport = page.getViewport({ scale: 2 });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvas, canvasContext: canvas.getContext("2d"), viewport }).promise;
-    blobs.push(await new Promise((r) => canvas.toBlob(r, "image/png")));
-  }
-  return blobs;
+/** Render one PDF page to a PNG no larger than MAX_IMAGE_EDGE (for scanned PDFs without a text layer). */
+async function renderPage(doc, i) {
+  const page = await doc.getPage(i);
+  const base = page.getViewport({ scale: 1 });
+  const viewport = page.getViewport({ scale: Math.min(2, MAX_IMAGE_EDGE / Math.max(base.width, base.height)) });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  await page.render({ canvas, canvasContext: canvas.getContext("2d"), viewport }).promise;
+  page.cleanup();
+  return canvasToBlob(canvas, "image/png");
 }
 
-/** On-device OCR with Tesseract (used when no Claude key is set). */
-export async function ocrImages(images, onProgress) {
+let ocrWorker = null;
+let ocrProgress = null; // progress callback of the scan in flight
+async function getOcrWorker(onProgress) {
+  if (ocrWorker) return ocrWorker;
   const { createWorker } = await import("tesseract.js");
   onProgress?.("Loading the text scanner (first time takes a few seconds)…");
-  const worker = await createWorker("eng", 1, {
+  ocrWorker = await createWorker("eng", 1, {
     logger: (m) => {
-      if (m.status === "recognizing text") onProgress?.(`Scanning text… ${Math.round(m.progress * 100)}%`);
+      if (m.status === "recognizing text") ocrProgress?.(`Scanning text… ${Math.round(m.progress * 100)}%`);
     },
   });
-  try {
-    const texts = [];
-    for (const img of images) texts.push((await worker.recognize(img)).data.text);
-    return texts.join("\n");
-  } finally {
-    await worker.terminate();
-  }
+  return ocrWorker;
 }
 
-/** Offline path: get plain text out of any mix of images and PDFs. */
+/** On-device OCR (free mode). One image at a time; the scanner is shut down afterwards to free memory. */
+async function ocr(blob, onProgress) {
+  const worker = await getOcrWorker(onProgress);
+  ocrProgress = onProgress;
+  return (await worker.recognize(blob)).data.text;
+}
+
+async function closeOcr() {
+  const w = ocrWorker;
+  ocrWorker = null;
+  await w?.terminate();
+}
+
+/** Free-mode path: get plain text out of any mix of images and PDFs, one page in memory at a time. */
 export async function filesToText(files, onProgress) {
   const parts = [];
-  for (const f of files) {
-    if (isPdf(f)) {
-      const text = await pdfText(f, onProgress);
-      if (text.replace(/\s/g, "").length > 50) parts.push(text);
-      else parts.push(await ocrImages(await pdfPagesAsImages(f, onProgress), onProgress));
-    } else if (isImage(f)) {
-      parts.push(await ocrImages([await normaliseImage(f)], onProgress));
+  try {
+    for (const f of files) {
+      if (isPdf(f)) {
+        const doc = await openPdf(f);
+        const text = await pdfDocText(doc, onProgress);
+        if (text.replace(/\s/g, "").length > 50) parts.push(text);
+        else {
+          for (let i = 1; i <= doc.numPages; i++) {
+            onProgress?.(`Scanning page ${i} of ${doc.numPages}…`);
+            parts.push(await ocr(await renderPage(doc, i), onProgress));
+          }
+        }
+        await doc.loadingTask.destroy(); // frees the parsed PDF and its worker memory
+      } else if (isImage(f)) {
+        parts.push(await ocr(await normaliseImage(f), onProgress));
+      }
     }
+  } finally {
+    await closeOcr();
   }
   return parts.join("\n\n");
 }

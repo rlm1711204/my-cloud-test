@@ -1,6 +1,6 @@
 // Google Gemini (free tier) as a word-card provider, via the Generative Language REST API.
 // Same prompts and card schema as the Claude provider, so cards look identical.
-import { RESULT_SCHEMA, enrichInstruction, extractInstruction, systemPrompt } from "./ai.js";
+import { LIST_SCHEMA, RESULT_SCHEMA, enrichInstruction, listInstruction, systemPrompt } from "./ai.js";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 export const GEMINI_AUTO = "auto";
@@ -112,14 +112,14 @@ export function readResponse(json) {
   return Array.isArray(parsed.words) ? parsed.words : [];
 }
 
-async function run(settings, parts, onProgress) {
+async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
   if (!settings.geminiKey) throw new GeminiError("No Gemini key.");
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt(settings) }] },
     contents: [{ role: "user", parts }],
     generationConfig: {
       responseMimeType: "application/json",
-      responseSchema: toGeminiSchema(RESULT_SCHEMA),
+      responseSchema: toGeminiSchema(schema),
       maxOutputTokens: 32768,
     },
   };
@@ -144,16 +144,17 @@ async function run(settings, parts, onProgress) {
   throw lastErr;
 }
 
-export async function geminiExtract(settings, sources, known, onProgress) {
+/** Step 1: list the words in images/PDFs (or plain text). Resolves {words: [{word, context}], model}. */
+export async function geminiList(settings, sources, onProgress) {
   const parts = sources.map((s) =>
     s.kind === "text"
       ? { text: `Source "${s.name}":\n${s.text}` }
       : { inlineData: { mimeType: s.kind === "pdf" ? "application/pdf" : s.mediaType, data: s.data } },
   );
-  parts.push({ text: extractInstruction(known) });
-  return run(settings, parts, onProgress);
+  parts.push({ text: listInstruction() });
+  return run(settings, parts, onProgress, LIST_SCHEMA);
 }
 
-export async function geminiEnrich(settings, words, onProgress) {
-  return run(settings, [{ text: enrichInstruction(words) }], onProgress);
+export async function geminiEnrich(settings, words, notes, onProgress) {
+  return run(settings, [{ text: enrichInstruction(words, notes) }], onProgress);
 }

@@ -177,3 +177,29 @@ export function toCSV(words) {
   const rows = live.map((w) => CSV_COLUMNS.map(([k]) => csvCell(k === "addedAt" ? String(w[k]).slice(0, 10) : w[k])).join(","));
   return [head, ...rows].join("\n");
 }
+
+/**
+ * Detect a numbered vocabulary list ("180  Play it by ear  PLAY it by EER  …", "12. Abate – to reduce")
+ * and return its headwords in order. Returns [] unless the text really looks like a numbered list
+ * (5+ entries, mostly consecutive numbers), so ordinary articles fall through to the hard-word filter.
+ * @returns {{word: string, context: string, n: number}[]}
+ */
+export function parseVocabList(text) {
+  const entries = [];
+  // The headword ends at a column gap, Indian-script text, a dash/colon/bracket, or a pronunciation
+  // column written with capitals ("muhn-DAYN", "PLAY it by EER").
+  const re =
+    /^\s*(\d{1,4})\s*[.)]?\s+([A-Za-z][A-Za-z'’ -]*?[A-Za-z])(?=\s{2,}|\t|\s+[ऀ-෿]|\s+[–—-]\s|\s*[:=]|\s*\(|\s+\S*[A-Z]{2,}|\s*$)/;
+  for (const line of String(text).split(/\n/)) {
+    const m = re.exec(line);
+    if (!m) continue;
+    const word = m[2].replace(/\s+/g, " ").trim();
+    if (word.split(" ").length > 6) continue;
+    const context = line.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim().slice(0, 220);
+    entries.push({ n: Number(m[1]), word, context });
+  }
+  if (entries.length < 5) return [];
+  let consecutive = 0;
+  for (let i = 1; i < entries.length; i++) if (entries[i].n === entries[i - 1].n + 1) consecutive += 1;
+  return consecutive / (entries.length - 1) >= 0.6 ? entries : [];
+}

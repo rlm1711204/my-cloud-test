@@ -2,13 +2,13 @@ import "./styles.css";
 import * as store from "./lib/store.js";
 import * as drive from "./lib/drive.js";
 import { DEFAULT_MODEL, EXAMS } from "./lib/ai.js";
-import { AllProvidersFailed, aiEnrich, aiExtract, fallbackNote, hasAI } from "./lib/engine.js";
+import { AllProvidersFailed, aiEnrichAll, aiList, fallbackNote, hasAI } from "./lib/engine.js";
 import { GEMINI_AUTO } from "./lib/gemini.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
 import { review, stage, stats, streak } from "./lib/srs.js";
-import { buildIndex, findExisting, needsEnrichment, parseTypedWords, toCSV, todayISO, wordKey } from "./lib/words.js";
+import { buildIndex, findExisting, needsEnrichment, parseTypedWords, parseVocabList, toCSV, todayISO, wordKey } from "./lib/words.js";
 
 // ---------- tiny helpers ----------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -743,11 +743,23 @@ async function handleFiles(files) {
     let records = null;
     if (hasAI(s)) {
       try {
+        // Step 1: list every word (short reply, so even a 200-word list comes back complete).
         const sources = await filesToSources(files);
-        const known = store.liveWords().map((w) => w.word);
-        const res = await aiExtract(s, sources, known.length <= 4000 ? known : [], setBusy);
-        records = res.words.map((r) => ({ ...r, source }));
-        noteFallback(res);
+        const listed = await aiList(s, sources, setBusy);
+        noteFallback(listed);
+        const index = buildIndex(store.liveWords());
+        const seen = new Set();
+        const items = listed.words.filter((w) => {
+          const k = wordKey(w.word);
+          return k && !seen.has(k) && seen.add(k);
+        });
+        const fresh = items.filter((w) => !findExisting(w.word, index)?.exact);
+        const dups = items.filter((w) => findExisting(w.word, index)?.exact);
+        // Step 2: word cards for the new ones, 25 at a time. Words already saved are only listed.
+        const cards = fresh.length ? await aiEnrichAll(s, fresh, setBusy) : { words: [], notes: [], failed: 0 };
+        if (cards.notes.length) toast(cards.notes.join(" · "), 7000);
+        records = [...cards.words, ...dups].map((r) => ({ ...r, source }));
+        if (cards.failed) records = await freeLookup(records, await loadLevels());
       } catch (e) {
         if (!(e instanceof AllProvidersFailed)) throw e;
         toast(`${e.message} → using the free dictionary instead`, 7000);
@@ -757,12 +769,16 @@ async function handleFiles(files) {
       const text = await filesToText(files, setBusy);
       setBusy("Picking out the difficult words…");
       const levels = await loadLevels();
-      records = candidatesFromText(text, levels).map((c) => ({
-        word: c.word,
-        context: c.context,
-        difficulty: difficultyFromLevel(c.level),
-        source,
-      }));
+      // A numbered vocabulary list keeps every headword; any other text keeps only the hard words.
+      const list = parseVocabList(text);
+      records = list.length
+        ? list.map((e) => ({ word: e.word, context: e.context, difficulty: difficultyFromLevel(levelOf(e.word, levels)), source }))
+        : candidatesFromText(text, levels).map((c) => ({
+            word: c.word,
+            context: c.context,
+            difficulty: difficultyFromLevel(c.level),
+            source,
+          }));
       records = await freeLookup(records, levels);
     }
     ui.busy = null;
@@ -792,14 +808,10 @@ async function handleTyped() {
     const levels = await loadLevels();
     let records = null;
     if (hasAI(s) && fresh.length) {
-      try {
-        const res = await aiEnrich(s, fresh, setBusy);
-        records = res.words.map((r) => ({ ...r, source: "Typed" }));
-        noteFallback(res);
-      } catch (e) {
-        if (!(e instanceof AllProvidersFailed)) throw e;
-        toast(`${e.message} → using the free dictionary instead`, 7000);
-      }
+      const cards = await aiEnrichAll(s, fresh.map((word) => ({ word })), setBusy);
+      if (cards.notes.length) toast(cards.notes.join(" · "), 7000);
+      records = cards.words.map((r) => ({ ...r, source: "Typed" }));
+      if (cards.failed) records = await freeLookup(records, levels);
     }
     if (!records) {
       records = fresh.map((w) => ({ word: w, difficulty: difficultyFromLevel(levelOf(w, levels)), source: "Typed" }));
@@ -820,7 +832,7 @@ const FREE_LOOKUP_UPFRONT = 40;
 /** Free-dictionary lookup for the review screen (skipped for very long lists; see add-selected). */
 async function freeLookup(records, levels) {
   const index = buildIndex(store.liveWords());
-  const todo = records.filter((r) => !findExisting(r.word, index)?.exact);
+  const todo = records.filter((r) => !r.meaning && !findExisting(r.word, index)?.exact);
   if (!todo.length || todo.length > FREE_LOOKUP_UPFRONT) return records;
   const { records: filled, quotaHit } = await enrichFree(todo, { tamil: settings().tamil, levels }, setBusy);
   if (quotaHit) toast("Free Hindi translation limit reached for today — tap “Fill missing” tomorrow.", 6000);
@@ -847,32 +859,29 @@ function noteFallback(res) {
 }
 
 async function enrich(ids) {
-  const words = ids.map(store.byId).filter(Boolean);
+  let words = ids.map(store.byId).filter(Boolean);
   if (!words.length) return;
   if (hasAI(settings())) {
-    toast(`AI is filling in ${plural(words.length, "word")}…`, 120000);
+    const progress = (msg) => toast(msg, 120000);
+    progress(`AI is filling in ${plural(words.length, "word")}…`);
     try {
-      const out = [];
-      let used = "";
-      for (let i = 0; i < words.length; i += 25) {
-        const res = await aiEnrich(settings(), words.slice(i, i + 25).map((w) => w.word));
-        out.push(...res.words);
-        used = res.provider;
-        noteFallback(res);
-      }
-      const byKey = new Map(out.map((r) => [wordKey(r.word), r]));
+      const cards = await aiEnrichAll(
+        settings(),
+        words.map((w) => ({ word: w.word, context: w.context })),
+        progress,
+      );
       let n = 0;
+      const left = [];
       words.forEach((w, i) => {
-        const r = byKey.get(wordKey(w.word)) ?? out[i];
-        if (!r) return;
-        store.saveWord(mergeDetails(w, r, { overwrite: true }));
-        n += 1;
+        const r = cards.words[i];
+        if (r?.meaning) (store.saveWord(mergeDetails(w, r, { overwrite: true })), (n += 1));
+        else left.push(w);
       });
-      toast(`Updated ${plural(n, "word")} with ${used} ✓`);
-      return;
+      toast([`Updated ${plural(n, "word")} with AI ✓`, ...cards.notes].join(" · "), 7000);
+      if (!left.length) return;
+      words = left.map((w) => store.byId(w.id)).filter(Boolean); // the rest go to the free dictionaries
     } catch (e) {
-      if (!(e instanceof AllProvidersFailed)) return toast(e.message || String(e), 6000);
-      toast(`${e.message} → using the free dictionary instead`, 7000);
+      return toast(e.message || String(e), 6000);
     }
   }
   // Free dictionaries (no AI key, or every AI option failed).
