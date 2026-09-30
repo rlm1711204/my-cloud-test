@@ -6,6 +6,8 @@ import { buildIndex, makeWord, mergeWordLists, todayISO, wordKey } from "./words
 const KEY = "vv.state.v1";
 
 export const DEFAULT_SETTINGS = {
+  geminiKey: "",
+  geminiModel: "auto",
   apiKey: "",
   model: DEFAULT_MODEL,
   exam: "general",

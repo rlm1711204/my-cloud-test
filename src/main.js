@@ -1,7 +1,9 @@
 import "./styles.css";
 import * as store from "./lib/store.js";
 import * as drive from "./lib/drive.js";
-import { DEFAULT_MODEL, EXAMS, enrichWords, explainError, extractWords } from "./lib/ai.js";
+import { DEFAULT_MODEL, EXAMS } from "./lib/ai.js";
+import { AllProvidersFailed, aiEnrich, aiExtract, fallbackNote, hasAI } from "./lib/engine.js";
+import { GEMINI_AUTO } from "./lib/gemini.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
@@ -126,7 +128,7 @@ function viewToday() {
         daily revision set.</p>
         <div class="stack">
           <button class="btn primary" data-nav="add" type="button">➕ Add your first words</button>
-          ${!s.settings.apiKey ? `<p class="muted small">Works free out of the box. Word cards come from free online dictionaries.</p>` : ""}
+          ${!hasAI(s.settings) ? `<p class="muted small">Works free out of the box. Word cards come from free online dictionaries.</p>` : ""}
         </div>
       </section>`;
   }
@@ -204,14 +206,15 @@ function viewAdd() {
     return `<section class="card center busy"><div class="spinner" aria-hidden="true"></div><p>${esc(ui.busy)}</p></section>`;
   }
   if (ui.candidates) return viewCandidates();
-  const aiOn = Boolean(s.apiKey);
+  const aiOn = hasAI(s);
+  const aiName = [s.geminiKey && "Gemini", s.apiKey && "Claude"].filter(Boolean).join(" → ");
   return `
     <h1>Add words</h1>
     <p class="mode ${aiOn ? "on" : "off"}">
       ${
         aiOn
-          ? `🤖 <b>AI mode</b> — Claude picks the hard words (${esc(EXAMS[s.exam] ?? EXAMS.general)}) and writes Hindi meaning, pronunciation, 2 sentences & an exam tip.`
-          : `🆓 <b>Free mode</b> — hard words are picked with a word-frequency list; meaning, Hindi, pronunciation, audio and examples come from free online dictionaries. (Optional: <a href="#" data-nav="settings">add a Claude key</a> for exam tips and richer cards.)`
+          ? `🤖 <b>AI mode (${aiName} → free dictionary)</b> — AI picks the hard words (${esc(EXAMS[s.exam] ?? EXAMS.general)}) and writes Hindi meaning, pronunciation, 2 sentences & an exam tip. If one fails or hits its limit, the next takes over.`
+          : `🆓 <b>Free mode</b> — hard words are picked with a word-frequency list; meaning, Hindi, pronunciation, audio and examples come from free online dictionaries. (Tip: <a href="#" data-nav="settings">add a free Gemini key</a> for exam tips and richer cards.)`
       }
     </p>
 
@@ -388,7 +391,7 @@ function viewWords() {
         <option value="hardest" ${ui.sort === "hardest" ? "selected" : ""}>Hardest</option>
         <option value="weakest" ${ui.sort === "weakest" ? "selected" : ""}>Weakest memory</option>
       </select>
-      ${needs ? `<button class="btn small" type="button" data-action="enrich-missing">${settings().apiKey ? "🤖" : "📖"} Fill ${needs} missing</button>` : ""}
+      ${needs ? `<button class="btn small" type="button" data-action="enrich-missing">${hasAI(settings()) ? "🤖" : "📖"} Fill ${needs} missing</button>` : ""}
     </div>
     ${
       list.length
@@ -420,14 +423,41 @@ function viewSettings() {
 
     <article class="card">
       <h3>📖 Word cards</h3>
-      <p class="muted">${st.apiKey ? "Using Claude AI." : "Free mode: meaning, pronunciation, audio, synonyms and examples from free dictionaries (Wiktionary); Hindi/Tamil via free MyMemory translation (a few hundred words a day)."}</p>
+      <p class="muted">Order used: ${[st.geminiKey && "<b>Gemini</b> (free)", st.apiKey && "<b>Claude</b> (paid)", "<b>free dictionaries</b>"].filter(Boolean).join(" → ")}.
+      If one fails or hits its limit, the next one takes over automatically.</p>
+      <p class="muted small">Free dictionaries: meaning, pronunciation, audio, synonyms and examples from Wiktionary; Hindi/Tamil via MyMemory translation (a few hundred words a day).</p>
+      <label class="field">Exam focus
+        <select data-setting="exam">
+          ${Object.entries(EXAMS).map(([k, v]) => `<option value="${k}" ${st.exam === k ? "selected" : ""}>${esc(v)}</option>`).join("")}
+        </select>
+      </label>
       <label class="toggle"><input type="checkbox" data-setting="tamil" ${st.tamil ? "checked" : ""} /> Also add Tamil meaning (தமிழ்)</label>
     </article>
 
     <article class="card">
+      <h3>✨ Google Gemini <span class="badge">free tier</span></h3>
+      <p class="muted">Free AI word cards with exam tips. Get a free key (no card needed) at
+      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <i>Create API key</i>.
+      The free tier has daily limits; when they run out the app switches to Claude (if set) or free dictionaries.
+      Google may use free-tier inputs to improve its products — fine for textbook pages, avoid personal documents.</p>
+      <label class="field">Gemini API key<input type="password" data-setting="geminiKey" value="${esc(st.geminiKey)}" placeholder="AIza…" autocomplete="off" /></label>
+      <label class="field">Model
+        <select data-setting="geminiModel">
+          ${[
+            [GEMINI_AUTO, "Auto · best free model"],
+            ["gemini-2.5-flash", "2.5 Flash"],
+            ["gemini-2.5-flash-lite", "2.5 Flash-Lite · more per day"],
+          ]
+            .map(([v, l]) => `<option value="${v}" ${st.geminiModel === v ? "selected" : ""}>${l}</option>`)
+            .join("")}
+        </select>
+      </label>
+    </article>
+
+    <article class="card">
       <h3>🤖 Claude AI <span class="badge">optional · paid</span></h3>
-      <p class="muted">Leave the key empty to stay free. With a key, Claude picks hard words for your exam and writes richer cards
-      (exam tips, 2 sentences for every word, idioms). Pay-per-use key from
+      <p class="muted">Backup when Gemini is unavailable (or leave empty to stay free). Best quality for handwriting and idioms.
+      Pay-per-use key from
       <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>; stored only on this device.</p>
       <label class="field">API key<input type="password" data-setting="apiKey" value="${esc(st.apiKey)}" placeholder="sk-ant-…" autocomplete="off" /></label>
       <label class="field">Model
@@ -439,11 +469,6 @@ function viewSettings() {
           ]
             .map(([v, l]) => `<option value="${v}" ${st.model === v ? "selected" : ""}>${l}</option>`)
             .join("")}
-        </select>
-      </label>
-      <label class="field">Exam focus
-        <select data-setting="exam">
-          ${Object.entries(EXAMS).map(([k, v]) => `<option value="${k}" ${st.exam === k ? "selected" : ""}>${esc(v)}</option>`).join("")}
         </select>
       </label>
     </article>
@@ -524,7 +549,7 @@ function showWord(id) {
       <button class="btn small" type="button" data-action="star" data-id="${w.id}">${w.starred ? "★ Unstar" : "☆ Star"}</button>
       <button class="btn small" type="button" data-action="edit-word" data-id="${w.id}">✎ Edit</button>
       ${
-        settings().apiKey
+        hasAI(settings())
           ? `<button class="btn small" type="button" data-action="enrich-one" data-id="${w.id}">🤖 ${needsEnrichment(w) ? "Fill" : "Refresh"} with AI</button>`
           : needsEnrichment(w)
             ? `<button class="btn small" type="button" data-action="enrich-one" data-id="${w.id}">📖 Fill from dictionary</button>`
@@ -557,7 +582,7 @@ function showEditor(id) {
       <label class="field">Antonyms (comma separated)<input name="antonyms" value="${esc((w?.antonyms ?? []).join(", "))}" /></label>
       <label class="field">Exam tip / mnemonic<textarea name="examTip" rows="2">${v("examTip")}</textarea></label>
       <button class="btn primary block" type="submit">Save</button>
-      ${!w && settings().apiKey ? `<p class="muted small center">Tip: just type the word and use the Add tab to let Claude fill everything.</p>` : ""}
+      ${!w ? `<p class="muted small center">Tip: just type the word in the Add tab and the app fills everything in.</p>` : ""}
     </form>`);
 }
 
@@ -715,13 +740,20 @@ async function handleFiles(files) {
   const source = files.map((f) => f.name).join(", ").slice(0, 120);
   setBusy("Preparing your files…");
   try {
-    let records;
-    if (s.apiKey) {
-      const sources = await filesToSources(files);
-      const known = store.liveWords().map((w) => w.word);
-      const res = await extractWords(s, sources, known.length <= 4000 ? known : [], setBusy);
-      records = res.map((r) => ({ ...r, source }));
-    } else {
+    let records = null;
+    if (hasAI(s)) {
+      try {
+        const sources = await filesToSources(files);
+        const known = store.liveWords().map((w) => w.word);
+        const res = await aiExtract(s, sources, known.length <= 4000 ? known : [], setBusy);
+        records = res.words.map((r) => ({ ...r, source }));
+        noteFallback(res);
+      } catch (e) {
+        if (!(e instanceof AllProvidersFailed)) throw e;
+        toast(`${e.message} → using the free dictionary instead`, 7000);
+      }
+    }
+    if (!records) {
       const text = await filesToText(files, setBusy);
       setBusy("Picking out the difficult words…");
       const levels = await loadLevels();
@@ -741,7 +773,7 @@ async function handleFiles(files) {
     ui.candidates = { items: prepareCandidates(records) };
   } catch (e) {
     ui.busy = null;
-    toast(explainError(e), 6000);
+    toast(e.message || String(e), 6000);
   }
   if (view === "add") render();
 }
@@ -758,10 +790,18 @@ async function handleTyped() {
   setBusy("Checking your words…");
   try {
     const levels = await loadLevels();
-    let records;
-    if (s.apiKey && fresh.length) {
-      records = (await enrichWords(s, fresh, setBusy)).map((r) => ({ ...r, source: "Typed" }));
-    } else {
+    let records = null;
+    if (hasAI(s) && fresh.length) {
+      try {
+        const res = await aiEnrich(s, fresh, setBusy);
+        records = res.words.map((r) => ({ ...r, source: "Typed" }));
+        noteFallback(res);
+      } catch (e) {
+        if (!(e instanceof AllProvidersFailed)) throw e;
+        toast(`${e.message} → using the free dictionary instead`, 7000);
+      }
+    }
+    if (!records) {
       records = fresh.map((w) => ({ word: w, difficulty: difficultyFromLevel(levelOf(w, levels)), source: "Typed" }));
       records = await freeLookup(records, levels);
     }
@@ -769,7 +809,7 @@ async function handleTyped() {
     ui.candidates = { items: prepareCandidates([...records, ...dupRecords], { typed: true, levels }), typed: true };
   } catch (e) {
     ui.busy = null;
-    toast(explainError(e), 6000);
+    toast(e.message || String(e), 6000);
   }
   if (view === "add") render();
 }
@@ -801,48 +841,59 @@ function mergeDetails(w, r, { overwrite }) {
   return next;
 }
 
+function noteFallback(res) {
+  const note = fallbackNote(res.skipped, res.provider);
+  if (note) toast(note, 7000);
+}
+
 async function enrich(ids) {
   const words = ids.map(store.byId).filter(Boolean);
   if (!words.length) return;
-  if (!settings().apiKey) {
-    toast(`Looking up ${plural(words.length, "word")} in free dictionaries…`, 120000);
+  if (hasAI(settings())) {
+    toast(`AI is filling in ${plural(words.length, "word")}…`, 120000);
     try {
-      const levels = await loadLevels();
-      const { records, quotaHit } = await enrichFree(words, { tamil: settings().tamil, levels });
+      const out = [];
+      let used = "";
+      for (let i = 0; i < words.length; i += 25) {
+        const res = await aiEnrich(settings(), words.slice(i, i + 25).map((w) => w.word));
+        out.push(...res.words);
+        used = res.provider;
+        noteFallback(res);
+      }
+      const byKey = new Map(out.map((r) => [wordKey(r.word), r]));
       let n = 0;
-      records.forEach((r, i) => {
-        const merged = mergeDetails(words[i], r, { overwrite: false });
-        if (JSON.stringify(merged) !== JSON.stringify(words[i])) (store.saveWord(merged), (n += 1));
+      words.forEach((w, i) => {
+        const r = byKey.get(wordKey(w.word)) ?? out[i];
+        if (!r) return;
+        store.saveWord(mergeDetails(w, r, { overwrite: true }));
+        n += 1;
       });
-      const missing = records.filter((r) => !r.meaning).length;
-      toast(
-        `Updated ${plural(n, "word")} ✓` +
-          (missing ? ` · ${missing} not found (idioms/rare words — add them via Edit)` : "") +
-          (quotaHit ? " · Hindi limit reached, try again tomorrow" : ""),
-        6000,
-      );
+      toast(`Updated ${plural(n, "word")} with ${used} ✓`);
+      return;
     } catch (e) {
-      toast(e.message, 6000);
+      if (!(e instanceof AllProvidersFailed)) return toast(e.message || String(e), 6000);
+      toast(`${e.message} → using the free dictionary instead`, 7000);
     }
-    return;
   }
-  toast(`Claude is filling in ${plural(words.length, "word")}…`, 60000);
+  // Free dictionaries (no AI key, or every AI option failed).
+  toast(`Looking up ${plural(words.length, "word")} in free dictionaries…`, 120000);
   try {
-    const out = [];
-    for (let i = 0; i < words.length; i += 25) {
-      out.push(...(await enrichWords(settings(), words.slice(i, i + 25).map((w) => w.word))));
-    }
-    const byKey = new Map(out.map((r) => [wordKey(r.word), r]));
+    const levels = await loadLevels();
+    const { records, quotaHit } = await enrichFree(words, { tamil: settings().tamil, levels });
     let n = 0;
-    words.forEach((w, i) => {
-      const r = byKey.get(wordKey(w.word)) ?? out[i];
-      if (!r) return;
-      store.saveWord(mergeDetails(w, r, { overwrite: true }));
-      n += 1;
+    records.forEach((r, i) => {
+      const merged = mergeDetails(words[i], r, { overwrite: false });
+      if (JSON.stringify(merged) !== JSON.stringify(words[i])) (store.saveWord(merged), (n += 1));
     });
-    toast(`Updated ${plural(n, "word")} ✓`);
+    const missing = records.filter((r) => !r.meaning).length;
+    toast(
+      `Updated ${plural(n, "word")} ✓` +
+        (missing ? ` · ${missing} not found (idioms/rare words — add them via Edit)` : "") +
+        (quotaHit ? " · Hindi limit reached, try again tomorrow" : ""),
+      6000,
+    );
   } catch (e) {
-    toast(explainError(e), 6000);
+    toast(e.message, 6000);
   }
 }
 
@@ -1068,7 +1119,7 @@ const actions = {
   },
   "add-selected": async () => {
     let recs = ui.candidates.items.filter((i) => i.selected).map((i) => i.rec);
-    if (!settings().apiKey && recs.some((r) => !r.meaning)) {
+    if (recs.some((r) => !r.meaning)) {
       const cands = ui.candidates;
       setBusy("Looking up your words…");
       try {
@@ -1155,7 +1206,7 @@ document.addEventListener("change", async (e) => {
     store.update((s) => (s.settings[k] = v), { touchesData: false });
     if (k === "googleClientId") drive.disconnect();
     toast("Saved");
-    if (["dailyCount", "googleClientId", "voice", "apiKey"].includes(k)) render();
+    if (["dailyCount", "googleClientId", "voice", "apiKey", "geminiKey"].includes(k)) render();
     return;
   }
   if (t.id === "sort") {

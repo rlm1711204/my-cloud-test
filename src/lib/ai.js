@@ -46,14 +46,14 @@ const WORD_SCHEMA = {
   },
 };
 
-const RESULT_SCHEMA = {
+export const RESULT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["words"],
   properties: { words: { type: "array", items: WORD_SCHEMA } },
 };
 
-function systemPrompt({ exam, tamil }) {
+export function systemPrompt({ exam, tamil }) {
   return [
     `You are a vocabulary coach for an Indian aspirant preparing for ${EXAMS[exam] ?? EXAMS.general}.`,
     "The learner is a graduate with good everyday English; they want to build an exam-grade vocabulary.",
@@ -108,12 +108,25 @@ const skipNote = (known) =>
     ? `\n\nThe learner ALREADY HAS these words saved — do not return them or their inflections:\n${known.join(", ")}`
     : "";
 
+/** Task text shared by every AI provider. */
+export const extractInstruction = (known) =>
+  "Read all the material above (it may be a screenshot, a photographed book page, handwritten notes or a PDF). " +
+  "List every DIFFICULT word, idiom or phrasal verb in it, following the definition in your instructions. " +
+  "If the material is itself a vocabulary list, include every entry. Use the dictionary base form. " +
+  "Fill every field for each word; put the original sentence from the material in `context`." +
+  skipNote(known);
+
+export const enrichInstruction = (words) =>
+  "Create a complete word card for EACH of these words/phrases, in the same order. Keep every one of " +
+  "them even if it seems easy, and correct obvious spelling mistakes in `word`. Leave `context` empty.\n\n" +
+  words.map((w, i) => `${i + 1}. ${w}`).join("\n");
+
 /**
  * Extract difficult words from images and/or PDFs (or plain text) and return enriched cards.
  * @param {{kind: "image"|"pdf"|"text", mediaType?: string, data?: string, text?: string, name: string}[]} sources
  * @param {string[]} known - words already in the master list (skipped by the model)
  */
-export async function extractWords(settings, sources, known, onProgress) {
+export async function claudeExtract(settings, sources, known, onProgress) {
   const content = [];
   for (const s of sources) {
     if (s.kind === "image") content.push({ type: "image", source: { type: "base64", media_type: s.mediaType, data: s.data } });
@@ -121,39 +134,19 @@ export async function extractWords(settings, sources, known, onProgress) {
       content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: s.data } });
     else content.push({ type: "text", text: `Source "${s.name}":\n${s.text}` });
   }
-  content.push({
-    type: "text",
-    text:
-      "Read all the material above (it may be a screenshot, a photographed book page, handwritten notes or a PDF). " +
-      "List every DIFFICULT word, idiom or phrasal verb in it, following the definition in your instructions. " +
-      "If the material is itself a vocabulary list, include every entry. Use the dictionary base form. " +
-      "Fill every field for each word; put the original sentence from the material in `context`." +
-      skipNote(known),
-  });
+  content.push({ type: "text", text: extractInstruction(known) });
   onProgress?.("Claude is reading your material…");
   return run(settings, content, onProgress);
 }
 
 /** Build full word cards for words the learner typed (or saved without details). */
-export async function enrichWords(settings, words, onProgress) {
+export async function claudeEnrich(settings, words, onProgress) {
   onProgress?.(`Claude is preparing ${words.length} word card${words.length === 1 ? "" : "s"}…`);
-  return run(
-    settings,
-    [
-      {
-        type: "text",
-        text:
-          "Create a complete word card for EACH of these words/phrases, in the same order. Keep every one of " +
-          "them even if it seems easy, and correct obvious spelling mistakes in `word`. Leave `context` empty.\n\n" +
-          words.map((w, i) => `${i + 1}. ${w}`).join("\n"),
-      },
-    ],
-    onProgress,
-  );
+  return run(settings, [{ type: "text", text: enrichInstruction(words) }], onProgress);
 }
 
-/** Friendlier messages for the errors people actually hit. */
-export function explainError(err) {
+/** Friendlier messages for the Claude errors people actually hit. */
+export function explainClaudeError(err) {
   if (err instanceof Anthropic.AuthenticationError) return "Your Claude API key was rejected. Check it in Settings.";
   if (err instanceof Anthropic.PermissionDeniedError) return "This API key can't use that model. Check your Anthropic Console.";
   if (err instanceof Anthropic.RateLimitError) return "Too many requests right now — wait a minute and try again.";
