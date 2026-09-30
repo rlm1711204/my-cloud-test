@@ -130,7 +130,10 @@ export const listInstruction = () =>
   "If it is a VOCABULARY LIST, glossary or word table: list EVERY headword/idiom in it, in order, including easy ones — " +
   "do not skip, merge or summarise any entry (use the words in the word column only, not words from the explanations). " +
   "Otherwise (an article, editorial, notes): list every DIFFICULT word, idiom or phrasal verb, following the definition in " +
-  "your instructions. Put the source line or sentence in `context`, written correctly (fix garbled text).";
+  "your instructions. Put the source line or sentence in `context`, written correctly (fix garbled text). " +
+  "`word` must be ONLY the headword itself: never a pronunciation or respelling (e.g. UT-er, ROO-mi-nayt, /əˈbeɪt/), " +
+  "a part-of-speech label such as (verb), a number, or a meaning. If the same word appears more than once (e.g. as " +
+  "verb and adjective), list it once.";
 
 export const enrichInstruction = (words, notes = []) =>
   "Create a complete word card for EACH of these words/phrases, in the same order. Keep every one of them even if it " +
