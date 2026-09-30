@@ -4,6 +4,7 @@ import * as drive from "./lib/drive.js";
 import { DEFAULT_MODEL, EXAMS, enrichWords, explainError, extractWords } from "./lib/ai.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
+import { enrichFree } from "./lib/freedict.js";
 import { review, stage, stats, streak } from "./lib/srs.js";
 import { buildIndex, findExisting, needsEnrichment, parseTypedWords, toCSV, todayISO, wordKey } from "./lib/words.js";
 
@@ -23,7 +24,11 @@ function toast(msg, ms = 3200) {
   toastTimer = setTimeout(() => t.classList.remove("show"), ms);
 }
 
-function speak(text) {
+function speak(text, audioUrl) {
+  if (audioUrl) {
+    // Recorded pronunciation from the free dictionary; fall back to the phone's voice if it can't play.
+    return new Audio(audioUrl).play().catch(() => speak(text));
+  }
   if (!("speechSynthesis" in window)) return toast("Speech isn't supported in this browser.");
   const u = new SpeechSynthesisUtterance(text);
   const lang = settings().voice;
@@ -88,7 +93,7 @@ function wordHead(w, { big = false } = {}) {
           ${w.ipa ? `<span class="ipa">${esc(w.ipa)}</span>` : ""}
         </div>
       </div>
-      <button class="icon-btn" type="button" data-action="speak" data-text="${esc(w.word)}" aria-label="Pronounce ${esc(w.word)}">🔊</button>
+      <button class="icon-btn" type="button" data-action="speak" data-text="${esc(w.word)}" data-audio="${esc(w.audio)}" aria-label="Pronounce ${esc(w.word)}">🔊</button>
     </div>`;
 }
 
@@ -121,7 +126,7 @@ function viewToday() {
         daily revision set.</p>
         <div class="stack">
           <button class="btn primary" data-nav="add" type="button">➕ Add your first words</button>
-          ${!s.settings.apiKey ? `<button class="btn" data-nav="settings" type="button">🔑 Set up Claude AI (recommended)</button>` : ""}
+          ${!s.settings.apiKey ? `<p class="muted small">Works free out of the box. Word cards come from free online dictionaries.</p>` : ""}
         </div>
       </section>`;
   }
@@ -206,7 +211,7 @@ function viewAdd() {
       ${
         aiOn
           ? `🤖 <b>AI mode</b> — Claude picks the hard words (${esc(EXAMS[s.exam] ?? EXAMS.general)}) and writes Hindi meaning, pronunciation, 2 sentences & an exam tip.`
-          : `📴 <b>Offline mode</b> — words are picked using a word-frequency list; you fill in meanings. <a href="#" data-nav="settings">Add a Claude key</a> for full word cards.`
+          : `🆓 <b>Free mode</b> — hard words are picked with a word-frequency list; meaning, Hindi, pronunciation, audio and examples come from free online dictionaries. (Optional: <a href="#" data-nav="settings">add a Claude key</a> for exam tips and richer cards.)`
       }
     </p>
 
@@ -383,7 +388,7 @@ function viewWords() {
         <option value="hardest" ${ui.sort === "hardest" ? "selected" : ""}>Hardest</option>
         <option value="weakest" ${ui.sort === "weakest" ? "selected" : ""}>Weakest memory</option>
       </select>
-      ${needs && settings().apiKey ? `<button class="btn small" type="button" data-action="enrich-missing">🤖 Fill ${needs} missing</button>` : ""}
+      ${needs ? `<button class="btn small" type="button" data-action="enrich-missing">${settings().apiKey ? "🤖" : "📖"} Fill ${needs} missing</button>` : ""}
     </div>
     ${
       list.length
@@ -414,10 +419,16 @@ function viewSettings() {
     <h1>Settings</h1>
 
     <article class="card">
-      <h3>🤖 Claude AI</h3>
-      <p class="muted">Used to find hard words in photos/PDFs and to write Hindi meanings, pronunciation, sentences and exam tips.
-      Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
-      It is stored only on this device.</p>
+      <h3>📖 Word cards</h3>
+      <p class="muted">${st.apiKey ? "Using Claude AI." : "Free mode: meaning, pronunciation, audio, synonyms and examples from free dictionaries (Wiktionary); Hindi/Tamil via free MyMemory translation (a few hundred words a day)."}</p>
+      <label class="toggle"><input type="checkbox" data-setting="tamil" ${st.tamil ? "checked" : ""} /> Also add Tamil meaning (தமிழ்)</label>
+    </article>
+
+    <article class="card">
+      <h3>🤖 Claude AI <span class="badge">optional · paid</span></h3>
+      <p class="muted">Leave the key empty to stay free. With a key, Claude picks hard words for your exam and writes richer cards
+      (exam tips, 2 sentences for every word, idioms). Pay-per-use key from
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>; stored only on this device.</p>
       <label class="field">API key<input type="password" data-setting="apiKey" value="${esc(st.apiKey)}" placeholder="sk-ant-…" autocomplete="off" /></label>
       <label class="field">Model
         <select data-setting="model">
@@ -435,7 +446,6 @@ function viewSettings() {
           ${Object.entries(EXAMS).map(([k, v]) => `<option value="${k}" ${st.exam === k ? "selected" : ""}>${esc(v)}</option>`).join("")}
         </select>
       </label>
-      <label class="toggle"><input type="checkbox" data-setting="tamil" ${st.tamil ? "checked" : ""} /> Also add Tamil meaning (தமிழ்)</label>
     </article>
 
     <article class="card">
@@ -513,7 +523,13 @@ function showWord(id) {
     <div class="row wrap">
       <button class="btn small" type="button" data-action="star" data-id="${w.id}">${w.starred ? "★ Unstar" : "☆ Star"}</button>
       <button class="btn small" type="button" data-action="edit-word" data-id="${w.id}">✎ Edit</button>
-      ${settings().apiKey ? `<button class="btn small" type="button" data-action="enrich-one" data-id="${w.id}">🤖 ${needsEnrichment(w) ? "Fill" : "Refresh"} with AI</button>` : ""}
+      ${
+        settings().apiKey
+          ? `<button class="btn small" type="button" data-action="enrich-one" data-id="${w.id}">🤖 ${needsEnrichment(w) ? "Fill" : "Refresh"} with AI</button>`
+          : needsEnrichment(w)
+            ? `<button class="btn small" type="button" data-action="enrich-one" data-id="${w.id}">📖 Fill from dictionary</button>`
+            : ""
+      }
       <button class="btn small danger" type="button" data-action="delete-word" data-id="${w.id}">Delete</button>
     </div>`);
 }
@@ -593,7 +609,7 @@ function renderSession() {
     }`,
     { tall: true },
   );
-  if (!ss.revealed && ss.autoSpeak) speak(w.word);
+  if (!ss.revealed && ss.autoSpeak) speak(w.word, w.audio);
 }
 
 // ---------- quiz ----------
@@ -715,6 +731,7 @@ async function handleFiles(files) {
         difficulty: difficultyFromLevel(c.level),
         source,
       }));
+      records = await freeLookup(records, levels);
     }
     ui.busy = null;
     if (!records.length) {
@@ -746,6 +763,7 @@ async function handleTyped() {
       records = (await enrichWords(s, fresh, setBusy)).map((r) => ({ ...r, source: "Typed" }));
     } else {
       records = fresh.map((w) => ({ word: w, difficulty: difficultyFromLevel(levelOf(w, levels)), source: "Typed" }));
+      records = await freeLookup(records, levels);
     }
     ui.busy = null;
     ui.candidates = { items: prepareCandidates([...records, ...dupRecords], { typed: true, levels }), typed: true };
@@ -756,9 +774,58 @@ async function handleTyped() {
   if (view === "add") render();
 }
 
+// Longer scans are shown for review first and looked up only for the words you keep.
+const FREE_LOOKUP_UPFRONT = 40;
+
+/** Free-dictionary lookup for the review screen (skipped for very long lists; see add-selected). */
+async function freeLookup(records, levels) {
+  const index = buildIndex(store.liveWords());
+  const todo = records.filter((r) => !findExisting(r.word, index)?.exact);
+  if (!todo.length || todo.length > FREE_LOOKUP_UPFRONT) return records;
+  const { records: filled, quotaHit } = await enrichFree(todo, { tamil: settings().tamil, levels }, setBusy);
+  if (quotaHit) toast("Free Hindi translation limit reached for today — tap “Fill missing” tomorrow.", 6000);
+  const byKey = new Map(filled.map((r) => [wordKey(r.word), r]));
+  return records.map((r) => byKey.get(wordKey(r.word)) ?? r);
+}
+
+/** Copy looked-up fields onto a saved word without losing its history or your own edits. */
+function mergeDetails(w, r, { overwrite }) {
+  const next = { ...w };
+  for (const k of ["pos", "meaning", "hindi", "tamil", "ipa", "say", "audio", "examTip", "sentences", "synonyms", "antonyms"]) {
+    const v = r[k];
+    const has = Array.isArray(v) ? v.length : Boolean(v);
+    const cur = Array.isArray(w[k]) ? w[k].length : Boolean(w[k]);
+    if (has && (overwrite || !cur)) next[k] = v;
+  }
+  if (!w.context && r.context) next.context = r.context;
+  return next;
+}
+
 async function enrich(ids) {
   const words = ids.map(store.byId).filter(Boolean);
   if (!words.length) return;
+  if (!settings().apiKey) {
+    toast(`Looking up ${plural(words.length, "word")} in free dictionaries…`, 120000);
+    try {
+      const levels = await loadLevels();
+      const { records, quotaHit } = await enrichFree(words, { tamil: settings().tamil, levels });
+      let n = 0;
+      records.forEach((r, i) => {
+        const merged = mergeDetails(words[i], r, { overwrite: false });
+        if (JSON.stringify(merged) !== JSON.stringify(words[i])) (store.saveWord(merged), (n += 1));
+      });
+      const missing = records.filter((r) => !r.meaning).length;
+      toast(
+        `Updated ${plural(n, "word")} ✓` +
+          (missing ? ` · ${missing} not found (idioms/rare words — add them via Edit)` : "") +
+          (quotaHit ? " · Hindi limit reached, try again tomorrow" : ""),
+        6000,
+      );
+    } catch (e) {
+      toast(e.message, 6000);
+    }
+    return;
+  }
   toast(`Claude is filling in ${plural(words.length, "word")}…`, 60000);
   try {
     const out = [];
@@ -770,8 +837,7 @@ async function enrich(ids) {
     words.forEach((w, i) => {
       const r = byKey.get(wordKey(w.word)) ?? out[i];
       if (!r) return;
-      const keep = { id: w.id, word: w.word, box: w.box, due: w.due, reviews: w.reviews, lapses: w.lapses, lastReviewed: w.lastReviewed, starred: w.starred, addedAt: w.addedAt, source: w.source, context: w.context || r.context, tags: w.tags };
-      store.saveWord({ ...w, ...r, ...keep });
+      store.saveWord(mergeDetails(w, r, { overwrite: true }));
       n += 1;
     });
     toast(`Updated ${plural(n, "word")} ✓`);
@@ -876,7 +942,7 @@ function go(v) {
 }
 
 const actions = {
-  speak: (el) => speak(el.dataset.text),
+  speak: (el) => speak(el.dataset.text, el.dataset.audio),
   sync: () => sync({ interactive: true }),
   disconnect: () => {
     drive.disconnect();
@@ -1000,8 +1066,22 @@ const actions = {
     for (const it of ui.candidates.items) it.selected = false;
     render();
   },
-  "add-selected": () => {
-    const recs = ui.candidates.items.filter((i) => i.selected).map((i) => i.rec);
+  "add-selected": async () => {
+    let recs = ui.candidates.items.filter((i) => i.selected).map((i) => i.rec);
+    if (!settings().apiKey && recs.some((r) => !r.meaning)) {
+      const cands = ui.candidates;
+      setBusy("Looking up your words…");
+      try {
+        const levels = await loadLevels();
+        const { records, quotaHit } = await enrichFree(recs, { tamil: settings().tamil, levels }, setBusy);
+        recs = records;
+        if (quotaHit) toast("Free Hindi translation limit reached for today — tap “Fill missing” tomorrow.", 6000);
+      } catch {
+        /* add them without details; "Fill missing" can retry later */
+      }
+      ui.busy = null;
+      ui.candidates = cands;
+    }
     const n = store.addWords(recs);
     const wasTyped = ui.candidates.typed;
     ui.candidates = null;
@@ -1075,7 +1155,7 @@ document.addEventListener("change", async (e) => {
     store.update((s) => (s.settings[k] = v), { touchesData: false });
     if (k === "googleClientId") drive.disconnect();
     toast("Saved");
-    if (k === "dailyCount" || k === "googleClientId" || k === "voice") render();
+    if (["dailyCount", "googleClientId", "voice", "apiKey"].includes(k)) render();
     return;
   }
   if (t.id === "sort") {

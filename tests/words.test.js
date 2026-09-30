@@ -68,3 +68,12 @@ describe("toCSV", () => {
     expect(lines[1]).toContain("x | y");
   });
 });
+
+describe("needsEnrichment", () => {
+  it("flags words missing a meaning, Hindi or any example", async () => {
+    const { needsEnrichment } = await import("../src/lib/words.js");
+    expect(needsEnrichment(makeWord({ word: "a", meaning: "m", hindi: "ह", sentences: ["s"] }))).toBe(false);
+    expect(needsEnrichment(makeWord({ word: "a", meaning: "m", sentences: ["s"] }))).toBe(true);
+    expect(needsEnrichment(makeWord({ word: "a", meaning: "m", hindi: "ह" }))).toBe(true);
+  });
+});

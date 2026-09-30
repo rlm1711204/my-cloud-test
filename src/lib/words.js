@@ -91,6 +91,7 @@ export function makeWord(input, now = new Date()) {
     tamil: String(input.tamil || "").trim(),
     ipa: String(input.ipa || "").trim(),
     say: String(input.say || "").trim(),
+    audio: String(input.audio || "").trim(), // recorded pronunciation URL (free dictionary)
     sentences: strList(input.sentences).slice(0, 3),
     synonyms: strList(input.synonyms).slice(0, 6),
     antonyms: strList(input.antonyms).slice(0, 6),
@@ -112,8 +113,9 @@ export function makeWord(input, now = new Date()) {
   };
 }
 
-/** True when the record still lacks the fields that make it useful for revision. */
-export const needsEnrichment = (w) => !w.meaning || !w.hindi || w.sentences.length < 2;
+/** True when the record still lacks the fields that make it useful for revision.
+ * (One example sentence is enough — free dictionaries often have only one.) */
+export const needsEnrichment = (w) => !w.meaning || !w.hindi || w.sentences.length === 0;
 
 /**
  * Merge two copies of the master list (e.g. this device vs Google Drive).

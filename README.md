@@ -10,7 +10,7 @@ Every day you get a **Word of the Day** plus **10 words to memorise** (you can c
 | | |
 |---|---|
 | 📷 **Capture** | Camera scan, screenshots, multi-page PDFs (including scanned ones), or typed/pasted lists |
-| 🧠 **Smart filtering** | Easy everyday words are dropped automatically. Claude AI judges difficulty for your exam; offline mode uses a word-frequency list |
+| 🧠 **Smart filtering** | Easy everyday words are dropped automatically, using a word-frequency list (free) or Claude AI (optional) |
 | 🔁 **Duplicate check** | Every word is checked against your master list, including forms like *mitigated* ↔ *mitigate*. Duplicates are never added twice |
 | 🗂️ **Word card** | Word, part of speech, simple meaning, **Hindi meaning**, optional **Tamil meaning**, IPA + easy pronunciation (*uh-BAYT*) with a 🔊 button, **2 example sentences**, synonyms, antonyms, an **exam tip** (root, mnemonic or confusable word), and the sentence where you found it |
 | ☀️ **Daily plan** | Word of the Day (never repeats until all words have been featured) plus N words mixing due reviews and new words |
@@ -21,20 +21,24 @@ Every day you get a **Word of the Day** plus **10 words to memorise** (you can c
 
 ## Using it
 
-1. **Settings → Claude AI**: paste your API key from [console.anthropic.com](https://console.anthropic.com/settings/keys).
-   Choose your **exam focus** (UPSC, RBI Grade B, SSC, Banking, CAT…) and turn on Tamil meanings if you want them.
-2. **Add**: scan or upload a page, or type words. On the review screen, untick anything you already know, then tap **Add**.
-3. **Today**: read the Word of the Day, then tap **Start flashcards** for today's set.
-4. **Quiz**: take one after revising. Words you get wrong come back in tomorrow's set.
+**It's free by default.** No API key is needed:
 
-**Without an API key** the app still works in offline mode. It reads text on the device (OCR for photos, the text
-layer for PDFs) and keeps words outside the ~10,000 most common English words. You then fill in the meanings yourself,
-or add a key later and tap **🤖 Fill missing** on the Words tab.
+- Hard words are picked using a word-frequency list (anything outside the ~10,000 most common English words).
+- Meanings, IPA, a recorded **audio pronunciation**, synonyms/antonyms and example sentences come from free dictionaries:
+  [Free Dictionary API](https://dictionaryapi.dev), plus [Wiktionary](https://en.wiktionary.org) for idioms and phrases.
+- **Hindi/Tamil** meanings come from the free [MyMemory](https://mymemory.translated.net) translation service
+  (a few hundred words a day). Machine translation of single words is sometimes imperfect, so fix any with ✎ Edit.
+- Photos are read on your phone (OCR). PDFs are read from their text layer.
 
-**Cost of AI mode:** you pay Anthropic directly for your own usage. A dense page with ~30 hard words costs roughly
-US$0.10–0.25 (₹8–20) with Opus 5.5 (the default, best quality), and about half that with Sonnet 5.5. Typed word lists cost less.
-You can switch the model in Settings.
-Your API key is stored only in your browser on that device. The app sends it only to Anthropic.
+1. **Add**: scan or upload a page, or type words. On the review screen, untick anything you already know, then tap **Add**.
+2. **Today**: read the Word of the Day, then tap **Start flashcards** for today's set.
+3. **Quiz**: take one after revising. Words you get wrong come back in tomorrow's set.
+4. **Words**: search and edit your list. **📖 Fill missing** retries lookups (e.g. after the daily translation limit resets).
+
+**Optional, paid: Claude AI.** Paste an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys)
+in Settings for richer cards: Claude judges difficulty for your exam (UPSC, RBI Grade B, SSC…), writes an exam tip and
+2 sentences for every word, and handles handwriting and idioms better. A dense page costs roughly US$0.10–0.25 with
+Opus 5.5, about half with Sonnet 5.5, and much less with Haiku 4.5. The key is stored only on your device.
 
 ## Setup
 
@@ -80,7 +84,8 @@ npm run build    # production build in dist/
 ```
 src/
   main.js            UI: Today, Add, Quiz, Words, Settings
-  lib/ai.js          Claude API: extract hard words from images/PDFs, build word cards (structured JSON output)
+  lib/freedict.js    Free word cards: dictionaryapi.dev + Wiktionary + MyMemory, IPA -> easy respelling
+  lib/ai.js          Optional Claude API: extract hard words from images/PDFs, build word cards
   lib/extract.js     Image downscaling, PDF text layer (pdf.js), on-device OCR (Tesseract) for offline mode
   lib/difficulty.js  Offline difficulty filter using SCOWL word-frequency levels
   lib/words.js       Word records, duplicate/inflection detection, merge logic, CSV
