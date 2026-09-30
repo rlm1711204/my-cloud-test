@@ -1,0 +1,47 @@
+// Kaasu for Android: a Trusted Web Activity. The app opens the Kaasu web app
+// full-screen in Chrome's engine, so every website update reaches the APK too,
+// and Google sign-in (Drive backup) works.
+plugins { id 'com.android.application' }
+
+def keystorePassword = System.getenv('KAASU_KEYSTORE_PASSWORD')
+
+android {
+    namespace 'io.github.rlm1711204.kaasu'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.rlm1711204.kaasu'
+        minSdk 21
+        targetSdk 34
+        versionCode((project.findProperty('versionCode') ?: '1') as int)
+        versionName(project.findProperty('versionName') ?: '1.0.0')
+    }
+
+    signingConfigs {
+        release {
+            // The key file is encrypted; its password lives only in the
+            // GitHub secret KAASU_KEYSTORE_PASSWORD.
+            storeFile file('../kaasu-release.p12')
+            storeType 'pkcs12'
+            storePassword keystorePassword
+            keyAlias 'kaasu'
+            keyPassword keystorePassword
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

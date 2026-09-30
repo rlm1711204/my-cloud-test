@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.rlm1711204.kaasu",
+    "sha256_cert_fingerprints": ["BD:89:89:6E:73:6F:80:64:1D:09:F1:F7:C9:30:B2:CB:8D:67:DB:22:F2:A2:9E:2C:51:77:EF:C7:21:7F:2E:7D"]
+  }
+}]
