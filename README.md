@@ -42,6 +42,10 @@ handwriting and idioms far better than the free dictionaries. The app picks the 
 If Flash hits its daily limit it switches to Flash-Lite, which has a bigger allowance. Note: Google may use free-tier
 inputs to improve its products, which is fine for textbook pages but not for personal documents.
 
+**Several Gemini keys:** in Settings you can add more than one key. They're tried in order. A key that hits its
+limit rests for 10 minutes while the next key takes over, and an invalid key is skipped. Each key's status (ready /
+limit reached / invalid) is shown next to it.
+
 **Optional, paid backup: Claude AI.** Add an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys)
 to use Claude whenever Gemini fails or runs out. A dense page costs roughly US$0.10–0.25 with Opus 5.5, about half with
 Sonnet 5.5, and much less with Haiku 4.5.

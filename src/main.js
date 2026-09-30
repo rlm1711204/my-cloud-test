@@ -3,12 +3,22 @@ import * as store from "./lib/store.js";
 import * as drive from "./lib/drive.js";
 import { DEFAULT_MODEL, EXAMS } from "./lib/ai.js";
 import { AllProvidersFailed, aiEnrichAll, aiList, fallbackNote, hasAI } from "./lib/engine.js";
-import { GEMINI_AUTO } from "./lib/gemini.js";
+import { GEMINI_AUTO, geminiKeysOf, keyStatus } from "./lib/gemini.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
 import { review, stage, stats, streak } from "./lib/srs.js";
-import { buildIndex, findExisting, needsEnrichment, parseTypedWords, parseVocabList, toCSV, todayISO, wordKey } from "./lib/words.js";
+import {
+  buildIndex,
+  cleanHeadword,
+  findExisting,
+  needsEnrichment,
+  parseTypedWords,
+  parseVocabList,
+  toCSV,
+  todayISO,
+  wordKey,
+} from "./lib/words.js";
 
 // ---------- tiny helpers ----------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -207,7 +217,8 @@ function viewAdd() {
   }
   if (ui.candidates) return viewCandidates();
   const aiOn = hasAI(s);
-  const aiName = [s.geminiKey && "Gemini", s.apiKey && "Claude"].filter(Boolean).join(" → ");
+  const nKeys = geminiKeysOf(s).length;
+  const aiName = [nKeys && (nKeys > 1 ? `Gemini ×${nKeys} keys` : "Gemini"), s.apiKey && "Claude"].filter(Boolean).join(" → ");
   return `
     <h1>Add words</h1>
     <p class="mode ${aiOn ? "on" : "off"}">
@@ -242,13 +253,18 @@ function viewAdd() {
 function viewCandidates() {
   const c = ui.candidates;
   const selected = c.items.filter((i) => i.selected).length;
-  const dups = c.items.filter((i) => i.status === "dup").length;
+  const skipped = c.skipped || [];
   return `
     <div class="row between">
       <h1>Review words</h1>
       <button class="btn small ghost" type="button" data-action="cancel-candidates">Cancel</button>
     </div>
-    <p class="muted">Found ${plural(c.items.length, "word")}${dups ? ` · ${dups} already in your list` : ""}. Untick any you already know.</p>
+    <p class="muted">${plural(c.items.length, "new word")} to review. Untick any you don't need.</p>
+    ${
+      skipped.length
+        ? `<p class="muted small">Skipped ${plural(skipped.length, "word")} already in your master list: ${esc(skipped.slice(0, 12).join(", "))}${skipped.length > 12 ? "…" : ""}</p>`
+        : ""
+    }
     <div class="row">
       <button class="btn small" type="button" data-action="select-all">Select all new</button>
       <button class="btn small" type="button" data-action="select-hard">Only hard (●●●+)</button>
@@ -260,12 +276,11 @@ function viewCandidates() {
           (it, i) => `
         <li class="cand ${it.status}">
           <label>
-            <input type="checkbox" data-cand="${i}" ${it.selected ? "checked" : ""} ${it.status === "dup" ? "disabled" : ""} />
+            <input type="checkbox" data-cand="${i}" ${it.selected ? "checked" : ""} />
             <span class="cand-body">
               <span class="cand-top">
                 <b>${esc(it.rec.word)}</b>
                 ${it.rec.say ? `<span class="say">${esc(it.rec.say)}</span>` : ""}
-                ${it.status === "dup" ? `<span class="badge dup">Already saved</span>` : ""}
                 ${it.status === "similar" ? `<span class="badge similar">Similar to “${esc(it.similarTo)}”</span>` : ""}
                 ${it.easy ? `<span class="badge easy">Common word</span>` : ""}
                 <span class="diff" title="Difficulty">${"●".repeat(it.rec.difficulty || 3)}</span>
@@ -424,7 +439,7 @@ function viewSettings() {
 
     <article class="card">
       <h3>📖 Word cards</h3>
-      <p class="muted">Order used: ${[st.geminiKey && "<b>Gemini</b> (free)", st.apiKey && "<b>Claude</b> (paid)", "<b>free dictionaries</b>"].filter(Boolean).join(" → ")}.
+      <p class="muted">Order used: ${[geminiKeysOf(st).length && `<b>Gemini</b> (free${geminiKeysOf(st).length > 1 ? `, ${geminiKeysOf(st).length} keys` : ""})`, st.apiKey && "<b>Claude</b> (paid)", "<b>free dictionaries</b>"].filter(Boolean).join(" → ")}.
       If one fails or hits its limit, the next one takes over automatically.</p>
       <p class="muted small">Free dictionaries: meaning, pronunciation, audio, synonyms and examples from Wiktionary; Hindi/Tamil via MyMemory translation (a few hundred words a day).</p>
       <label class="field">Exam focus
@@ -441,7 +456,25 @@ function viewSettings() {
       <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <i>Create API key</i>.
       The free tier has daily limits; when they run out the app switches to Claude (if set) or free dictionaries.
       Google may use free-tier inputs to improve its products — fine for textbook pages, avoid personal documents.</p>
-      <label class="field">Gemini API key<input type="password" data-setting="geminiKey" value="${esc(st.geminiKey)}" placeholder="AIza…" autocomplete="off" /></label>
+      <div class="field">Gemini API keys (tried in order; when one hits its limit the next is used)
+        ${geminiKeysOf(st).length
+          ? `<ul class="key-list">${geminiKeysOf(st)
+              .map((k, i) => {
+                const ks = keyStatus(k);
+                const label =
+                  ks.state === "invalid"
+                    ? `<span class="badge easy">invalid</span>`
+                    : ks.state === "resting"
+                      ? `<span class="badge learning">limit reached · back ${new Date(ks.until).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>`
+                      : `<span class="badge mastered">ready</span>`;
+                return `<li><code>Key ${i + 1}: ${esc(k.slice(0, 4))}…${esc(k.slice(-4))}</code> ${label}
+                  <button class="icon-btn small" type="button" data-action="remove-gemini-key" data-i="${i}" aria-label="Remove key ${i + 1}">✕</button></li>`;
+              })
+              .join("")}</ul>`
+          : ""}
+        <div class="row"><input type="password" id="newGeminiKey" placeholder="Paste a key: AIza…" autocomplete="off" />
+          <button class="btn small primary" type="button" data-action="add-gemini-key">Add</button></div>
+      </div>
       <label class="field">Model
         <select data-setting="geminiModel">
           ${[
@@ -717,23 +750,42 @@ function setBusy(text) {
   if (view === "add") render();
 }
 
+/**
+ * Build the review list. Repeats and words already in the master list are left out (only counted);
+ * forms of a saved word ("mitigated" vs "mitigate") are shown but unticked.
+ * @returns {{items: object[], skipped: string[]}}
+ */
 function prepareCandidates(records, { typed = false, levels = null } = {}) {
   const index = buildIndex(store.liveWords());
   const seen = new Set();
   const items = [];
+  const skipped = [];
   for (const rec of records) {
     const key = wordKey(rec.word);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     const ex = findExisting(key, index);
+    if (ex?.exact) {
+      skipped.push(ex.match.word);
+      continue;
+    }
     const easy = typed && levels ? isEasy(key, levels) : false;
-    const status = ex?.exact ? "dup" : ex ? "similar" : "new";
-    items.push({ rec, status, similarTo: ex?.match.word, easy, selected: status !== "dup" && (typed || !easy) });
+    const status = ex ? "similar" : "new";
+    items.push({ rec, status, similarTo: ex?.match.word, easy, selected: status === "new" && (typed || !easy) });
   }
-  // New words first, duplicates last.
-  const order = { new: 0, similar: 1, dup: 2 };
-  items.sort((a, b) => order[a.status] - order[b.status]);
-  return items;
+  items.sort((a, b) => Number(a.status === "similar") - Number(b.status === "similar"));
+  return { items, skipped };
+}
+
+/** Open the review screen, or just report when everything was already saved. */
+function showCandidates(records, opts = {}) {
+  const { items, skipped } = prepareCandidates(records, opts);
+  if (!items.length) {
+    ui.candidates = null;
+    toast(skipped.length ? `All ${plural(skipped.length, "word")} are already in your master list ✓` : "No words found. Try a clearer photo, or type the words.", 6000);
+    return;
+  }
+  ui.candidates = { items, skipped, typed: Boolean(opts.typed) };
 }
 
 async function handleFiles(files) {
@@ -751,11 +803,15 @@ async function handleFiles(files) {
         noteFallback(listed);
         if (!listed.words.length) throw new AllProvidersFailed([{ name: listed.provider, reason: "found no words" }]);
         const index = buildIndex(store.liveWords());
+        // Drop pronunciations/labels the AI sometimes lists as words ("UT-er", "Utter (verb)"), then repeats.
         const seen = new Set();
-        const items = listed.words.filter((w) => {
-          const k = wordKey(w.word);
-          return k && !seen.has(k) && seen.add(k);
-        });
+        const items = listed.words
+          .map((w) => ({ ...w, word: cleanHeadword(w.word) }))
+          .filter((w) => {
+            const k = w.word && wordKey(w.word);
+            return k && !seen.has(k) && seen.add(k);
+          });
+        if (!items.length) throw new AllProvidersFailed([{ name: listed.provider, reason: "found no words" }]);
         const fresh = items.filter((w) => !findExisting(w.word, index)?.exact);
         const dups = items.filter((w) => findExisting(w.word, index)?.exact);
         // Step 2: word cards for the new ones, 25 at a time. Words already saved are only listed.
@@ -773,7 +829,9 @@ async function handleFiles(files) {
       setBusy("Picking out the difficult words…");
       const levels = await loadLevels();
       // A numbered vocabulary list keeps every headword; any other text keeps only the hard words.
-      const list = parseVocabList(text);
+      const list = parseVocabList(text)
+        .map((e) => ({ ...e, word: cleanHeadword(e.word) }))
+        .filter((e) => e.word);
       records = list.length
         ? list.map((e) => ({ word: e.word, context: e.context, difficulty: difficultyFromLevel(levelOf(e.word, levels)), source }))
         : candidatesFromText(text, levels).map((c) => ({
@@ -785,11 +843,7 @@ async function handleFiles(files) {
       records = await freeLookup(records, levels);
     }
     ui.busy = null;
-    if (!records.length) {
-      toast("No difficult words found. Try a clearer photo, or type the words.");
-      return render();
-    }
-    ui.candidates = { items: prepareCandidates(records) };
+    showCandidates(records);
   } catch (e) {
     ui.busy = null;
     toast(e.message || String(e), 6000);
@@ -821,7 +875,7 @@ async function handleTyped() {
       records = await freeLookup(records, levels);
     }
     ui.busy = null;
-    ui.candidates = { items: prepareCandidates([...records, ...dupRecords], { typed: true, levels }), typed: true };
+    showCandidates([...records, ...dupRecords], { typed: true, levels });
   } catch (e) {
     ui.busy = null;
     toast(e.message || String(e), 6000);
@@ -1122,11 +1176,26 @@ const actions = {
     render();
   },
   "select-all": () => {
-    for (const it of ui.candidates.items) it.selected = it.status !== "dup";
+    for (const it of ui.candidates.items) it.selected = it.status === "new";
+    render();
+  },
+  "add-gemini-key": () => {
+    const input = $("#newGeminiKey");
+    const key = input.value.trim();
+    if (!/^[A-Za-z0-9_-]{20,}$/.test(key)) return toast("That doesn't look like a Gemini key (they start with AIza…).");
+    if (geminiKeysOf(settings()).includes(key)) return toast("That key is already added.");
+    store.update((s) => (s.settings.geminiKeys = [...geminiKeysOf(s.settings), key]), { touchesData: false });
+    toast(`Gemini key ${geminiKeysOf(settings()).length} added ✓`);
+    render();
+  },
+  "remove-gemini-key": (el) => {
+    const i = Number(el.dataset.i);
+    if (!confirm(`Remove Gemini key ${i + 1}?`)) return;
+    store.update((s) => (s.settings.geminiKeys = geminiKeysOf(s.settings).filter((_, j) => j !== i)), { touchesData: false });
     render();
   },
   "select-hard": () => {
-    for (const it of ui.candidates.items) it.selected = it.status !== "dup" && (it.rec.difficulty ?? 3) >= 3;
+    for (const it of ui.candidates.items) it.selected = it.status === "new" && (it.rec.difficulty ?? 3) >= 3;
     render();
   },
   "select-none": () => {
@@ -1222,7 +1291,7 @@ document.addEventListener("change", async (e) => {
     store.update((s) => (s.settings[k] = v), { touchesData: false });
     if (k === "googleClientId") drive.disconnect();
     toast("Saved");
-    if (["dailyCount", "googleClientId", "voice", "apiKey", "geminiKey"].includes(k)) render();
+    if (["dailyCount", "googleClientId", "voice", "apiKey"].includes(k)) render();
     return;
   }
   if (t.id === "sort") {

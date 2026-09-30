@@ -203,3 +203,28 @@ export function parseVocabList(text) {
   for (let i = 1; i < entries.length; i++) if (entries[i].n === entries[i - 1].n + 1) consecutive += 1;
   return consecutive / (entries.length - 1) >= 0.6 ? entries : [];
 }
+
+const POS_LABEL = /\s*[,;:–—-]?\s*\b(n|v|vt|vi|adj|adv|prep|conj|noun|verb|adjective|adverb|phrasal verb|idiom|phrase)\.?\s*$/i;
+
+/**
+ * Clean one headword from a list or AI reply, or return null if it isn't a word at all.
+ * "Utter (verb)" -> "Utter"; "12. Obtuse" -> "Obtuse"; pronunciations such as "UT-er",
+ * "ROO-mi-nayt", "ob-TOOS / ob-TYOOS" or "/əˈbeɪt/" -> null.
+ */
+export function cleanHeadword(raw) {
+  let w = String(raw || "")
+    .replace(/[\u0000-\u001f]/g, "")
+    .replace(/^\s*\d+\s*[.)]?\s*/, "") // numbering
+    .replace(/\s*[([{][^)\]}]*[)\]}]\s*/g, " ") // (verb), [adj], {n}
+    .replace(/\s+/g, " ")
+    .trim();
+  w = w.replace(POS_LABEL, "").replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, "");
+  if (!w || w.length < 2) return null;
+  if (/[/\\|0-9@#=+ˈˌəɪʊæɑɔʃʒθðŋːऀ-෿]/.test(w)) return null; // pronunciation, IPA, numbers, Indian script
+  if (w.split(" ").length > 6) return null;
+  const parts = w.split(/[\s-]+/).filter(Boolean);
+  const hasCaps = parts.some((p) => p.length >= 2 && p === p.toUpperCase());
+  const hasLower = parts.some((p) => p !== p.toUpperCase());
+  if (hasCaps && hasLower) return null; // respelling like "UT-er", "PLAY it by EER"
+  return w === w.toUpperCase() && w.length > 1 ? w.toLowerCase() : w;
+}

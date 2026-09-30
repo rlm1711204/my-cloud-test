@@ -104,3 +104,23 @@ describe("parseVocabList", () => {
     expect(parseVocabList("2024 was busy.\n15 officers met.\n3 cases closed.\n40 notices went out.\n7 appeals filed.")).toEqual([]);
   });
 });
+
+describe("cleanHeadword", () => {
+  it("keeps real headwords and strips labels/numbering", async () => {
+    const { cleanHeadword } = await import("../src/lib/words.js");
+    expect(cleanHeadword("Utter (verb)")).toBe("Utter");
+    expect(cleanHeadword("Utter (adjective)")).toBe("Utter");
+    expect(cleanHeadword("12. Obtuse")).toBe("Obtuse");
+    expect(cleanHeadword("ruminate - verb")).toBe("ruminate");
+    expect(cleanHeadword("Play it by ear")).toBe("Play it by ear");
+    expect(cleanHeadword("Bad-mouth")).toBe("Bad-mouth");
+    expect(cleanHeadword("salt of the earth")).toBe("salt of the earth");
+    expect(cleanHeadword("OBTUSE")).toBe("obtuse");
+  });
+  it("rejects pronunciations and junk", async () => {
+    const { cleanHeadword } = await import("../src/lib/words.js");
+    for (const junk of ["UT-er", "ROO-mi-nayt", "ob-TOOS / ob-TYOOS", "/əˈbeɪt/", "PLAY it by EER", "muhn-DAYN", "213", "मूर्ख", ""]) {
+      expect(cleanHeadword(junk), junk).toBeNull();
+    }
+  });
+});

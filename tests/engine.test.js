@@ -6,10 +6,11 @@ let impl = async () => ({ words: [] });
 vi.mock("../src/lib/gemini.js", () => ({
   geminiEnrich: (...a) => (calls.push(a), impl(...a)),
   geminiList: async () => ({ words: [] }),
+  geminiKeysOf: (s) => (s.geminiKeys || []).filter(Boolean),
 }));
 
 const { aiEnrichAll, BATCH } = await import("../src/lib/engine.js");
-const S = { geminiKey: "k", apiKey: "" };
+const S = { geminiKeys: ["k"], apiKey: "" };
 const card = (w) => ({ word: w, meaning: `m:${w}` });
 
 describe("aiEnrichAll", () => {

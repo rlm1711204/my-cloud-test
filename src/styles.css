@@ -321,3 +321,8 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
   .ph { max-width: 200px; }
 }
 .sheet.no-anim { animation: none; }
+.key-list { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 6px; }
+.key-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--surface-2); border-radius: 10px; padding: 6px 8px; font-weight: 400; }
+.key-list li .icon-btn { margin-left: auto; }
+.icon-btn.small { width: 32px; height: 32px; font-size: .85rem; }
+.field .row input { flex: 1; }

@@ -1,10 +1,10 @@
 // Chooses who writes the word cards: Gemini (free) → Claude (paid) → free dictionaries.
 // Each AI provider is tried in turn; if all fail the caller falls back to the free dictionary path.
 import { claudeEnrich, claudeList, explainClaudeError } from "./ai.js";
-import { geminiEnrich, geminiList } from "./gemini.js";
+import { geminiEnrich, geminiKeysOf, geminiList } from "./gemini.js";
 import { wordKey } from "./words.js";
 
-export const hasAI = (s) => Boolean(s.geminiKey || s.apiKey);
+export const hasAI = (s) => Boolean(geminiKeysOf(s).length || s.apiKey);
 
 /** Cards per request: small enough that a reply never gets cut off, even with long explanations. */
 export const BATCH = 25;
@@ -13,7 +13,7 @@ const cooldown = new Map(); // provider name -> time it may be tried again (afte
 
 function providers(s) {
   const list = [];
-  if (s.geminiKey) list.push({ name: "Gemini", list: geminiList, enrich: geminiEnrich, explain: (e) => e.message });
+  if (geminiKeysOf(s).length) list.push({ name: "Gemini", list: geminiList, enrich: geminiEnrich, explain: (e) => e.message });
   if (s.apiKey) {
     list.push({
       name: "Claude",

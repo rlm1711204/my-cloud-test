@@ -6,7 +6,7 @@ import { buildIndex, makeWord, mergeWordLists, todayISO, wordKey } from "./words
 const KEY = "vv.state.v1";
 
 export const DEFAULT_SETTINGS = {
-  geminiKey: "",
+  geminiKeys: [], // several free keys: when one hits its limit the next is used
   geminiModel: "auto",
   apiKey: "",
   model: DEFAULT_MODEL,
@@ -39,6 +39,11 @@ function load() {
     if (!raw) return blank();
     const s = { ...blank(), ...raw, settings: { ...DEFAULT_SETTINGS, ...raw.settings } };
     s.words = (s.words || []).map((w) => makeWord(w));
+    // Older versions kept one Gemini key; move it into the list.
+    if (s.settings.geminiKey) {
+      s.settings.geminiKeys = [...new Set([...(s.settings.geminiKeys || []), s.settings.geminiKey.trim()])];
+      delete s.settings.geminiKey;
+    }
     return s;
   } catch {
     return blank();

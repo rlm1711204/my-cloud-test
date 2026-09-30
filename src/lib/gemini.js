@@ -50,21 +50,35 @@ export function rankModels(models) {
     );
 }
 
-let modelCache = { key: "", list: null };
+/** All Gemini keys in Settings, in order (older versions stored a single `geminiKey`). */
+export const geminiKeysOf = (s) => [...new Set([...(s.geminiKeys || []), s.geminiKey].map((k) => String(k || "").trim()).filter(Boolean))];
 
-async function candidateModels(settings) {
+const KEY_REST_MS = 10 * 60 * 1000;
+const keyRest = new Map(); // key -> time it may be used again (after hitting its free limit)
+const badKeys = new Set(); // keys Google rejected as invalid, until the app is reopened
+
+/** "ok" | "resting" (limit reached, with `until`) | "invalid" — shown next to each key in Settings. */
+export function keyStatus(key) {
+  if (badKeys.has(key)) return { state: "invalid" };
+  const until = keyRest.get(key) ?? 0;
+  return until > Date.now() ? { state: "resting", until } : { state: "ok" };
+}
+
+const modelCache = new Map(); // key -> ranked model list
+
+async function candidateModels(settings, key) {
   if (settings.geminiModel && settings.geminiModel !== GEMINI_AUTO) {
     return [settings.geminiModel, ...FALLBACK_MODELS.filter((m) => m !== settings.geminiModel)];
   }
-  if (modelCache.key === settings.geminiKey && modelCache.list) return modelCache.list;
+  if (modelCache.has(key)) return modelCache.get(key);
   try {
-    const res = await fetch(`${BASE}/models?pageSize=200&key=${encodeURIComponent(settings.geminiKey)}`);
+    const res = await fetch(`${BASE}/models?pageSize=200&key=${encodeURIComponent(key)}`);
     if (res.ok) {
       const ranked = rankModels((await res.json()).models || []);
       // Best Flash plus best Flash-Lite is enough: Lite is the quota fallback.
       const best = [ranked.find((m) => !m.includes("-lite")), ranked.find((m) => m.includes("-lite"))].filter(Boolean);
       if (best.length) {
-        modelCache = { key: settings.geminiKey, list: best };
+        modelCache.set(key, best);
         return best;
       }
     } else if (res.status === 400 || res.status === 403) {
@@ -112,23 +126,13 @@ export function readResponse(json) {
   return Array.isArray(parsed.words) ? parsed.words : [];
 }
 
-async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
-  if (!settings.geminiKey) throw new GeminiError("No Gemini key.");
-  const body = {
-    systemInstruction: { parts: [{ text: systemPrompt(settings) }] },
-    contents: [{ role: "user", parts }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: toGeminiSchema(schema),
-      maxOutputTokens: 32768,
-    },
-  };
+async function runWithKey(settings, key, body, onProgress, label) {
   let lastErr;
-  for (const model of await candidateModels(settings)) {
-    onProgress?.(`Gemini (${model}) is preparing your word cards…`);
+  for (const model of await candidateModels(settings, key)) {
+    onProgress?.(`Gemini${label} (${model}) is working…`);
     let res;
     try {
-      res = await fetch(`${BASE}/models/${model}:generateContent?key=${encodeURIComponent(settings.geminiKey)}`, {
+      res = await fetch(`${BASE}/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -142,6 +146,55 @@ async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
     if (!(lastErr.quota || lastErr.status >= 500 || lastErr.status === 404)) break;
   }
   throw lastErr;
+}
+
+/**
+ * Try each saved key in turn. A key that hits its free limit rests for 10 minutes and the next key
+ * takes over; an invalid key is skipped. Only when every key fails does Gemini report failure.
+ */
+async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
+  const keys = geminiKeysOf(settings);
+  if (!keys.length) throw new GeminiError("No Gemini key.");
+  const body = {
+    systemInstruction: { parts: [{ text: systemPrompt(settings) }] },
+    contents: [{ role: "user", parts }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: toGeminiSchema(schema),
+      maxOutputTokens: 32768,
+    },
+  };
+  let lastErr = null;
+  let anyQuota = false;
+  for (const [i, key] of keys.entries()) {
+    if (badKeys.has(key)) continue;
+    if ((keyRest.get(key) ?? 0) > Date.now()) {
+      anyQuota = true;
+      continue;
+    }
+    try {
+      return await runWithKey(settings, key, body, onProgress, keys.length > 1 ? ` key ${i + 1}` : "");
+    } catch (e) {
+      if (!(e instanceof GeminiError)) throw e;
+      lastErr = e;
+      if (e.quota) {
+        anyQuota = true;
+        keyRest.set(key, Date.now() + KEY_REST_MS);
+      } else if (e.status === 400 || e.status === 403) {
+        badKeys.add(key);
+      } else if (!e.status || e.status < 500) {
+        throw e; // network or content problem: another key won't help
+      }
+      if (keys.length > 1) onProgress?.(`Gemini key ${i + 1}: ${e.message} Trying the next key…`);
+    }
+  }
+  if (anyQuota) {
+    throw new GeminiError(keys.length > 1 ? "All Gemini keys have reached their free limit for now." : "Gemini free limit reached for now.", {
+      status: 429,
+      quota: true,
+    });
+  }
+  throw lastErr ?? new GeminiError("No working Gemini key. Check your keys in Settings.");
 }
 
 /** Step 1: list the words in images/PDFs (or plain text). Resolves {words: [{word, context}], model}. */
