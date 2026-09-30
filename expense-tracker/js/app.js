@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.2.1';
+  const APP_VERSION = '1.3.0';
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const inr = (n) => (n < 0 ? '−' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -24,6 +24,8 @@
     return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
   };
   const INFLOW = new Set(['income', 'borrowed', 'got_back']);
+  const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const IS_STANDALONE = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const ordinal = (n) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
   const shortDate = (s) => new Date(s + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   const curYm = () => todayIso().slice(0, 7);
@@ -41,6 +43,11 @@
 
   function download(name, content, mime) {
     const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
+    // iPhone: saving files works best through the Share sheet ("Save to Files", WhatsApp, Mail…)
+    if (IS_IOS && navigator.canShare) {
+      const file = new File([blob], name, { type: mime || blob.type });
+      if (navigator.canShare({ files: [file] })) { navigator.share({ files: [file], title: name }).catch(() => {}); return; }
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = name;
@@ -713,7 +720,7 @@
   $('#dl-json').addEventListener('click', backupDownload);
   $('#dl-pdf').addEventListener('click', () => {
     buildPrintReport();
-    toast('Choose "Save as PDF" as the printer.');
+    toast(IS_IOS ? 'In the print screen, tap Share (□↑) → Save to Files to keep it as a PDF.' : 'Choose "Save as PDF" as the printer.');
     setTimeout(() => window.print(), 300);
   });
   $('#dl-drive').addEventListener('click', async () => {
@@ -759,6 +766,7 @@
    * ===================================================================== */
   function renderSettings() {
     $('#origin-hint').textContent = location.origin;
+    $('#redirect-hint').textContent = Drive.redirectUri();
     $('#client-id').value = Drive.clientId();
     const connected = Drive.wasConnected();
     $('#drive-setup').hidden = connected;
@@ -957,9 +965,21 @@
     await installEvt.userChoice;
     installEvt = null; $('#btn-install').hidden = true;
   });
-  if (window.matchMedia('(display-mode: standalone)').matches) {
+  if (IS_STANDALONE) {
     $('#install-text').textContent = '✅ Installed. Open Kaasu from your home screen.';
   }
+  // iPhone / iPad: there is no "Install" button — show how to add it to the Home Screen.
+  const IOS_TIP_KEY = 'expense-tracker.iosTipClosed';
+  if (IS_IOS && !IS_STANDALONE && !localStorage.getItem(IOS_TIP_KEY)) {
+    const share = '<svg class="ios-share" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>';
+    const inSafari = !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(navigator.userAgent);
+    $('#ios-steps').innerHTML = (inSafari ? '' : '<li>Best in <b>Safari</b>: copy this link and open it in Safari (Chrome on newer iPhones also works via its Share button).</li>') +
+      '<li>Tap the <b>Share</b> button ' + share + ' (bottom bar in Safari).</li>' +
+      '<li>Scroll down and tap <b>Add to Home Screen</b>.</li>' +
+      '<li>Tap <b>Add</b>. Open Kaasu from the new icon on your Home Screen.</li>';
+    $('#ios-install').hidden = false;
+  }
+  $('#ios-install-close').addEventListener('click', () => { localStorage.setItem(IOS_TIP_KEY, '1'); $('#ios-install').hidden = true; });
 
   /* =====================================================================
    * GOOGLE DRIVE SYNC
@@ -1037,7 +1057,9 @@
 
   show(location.hash.slice(1) || 'home');
   setPill();
-  if (Drive.wasConnected() && Drive.hasToken()) doSync(false);
+  const rr = Drive.redirectResult();
+  if (rr && rr.error) { setTimeout(() => toast(rr.error), 500); go('settings'); }
+  if (Drive.wasConnected() && Drive.hasToken()) doSync(!!(rr && rr.ok));
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

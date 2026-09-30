@@ -1,11 +1,11 @@
 /* Service worker — lets Kaasu open without internet.
  * Strategy: try the network first (so you always get updates), fall back to
  * the saved copy when offline. Google and bill-scanner files are not touched. */
-const CACHE = 'kaasu-v4';
+const CACHE = 'kaasu-v5';
 const SHELL = [
   './', 'index.html', 'css/styles.css', 'manifest.webmanifest',
   'js/parser.js', 'js/store.js', 'js/charts.js', 'js/ocr.js', 'js/drive.js', 'js/app.js',
-  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
+  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (e) => {

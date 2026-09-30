@@ -362,3 +362,17 @@ td.num, th.num { text-align: right; }
 .carry-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface-2); border-radius: 12px; padding: 10px 12px; margin-top: 8px; font-size: 14px; }
 .carry-row b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .learned button.need { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+
+/* ---------- iPhone / iPad ---------- */
+/* iOS zooms into any text box smaller than 16px — keep them at 16px */
+input, select, textarea, .field input, .field select, .toolbar input[type=search] { font-size: 16px; }
+.ios-install { border-color: var(--accent); background: var(--accent-soft); }
+.ios-steps { margin: 0; padding-left: 20px; font-size: 14.5px; }
+.ios-steps li { margin: 6px 0; }
+.ios-share { display: inline-block; width: 18px; height: 18px; vertical-align: -3px; stroke: var(--accent); }
+@supports not (color: color-mix(in srgb, red, blue)) {
+  /* older iPhones (iOS < 16.2) don't know color-mix — simple fallbacks */
+  .topbar { background: var(--bg); }
+  .pv.err { background: var(--surface-2); }
+  .btn.danger { border-color: var(--line); }
+}

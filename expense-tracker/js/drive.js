@@ -59,6 +59,43 @@
   const lastSync = () => cfg.lastSync || '';
   const account = () => cfg.email || '';
 
+  /* ---------- iPhone / iPad: full-page sign-in --------------------------
+   * Home-screen apps on iOS can't use Google's pop-up window, so there we
+   * go to Google's sign-in page and come back with the key in the address. */
+
+  const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const redirectUri = () => location.origin + location.pathname.replace(/index\.html$/, '');
+
+  function redirectSignIn() {
+    const state = Math.random().toString(36).slice(2);
+    localStorage.setItem(CFG_KEY + '.state', state);
+    const q = new URLSearchParams({
+      client_id: cfg.clientId, redirect_uri: redirectUri(), response_type: 'token',
+      scope: SCOPE, include_granted_scopes: 'true', state,
+    });
+    if (!cfg.connected) q.set('prompt', 'consent');
+    if (cfg.email) q.set('login_hint', cfg.email);
+    location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + q.toString();
+  }
+
+  /** Runs when the app opens: picks up the key Google sent back (if any). */
+  let redirectResult = null;
+  (function handleRedirect() {
+    if (typeof location === 'undefined') return; // not in a browser (tests)
+    const h = location.hash || '';
+    if (!/access_token=|error=/.test(h)) return;
+    const p = new URLSearchParams(h.slice(1));
+    const expected = localStorage.getItem(CFG_KEY + '.state');
+    localStorage.removeItem(CFG_KEY + '.state');
+    history.replaceState(null, '', location.pathname + location.search); // hide the key from the address bar
+    if (p.get('error')) { redirectResult = { error: p.get('error') === 'access_denied' ? 'Google sign-in was cancelled or blocked (access_denied).' : 'Google sign-in failed: ' + p.get('error') }; return; }
+    if (!expected || p.get('state') !== expected) { redirectResult = { error: 'Sign-in could not be verified. Please try Connect again.' }; return; }
+    token = { access_token: p.get('access_token'), expiresAt: Date.now() + (Number(p.get('expires_in')) || 3600) * 1000 };
+    try { sessionStorage.setItem(CFG_KEY + '.token', JSON.stringify(token)); } catch (e) { /* ignore */ }
+    cfg.connected = true; saveCfg();
+    redirectResult = { ok: true };
+  })();
+
   /**
    * Ask Google for permission. MUST be called from a button tap (browsers
    * block pop-ups otherwise). After the first "Allow", later calls usually
@@ -66,6 +103,7 @@
    */
   async function connect() {
     if (!isConfigured()) throw new Error('Add your Google Client ID in Settings first.');
+    if (isIOS()) { redirectSignIn(); return new Promise(() => {}); } // page leaves for Google and comes back
     await loadGIS();
     return new Promise((resolve, reject) => {
       if (!tokenClient) {
@@ -210,6 +248,6 @@
     await writeFile(name, content, mime || 'text/csv', reports);
   }
 
-  const api = { copiesMerged: () => cfg.copiesMerged || 0, setClientId, isConfigured, hasToken, wasConnected, lastSync, account, connect, disconnect, sync, saveReport, clientId: () => cfg.clientId || '' };
+  const api = { redirectResult: () => redirectResult, isIOS, redirectUri, copiesMerged: () => cfg.copiesMerged || 0, setClientId, isConfigured, hasToken, wasConnected, lastSync, account, connect, disconnect, sync, saveReport, clientId: () => cfg.clientId || '' };
   root.Drive = api;
 })(self);

@@ -9,7 +9,13 @@
   <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <!-- iPhone / iPad: install as a home-screen app -->
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Kaasu">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="format-detection" content="telephone=no">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -47,6 +53,11 @@
           <button>gave ravi 2000</button><button>ravi returned 1000</button><button>sip 5000</button>
           <button>lunch 150 yesterday</button><button>took 500 from kumar</button>
         </div>
+      </div>
+
+      <div class="card ios-install" id="ios-install" hidden>
+        <div class="card-head"><h3>📲 Install Kaasu on your iPhone</h3><button class="icon-btn sm" id="ios-install-close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+        <ol class="ios-steps" id="ios-steps"></ol>
       </div>
 
       <div class="card hero">
@@ -199,6 +210,7 @@
               <li><b>Audience</b> → <b>Test users</b> → <b>Add users</b> → add your own Gmail → Save.</li>
               <li><b>Clients</b> (or "Credentials") → <b>Create client</b> → type <b>Web application</b>.</li>
               <li>Under <b>Authorised JavaScript origins</b> add: <code id="origin-hint"></code> → Create.</li>
+              <li><b>For iPhone:</b> also under <b>Authorised redirect URIs</b> add: <code id="redirect-hint"></code></li>
               <li>Copy the <b>Client ID</b> (ends with <i>.apps.googleusercontent.com</i>) and paste it above.</li>
             </ol>
             <p class="small muted">When Google says "Google hasn't verified this app", tap <b>Continue</b> — it's your own app.</p>
@@ -248,7 +260,7 @@
 
       <div class="card" id="install-card">
         <h3>Install on your phone</h3>
-        <p class="muted small" id="install-text">In Chrome, tap ⋮ → <b>Add to Home screen</b> → <b>Install</b>.</p>
+        <p class="muted small" id="install-text"><b>Android:</b> in Chrome, tap ⋮ → <b>Add to Home screen</b> → <b>Install</b>.<br><b>iPhone / iPad:</b> open this page in <b>Safari</b> → tap <b>Share</b> (□↑) → <b>Add to Home Screen</b> → <b>Add</b>.</p>
         <button class="btn primary" id="btn-install" hidden>Install app</button>
       </div>
 

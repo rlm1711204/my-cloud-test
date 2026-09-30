@@ -63,6 +63,15 @@ Your app's address will be:
    You may instead see a bar at the bottom offering to **Install**.
 3. The **Kaasu** icon is now on your home screen. Open it from there. It runs full screen like any other app.
 
+### Step B (iPhone / iPad)
+iPhones don't show an "Install" button. Apple only allows installing web apps through the Share menu.
+1. Open the app address in **Safari**. On iOS 16.4 and later, Chrome's Share button also works.
+2. Tap the **Share** button (the square with an arrow ↑) in the bottom bar.
+3. Scroll down and tap **Add to Home Screen**, then **Add**.
+4. Always open Kaasu from the **new Home Screen icon**. The icon version keeps its own storage, separate from the Safari tab.
+
+Kaasu also shows these steps on its Home screen when opened on an iPhone.
+
 ---
 
 ## 3. Save your records in Google Drive (one time, about 10 minutes)
@@ -79,6 +88,8 @@ Google makes every app get its own free "Client ID" before it can write to your 
 5. **Audience** → **Test users** → **Add users** → add **your own Gmail** → **Save**.
 6. **Clients** (or **Credentials**) → **Create client** → Application type **Web application**.
    - Under **Authorised JavaScript origins**, add exactly: `https://rlm1711204.github.io`
+   - **For iPhone:** also under **Authorised redirect URIs** add exactly: `https://rlm1711204.github.io/my-cloud-test/expense-tracker/`
+     (iPhone home-screen apps can't use Google's pop-up, so Kaasu opens Google's sign-in page and comes back to this address.)
    - Tap **Create**.
 7. Copy the **Client ID**. It looks like `1234567890-abc123.apps.googleusercontent.com`.
 8. In the Kaasu app, open **Settings → Google Drive backup**, paste the Client ID, tap **Save Client ID**, then **Connect Google Drive**.
@@ -162,6 +173,8 @@ The first scan needs internet (about 10 MB, downloaded once). For best results, 
 | Bill total is wrong | Just correct it before saving. Retake the photo straight on, with less shadow. |
 | Voice button doesn't work | Allow the microphone for Chrome, or use the 🎤 on your keyboard. |
 | Two phones show different data | Both phones must be connected with the **same Gmail** and the **same Client ID**. Check Settings → Google Drive backup on each phone: it shows the Gmail and the last 6 characters of the Client ID. Then tap **Sync now** on phone A, then phone B, then phone A again. |
+| iPhone: Google says `redirect_uri_mismatch` | Add `https://rlm1711204.github.io/my-cloud-test/expense-tracker/` under **Authorised redirect URIs** of your Client ID (Section 3, step 6) and wait 5 minutes. |
+| iPhone: no "Add to Home Screen" | Use **Safari** (or Chrome on iOS 16.4+) → Share → scroll down. In-app browsers (WhatsApp, Instagram) don't show it: open the link in Safari first. |
 | Changed phones or cleared Chrome data | If Drive was connected, reconnect and your data returns. Otherwise use **Settings → Restore from file** with a downloaded backup. |
 
 **Tip:** once a month, tap **Settings → Download backup** as an extra safety copy.
