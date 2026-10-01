@@ -114,3 +114,12 @@ assert.strictEqual(P.parseOne('shopping 800 need', ctx).bucket, 'need');
 assert.strictEqual(P.parseOne('course 2000 want', ctx).bucket, 'want');
 assert.strictEqual(P.parseOne('course 2000 want', ctx).amount, 2000);
 console.log('need/want words ok');
+
+// Money given with nothing expected back -> expense tagged to that person
+const gift = P.parseOne('gave manoj 500 gift', ctx);
+assert.strictEqual(gift.type, 'expense'); assert.strictEqual(gift.person, 'Manoj'); assert.strictEqual(gift.amount, 500);
+const g2 = P.parseOne('gave dilmaan 2000 no return', ctx);
+assert.strictEqual(g2.type, 'expense'); assert.strictEqual(g2.person, 'Dilmaan');
+assert.strictEqual(P.parseOne('gave ravi 2000', ctx).type, 'lent');   // still a loan without the word
+assert.strictEqual(P.parseOne('gift 500', ctx).type, 'expense');       // no name -> plain expense
+console.log('gift entries ok');

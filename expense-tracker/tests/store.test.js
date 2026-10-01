@@ -107,3 +107,27 @@ assert.strictEqual(Store.carryInto(2026, 8), -15000);
 assert.strictEqual(Store.carryInto(2026, 6), 0);
 assert.strictEqual(Store.budgetPlan(2026, 6).hasEarlier, false);
 console.log('budget plan ok');
+
+// Group by item name, and cumulative spending per person
+Store.replaceAll(Store.emptyData());
+const mk = (note, amount, date, person) => Store.add({ type: 'expense', amount, category: person ? 'Gifts' : 'Groceries', note, date, person: person || '' });
+mk('Milk', 30, '2026-10-01'); mk('milk ', 30, '2026-10-05'); mk('Milk', 60, '2026-10-09');
+mk('Eggs', 80, '2026-10-02'); mk('egg', 80, '2026-10-08');
+Store.add({ type: 'expense', amount: 1200, category: 'Health', note: 'Gym subscription', date: '2026-10-03' });
+mk('Gift to Manoj', 500, '2026-10-04', 'Manoj'); mk('Manoj birthday', 1500, '2026-10-20', 'manoj');
+mk('Dilmaan help', 2000, '2026-10-06', 'Dilmaan');
+const items = Store.byItem('2026-10-01', '2026-10-31');
+assert.strictEqual(items.find((x) => x.key === 'person:manoj').amount, 2000); // both Manoj entries in one row
+assert.strictEqual(items.find((x) => x.key === 'person:manoj').name, '🎁 Manoj');
+const milk = items.find((x) => x.key === 'milk');
+assert.strictEqual(milk.amount, 120); assert.strictEqual(milk.count, 3); assert.strictEqual(milk.avg, 40);
+assert.strictEqual(items.find((x) => x.key === 'egg').amount, 160);     // Eggs + egg together
+assert.strictEqual(items.find((x) => x.key === 'gym subscription').amount, 1200);
+const gifts = Store.gifts('2026-10-01', '2026-10-31');
+assert.strictEqual(gifts[0].name, 'Manoj');                              // biggest first
+assert.strictEqual(gifts[0].amount, 2000); assert.strictEqual(gifts[0].count, 2);  // Manoj + manoj together
+assert.strictEqual(gifts.find((g) => g.key === 'dilmaan').amount, 2000);
+assert.strictEqual(Store.gifts().length, 3 - 1);                          // all time, Manoj merged
+// gifts are ordinary expenses: they count in the month's spending
+assert.strictEqual(Store.totals('2026-10-01', '2026-10-31').expense, 30 + 30 + 60 + 80 + 80 + 1200 + 500 + 1500 + 2000);
+console.log('item & person grouping ok');

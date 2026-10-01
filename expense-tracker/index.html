@@ -175,6 +175,20 @@
       </div>
 
       <div class="card">
+        <div class="card-head"><h3>By item name</h3><span class="muted small" id="r-items-count"></span></div>
+        <p class="muted small">Every entry with the same name added up — milk, gym, groceries, eggs…</p>
+        <input id="r-item-search" type="search" placeholder="Search an item…" autocomplete="off">
+        <div id="r-items"></div>
+        <button class="link small" id="r-items-more" hidden>Show all</button>
+      </div>
+
+      <div class="card" id="r-gifts-card" hidden>
+        <div class="card-head"><h3>🎁 Spent on people</h3><span class="muted small" id="r-gifts-total"></span></div>
+        <p class="muted small">Money given or spent on someone with nothing expected back. Loans are on the <b>People</b> tab.</p>
+        <div id="r-gifts"></div>
+      </div>
+
+      <div class="card">
         <h3>How you paid</h3>
         <div id="r-modes"></div>
       </div>
@@ -291,6 +305,7 @@
           <li><b>Returned:</b> ravi returned 1000 · paid back kumar 500</li>
           <li><b>Dates:</b> yesterday · 2 days ago · last monday · 5/9 · 5 sep</li>
           <li><b>Many at once:</b> chai 20, auto 60, milk 30</li>
+          <li><b>Given, not a loan:</b> gave manoj 500 gift · paid for dilmaan 300 no return</li>
           <li><b>Budget head:</b> add <b>need</b> or <b>want</b>, e.g. shopping 800 need</li>
           <li><b>Every month:</b> rent 12000 every month on 5th · salary 55000 monthly on 1st</li>
         </ul>
@@ -332,7 +347,7 @@
       <label class="field" id="f-bucket-wrap"><span>Budget head</span>
         <select id="f-bucket"><option value="">Auto</option><option value="need">🧱 Need</option><option value="want">🎈 Want</option></select>
       </label>
-      <label class="field" id="f-person-wrap" hidden><span>Person</span><input id="f-person" list="people-list" autocomplete="off" autocapitalize="words"></label>
+      <label class="field" id="f-person-wrap" hidden><span id="f-person-label">Person</span><input id="f-person" list="people-list" autocomplete="off" autocapitalize="words" placeholder="optional"></label>
       <datalist id="people-list"></datalist>
       <label class="field"><span>Description</span><input id="f-note" autocomplete="off"></label>
       <div class="field-row">

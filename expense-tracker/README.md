@@ -149,6 +149,23 @@ Set these up once, and Kaasu adds them by itself on that day every month. You ca
 
 Auto entries are added when you open the app on or after the due day. If you open it after a few days, any missed months are filled in. They are marked 🔁 in your lists and sync to Google Drive like everything else.
 
+### Reports → By item name
+Every entry with the same name is added up, so you can see what one thing costs you over time: **Milk ₹120 (3×, avg ₹40)**, **Gym subscription ₹2,500**, **Sabji ₹210 (2×)**. Small spelling differences are matched automatically (Milk / milk / Milks; Eggs / egg). Search for an item, or tap a row to see every entry behind it.
+
+### Money given to someone, not a loan 🎁
+For money you give and won't ask back (helping Manoj, a gift for Dilmaan), add the word **gift** or **no return**:
+
+```
+gave manoj 500 gift
+gave dilmaan 2000 no return
+```
+
+It's saved as a normal **expense** (so it counts in your spending and budget), but it remembers the person. **Reports → 🎁 Spent on people** shows the cumulative total per person, and tapping a name lists every entry.
+
+You can also add a name to any expense: open the entry and fill in **Spent on (optional)**.
+
+Without the word "gift", `gave manoj 500` is still treated as a **loan** and appears on the **People** tab, where you can record repayments.
+
 ### Scanning a bill 📷
 1. Tap the scan button → **Take photo** (or **Choose from gallery**).
 2. Kaasu reads the bill on your phone and fills in the **total**, **date**, **shop name** and **category**. It also shows the **GST** amount and the shop's **GSTIN**.

@@ -307,6 +307,12 @@
     const modeRes = extractMode(t);
     t = modeRes.text;
 
+    // "gave manoj 500 gift" / "for manoj 500 no return" — money given with
+    // nothing expected back: an ordinary expense that remembers the person.
+    const GIFT = /\b(gift|gifted|gifting|no return|not return(?:able)?|nothing back|won'?t ask back|donat(?:ed|ion)|khar(?:cha|ch)|free)\b/;
+    const isGift = GIFT.test(t);
+    if (isGift) t = t.replace(GIFT, ' ');
+
     let type = detectType(t, ctx);
     let category = '';
     let person = '';
@@ -318,6 +324,16 @@
 
     if (type === 'lent' || type === 'borrowed' || type === 'got_back' || type === 'paid_back' || type === 'borrowed_or_income') {
       person = extractPerson(t);
+      if (isGift && (type === 'lent' || type === 'borrowed_or_income')) {
+        // given, not lent: keep the name but record it as spending
+        const rest = leftoverNote(t, [person, ...person.split(' ')]);
+        return {
+          ok: true, type: 'expense', amount: amtRes.amount,
+          category: matchCategory(t, EXP_INDEX) ? matchCategory(t, EXP_INDEX).name : 'Gifts',
+          person: titleCase(person), note: rest || ('Gift to ' + titleCase(person)),
+          date: dateRes.date, mode: modeRes.mode, repeat: false, bucket: bucket || 'want', raw,
+        };
+      }
       // "gave amma 2000" / "sent home 5000" is family support, not a loan.
       if ((type === 'lent') && (FAMILY_WORDS.has(person) || /\bsent home\b/.test(t)) && !/\b(lent|lend|loan)\b/.test(t)) {
         type = 'expense'; category = 'Family';

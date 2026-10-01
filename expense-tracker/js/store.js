@@ -295,6 +295,68 @@
     return [...m.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
   }
 
+  /**
+   * Group entries by their name (description), so "Milk" bought 12 times
+   * shows one row with the total. Names are matched ignoring case, plurals
+   * and small spelling differences ("Gym" / "gym " / "Gyms").
+   */
+  function itemKey(note, category) {
+    let k = String(note || category || 'Other').toLowerCase()
+      .replace(/[^a-z0-9& ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    k = k.replace(/\b(ies)\b/, 'y').replace(/(\w{3,})(es|s)\b/, '$1'); // sabjis -> sabji, eggs -> egg
+    return k || 'other';
+  }
+
+  function byItem(from, to, opts) {
+    opts = opts || {};
+    const types = opts.types || ['expense'];
+    const m = new Map();
+    for (const t of active()) {
+      if (!types.includes(t.type) || !inRange(t, from, to)) continue;
+      // everything spent on one person groups under that person's name
+      const key = (t.type === 'expense' && t.person) ? 'person:' + t.person.trim().toLowerCase() : itemKey(t.note, t.category);
+      const row = m.get(key) || { key, name: '', amount: 0, count: 0, first: t.date, last: t.date, category: t.category, txns: [] };
+      row.amount += t.amount;
+      row.count++;
+      if (t.date < row.first) row.first = t.date;
+      if (t.date > row.last) { row.last = t.date; row.category = t.category; }
+      row.txns.push(t);
+      m.set(key, row);
+    }
+    // show the spelling you used most recently
+    for (const row of m.values()) {
+      const latest = row.txns.slice().sort((a, b) => (b.date + b.createdAt).localeCompare(a.date + a.createdAt))[0];
+      row.name = row.key.startsWith('person:')
+        ? '🎁 ' + latest.person.trim().replace(/\b\w/g, (c) => c.toUpperCase())  // Manoj, however it was typed
+        : (latest.note || latest.category);
+      row.avg = Math.round((row.amount / row.count) * 100) / 100;
+      row.amount = Math.round(row.amount * 100) / 100;
+    }
+    return [...m.values()].sort((a, b) => b.amount - a.amount);
+  }
+
+  /**
+   * Money spent ON someone and not expected back (a gift, or paying for
+   * them). These are ordinary expenses that carry a person's name.
+   * Loans are separate — see people().
+   */
+  function gifts(from, to) {
+    const m = new Map();
+    for (const t of active()) {
+      if (t.type !== 'expense' || !t.person) continue;
+      if (from && !inRange(t, from, to)) continue;
+      const key = t.person.trim().toLowerCase();
+      const row = m.get(key) || { key, name: t.person.trim(), amount: 0, count: 0, last: t.date, txns: [] };
+      row.amount += t.amount;
+      row.count++;
+      if (t.date > row.last) row.last = t.date;
+      row.txns.push(t);
+      m.set(key, row);
+    }
+    for (const row of m.values()) row.amount = Math.round(row.amount * 100) / 100;
+    return [...m.values()].sort((a, b) => b.amount - a.amount);
+  }
+
   /** Spending for each day of a month. */
   function byDay(year, month0) {
     const days = new Date(year, month0 + 1, 0).getDate();
@@ -447,7 +509,7 @@
 
   const api = {
     load, save, onChange, get, active, add, addMany, update, remove, restore, learn, forget, setSetting,
-    budgetPlan, carryInto, headOf, categoryHead, HEADS, SPLIT_PRESETS, NEED_CATEGORIES,
+    byItem, itemKey, gifts, budgetPlan, carryInto, headOf, categoryHead, HEADS, SPLIT_PRESETS, NEED_CATEGORIES,
     rules, addRule, updateRule, removeRule, linkToRule, applyRecurring, nextRun, ruleDate,
     merge, replaceAll, totals, byCategory, byDay, byMonth, people, owesMe, toCSV, emptyData, TYPE_LABEL,
   };

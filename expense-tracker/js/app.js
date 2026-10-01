@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.5.0';
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const inr = (n) => (n < 0 ? '−' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -92,7 +92,7 @@
       case 'borrowed': return { title: 'Took from ' + who, sub: t.note ? esc(t.note) : 'You owe them' };
       case 'got_back': return { title: who + ' paid back', sub: t.note ? esc(t.note) : 'Money returned to you' };
       case 'paid_back': return { title: 'Paid back ' + who, sub: t.note ? esc(t.note) : 'You returned money' };
-      default: return { title: esc(t.note || t.category), sub: esc(t.category) };
+      default: return { title: esc(t.note || t.category), sub: esc(t.category) + (t.type === 'expense' && t.person ? ' · 🎁 ' + who : '') };
     }
   }
   function rowHTML(t, opts) {
@@ -270,10 +270,12 @@
     const type = $('#f-type').value;
     const isPeople = PEOPLE_TYPES.has(type);
     $('#f-repeat-wrap').hidden = isPeople;
+    $('#f-person-wrap').hidden = !(isPeople || type === 'expense');
+    $('#f-person-label').textContent = isPeople ? 'Person' : 'Spent on (optional)';
+    $('#f-person').placeholder = isPeople ? '' : 'e.g. Manoj — money you won\'t ask back';
     $('#f-bucket-wrap').hidden = type !== 'expense';
     updateBucketAuto();
     $('#f-cat-wrap').hidden = isPeople;
-    $('#f-person-wrap').hidden = !isPeople;
     fillCategories(type, isPeople ? 'Personal loan' : (sheetState.rec.type === type ? sheetState.rec.category : ''));
   }
   $('#f-type').addEventListener('change', syncTypeFields);
@@ -331,7 +333,7 @@
     const rec = {
       type, amount,
       category: PEOPLE_TYPES.has(type) ? 'Personal loan' : $('#f-category').value,
-      person: PEOPLE_TYPES.has(type) ? person : '',
+      person: (PEOPLE_TYPES.has(type) || type === 'expense') ? person : '',
       note: $('#f-note').value.trim(),
       date: $('#f-date').value || todayIso(),
       mode: $('#f-mode').value,
@@ -547,6 +549,7 @@
     if (!p) { $('#person-sheet').close(); return; }
     $('#ps-name').textContent = p.name;
     $('#ps-balance').innerHTML = p.balance > 0 ? `${esc(p.name)} owes you <span class="pos">${inr(p.balance)}</span>` : p.balance < 0 ? `You owe ${esc(p.name)} ${inr(-p.balance)}` : 'All settled ✓';
+    $('#ps-add').hidden = false;
     $('#ps-settle').hidden = Math.abs(p.balance) < 0.5;
     $('#ps-settle').textContent = p.balance > 0 ? 'Got money back' : 'I paid back';
     $('#ps-list').innerHTML = p.txns.slice().sort((a, b) => b.date.localeCompare(a.date)).map((t) => rowHTML(t, { showDate: true })).join('');
@@ -682,6 +685,20 @@
     });
     $('#r-trend-table').innerHTML = `<table><thead><tr><th>Month</th><th class="num">Income</th><th class="num">Spent</th><th class="num">Saved</th></tr></thead><tbody>${trend.map((x) => `<tr><td>${x.label} ${x.year}</td><td class="num">${inr(Math.round(x.income))}</td><td class="num">${inr(Math.round(x.expense))}</td><td class="num">${inr(Math.round(x.saving))}</td></tr>`).join('')}</tbody></table>`;
 
+    // By item name (every entry with the same name added up)
+    renderItems(r);
+
+    // Money spent on people (gifts, nothing expected back)
+    const gifts = Store.gifts(r.from, r.to);
+    $('#r-gifts-card').hidden = !gifts.length;
+    if (gifts.length) {
+      $('#r-gifts-total').textContent = inr(Math.round(gifts.reduce((s, g) => s + g.amount, 0))) + ' total';
+      $('#r-gifts').innerHTML = gifts.map((g) => `<button class="item-row" data-gift="${esc(g.key)}">
+        <span class="ico">${esc(g.name.charAt(0).toUpperCase())}</span>
+        <span class="what"><b>${esc(g.name)}</b><span>${g.count} ${g.count === 1 ? 'time' : 'times'} · last ${shortDate(g.last)}</span></span>
+        <span class="amt">${inr(Math.round(g.amount))}</span></button>`).join('');
+    }
+
     // Payment modes
     const modes = new Map();
     Store.active().filter((x) => x.type === 'expense' && x.date >= r.from && x.date <= r.to).forEach((x) => modes.set(x.mode || 'Not set', (modes.get(x.mode || 'Not set') || 0) + x.amount));
@@ -690,6 +707,49 @@
 
     // Insights
     $('#r-insights').innerHTML = insights(r, t, p, cats).map((s) => '<li>' + s + '</li>').join('');
+  }
+
+  let itemQuery = '', itemsExpanded = false;
+  function renderItems(r) {
+    const all = Store.byItem(r.from, r.to);
+    const q = itemQuery.trim().toLowerCase();
+    const list = q ? all.filter((x) => x.key.includes(q) || x.name.toLowerCase().includes(q) || x.category.toLowerCase().includes(q)) : all;
+    const shown = (itemsExpanded || q) ? list : list.slice(0, 8);
+    $('#r-items-count').textContent = all.length ? all.length + ' items' : '';
+    $('#r-items').innerHTML = shown.length ? shown.map((x) => `<button class="item-row" data-item="${esc(x.key)}">
+        <span class="ico">${Parser.iconFor('expense', x.category)}</span>
+        <span class="what"><b>${esc(x.name)}</b><span>${x.count}× · ${esc(x.category)}${x.count > 1 ? ' · avg ' + inr(Math.round(x.avg)) : ''}</span></span>
+        <span class="amt">${inr(Math.round(x.amount))}</span></button>`).join('')
+      : '<p class="empty">' + (q ? 'No item matches "' + esc(itemQuery) + '".' : 'No spending in this period.') + '</p>';
+    const more = $('#r-items-more');
+    more.hidden = !!q || list.length <= 8;
+    more.textContent = itemsExpanded ? 'Show less' : 'Show all ' + list.length + ' items';
+  }
+  $('#r-item-search').addEventListener('input', (e) => { itemQuery = e.target.value; renderItems(reportRange()); });
+  $('#r-items-more').addEventListener('click', () => { itemsExpanded = !itemsExpanded; renderItems(reportRange()); });
+  $('#r-items').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-item]'); if (!b) return;
+    const r = reportRange();
+    const row = Store.byItem(r.from, r.to).find((x) => x.key === b.dataset.item);
+    if (row) openGroup(row.name, row.amount + ' spent on this in ' + r.label, row.txns);
+  });
+  $('#r-gifts').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-gift]'); if (!b) return;
+    const r = reportRange();
+    const g = Store.gifts(r.from, r.to).find((x) => x.key === b.dataset.gift);
+    if (g) openGroup('🎁 ' + g.name, 'Spent on ' + g.name + ' (not a loan)', g.txns);
+  });
+
+  /** Show every entry behind one item / person row, reusing the person sheet. */
+  function openGroup(title, subtitle, txns) {
+    personKey = null;
+    $('#ps-name').textContent = title;
+    const total = txns.reduce((s, t) => s + t.amount, 0);
+    $('#ps-balance').innerHTML = inr(Math.round(total)) + ' <span class="muted small">· ' + txns.length + ' ' + (txns.length === 1 ? 'entry' : 'entries') + '</span>';
+    $('#ps-settle').hidden = true;
+    $('#ps-add').hidden = true;
+    $('#ps-list').innerHTML = txns.slice().sort((a, b) => b.date.localeCompare(a.date)).map((t) => rowHTML(t, { showDate: true })).join('');
+    $('#person-sheet').showModal();
   }
 
   function insights(r, t, p, cats) {
@@ -707,6 +767,8 @@
       const jump = cats.map((c) => ({ c: c.category, d: c.amount - (prevCats.get(c.category) || 0) })).sort((a, b) => b.d - a.d)[0];
       if (jump && jump.d > 0 && jump.d >= t.expense * 0.05) out.push(`<b>${esc(jump.c)}</b> went up the most: +${inr(Math.round(jump.d))}.`);
     }
+    const items = Store.byItem(r.from, r.to).filter((x) => x.count > 1);
+    if (items.length) out.push(`You spent most often on <b>${esc(items[0].name)}</b>: ${inr(Math.round(items[0].amount))} across ${items[0].count} entries.`);
     const big = list.filter((x) => x.type === 'expense').sort((a, b) => b.amount - a.amount)[0];
     if (big) out.push(`Biggest single spend: ${inr(big.amount)} on ${esc(big.note || big.category)} (${niceDate(big.date)}).`);
     const days = Math.max(1, Math.round((Math.min(new Date(r.to + 'T00:00:00'), new Date()) - new Date(r.from + 'T00:00:00')) / 864e5) + 1);
@@ -762,6 +824,8 @@
       <table><thead><tr><th>Category</th><th class="num">Amount</th><th class="num">Share</th></tr></thead><tbody>
       ${cats.map((c) => `<tr><td>${esc(c.category)}</td><td class="num">${inr(Math.round(c.amount))}</td><td class="num">${catTotal ? Math.round((c.amount / catTotal) * 100) : 0}%</td></tr>`).join('')}</tbody></table>
       ${ppl.length ? `<h2>Money given & taken (pending)</h2><table><thead><tr><th>Person</th><th>Status</th><th class="num">Amount</th></tr></thead><tbody>${ppl.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.balance > 0 ? 'Owes you' : 'You owe'}</td><td class="num">${inr(Math.abs(p.balance))}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${(() => { const its = Store.byItem(r.from, r.to); return its.length ? `<h2>By item name</h2><table><thead><tr><th>Item</th><th>Category</th><th class="num">Times</th><th class="num">Total</th></tr></thead><tbody>${its.map((x) => `<tr><td>${esc(x.name)}</td><td>${esc(x.category)}</td><td class="num">${x.count}</td><td class="num">${inr(Math.round(x.amount))}</td></tr>`).join('')}</tbody></table>` : ''; })()}
+      ${(() => { const gs = Store.gifts(r.from, r.to); return gs.length ? `<h2>Spent on people (not loans)</h2><table><thead><tr><th>Person</th><th class="num">Times</th><th class="num">Total</th></tr></thead><tbody>${gs.map((g) => `<tr><td>${esc(g.name)}</td><td class="num">${g.count}</td><td class="num">${inr(Math.round(g.amount))}</td></tr>`).join('')}</tbody></table>` : ''; })()}
       <h2>All entries (${list.length})</h2>
       <table><thead><tr><th>Date</th><th>Type</th><th>Category / person</th><th>Description</th><th>Paid by</th><th class="num">Amount</th></tr></thead><tbody>
       ${list.map((x) => `<tr><td>${x.date}</td><td>${Store.TYPE_LABEL[x.type]}</td><td>${esc(x.person || x.category)}</td><td>${esc(x.note)}</td><td>${esc(x.mode)}</td><td class="num">${INFLOW.has(x.type) ? '+' : '−'}${inr(x.amount)}</td></tr>`).join('')}</tbody></table>`;
