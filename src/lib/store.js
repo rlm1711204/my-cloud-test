@@ -9,6 +9,7 @@ const KEY = "vv.state.v1";
 
 export const DEFAULT_SETTINGS = {
   geminiKeys: [], // several free keys: when one hits its limit the next is used
+  geminiKeyPick: "", // "" = Auto (all keys in turn); otherwise the one key chosen on the Add screen
   geminiModel: "auto",
   apiKey: "",
   model: DEFAULT_MODEL,

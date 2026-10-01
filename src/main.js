@@ -3,7 +3,7 @@ import * as store from "./lib/store.js";
 import * as drive from "./lib/drive.js";
 import { DEFAULT_MODEL, EXAMS } from "./lib/ai.js";
 import { AllProvidersFailed, aiEnrichAll, aiList, fallbackNote, hasAI } from "./lib/engine.js";
-import { GEMINI_AUTO, geminiKeysOf, keyStatus, looksLikeGeminiKey, testKey } from "./lib/gemini.js";
+import { GEMINI_AUTO, geminiKeysOf, keyStatus, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "./lib/gemini.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
@@ -299,6 +299,32 @@ function viewToday() {
     ${madeBy()}`;
 }
 
+/** Short label for a key's state: ready / limit reached / invalid. */
+function keyStateText(k) {
+  const ks = keyStatus(k);
+  if (ks.state === "invalid") return "invalid";
+  if (ks.state === "resting") return `limit reached · back ${new Date(ks.until).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
+  return "ready";
+}
+
+/** Choose which Gemini key scans and writes cards: Auto (all keys in turn) or one key by hand. */
+function keyPicker() {
+  const s = settings();
+  const keys = geminiKeysOf(s);
+  if (keys.length < 2) return "";
+  const picked = pickedGeminiKey(s);
+  return `
+    <label class="field key-pick">🔑 Gemini key for scanning & adding
+      <select data-keypick>
+        <option value="" ${picked ? "" : "selected"}>Auto — use keys in order, switch when one runs out</option>
+        ${keys
+          .map((k, i) => `<option value="${i}" ${k === picked ? "selected" : ""}>Key ${i + 1} only (${esc(k.slice(0, 4))}…${esc(k.slice(-4))}) · ${esc(keyStateText(k))}</option>`)
+          .join("")}
+      </select>
+    </label>
+    ${picked ? `<p class="muted small">Only key ${pickedKeyNumber(s)} is used. If it runs out, choose another key or Auto.</p>` : ""}`;
+}
+
 function viewAdd() {
   const s = settings();
   if (ui.busy) {
@@ -307,7 +333,8 @@ function viewAdd() {
   if (ui.candidates) return viewCandidates();
   const aiOn = hasAI(s);
   const nKeys = geminiKeysOf(s).length;
-  const aiName = [nKeys && (nKeys > 1 ? `Gemini ×${nKeys} keys` : "Gemini"), s.apiKey && "Claude"].filter(Boolean).join(" → ");
+  const pickN = pickedKeyNumber(s);
+  const aiName = [nKeys && (pickN ? `Gemini key ${pickN}` : nKeys > 1 ? `Gemini ×${nKeys} keys` : "Gemini"), s.apiKey && "Claude"].filter(Boolean).join(" → ");
   return `
     <h1>Add words</h1>
     <p class="mode ${aiOn ? "on" : "off"}">
@@ -317,6 +344,7 @@ function viewAdd() {
           : `🆓 <b>Free mode</b> — hard words are picked with a word-frequency list; meaning, Hindi, pronunciation, audio and examples come from free online dictionaries. (Tip: <a href="#" data-nav="settings">add a free Gemini key</a> for exam tips and richer cards.)`
       }
     </p>
+    ${keyPicker()}
 
     <div class="add-grid">
       <label class="add-tile">
@@ -607,13 +635,9 @@ function viewSettings() {
         ${geminiKeysOf(st).length
           ? `<ul class="key-list">${geminiKeysOf(st)
               .map((k, i) => {
-                const ks = keyStatus(k);
-                const label =
-                  ks.state === "invalid"
-                    ? `<span class="badge easy">invalid</span>`
-                    : ks.state === "resting"
-                      ? `<span class="badge learning">limit reached · back ${new Date(ks.until).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>`
-                      : `<span class="badge mastered">ready</span>`;
+                const state = keyStatus(k).state;
+                const cls = { invalid: "easy", resting: "learning", ok: "mastered" }[state];
+                const label = `<span class="badge ${cls}">${esc(keyStateText(k))}</span>${k === pickedGeminiKey(st) ? ` <span class="badge new">in use</span>` : ""}`;
                 return `<li><code>Key ${i + 1}: ${esc(k.slice(0, 4))}…${esc(k.slice(-4))}</code> ${label}
                   <button class="icon-btn small" type="button" data-action="remove-gemini-key" data-i="${i}" aria-label="Remove key ${i + 1}">✕</button></li>`;
               })
@@ -622,6 +646,7 @@ function viewSettings() {
         <div class="row"><input type="password" id="newGeminiKey" placeholder="Paste a key: AQ.… or AIza…" autocomplete="off" />
           <button class="btn small primary" type="button" data-action="add-gemini-key">Add</button></div>
       </div>
+      ${keyPicker()}
       <label class="field">Model
         <select data-setting="geminiModel">
           ${[
@@ -1456,7 +1481,14 @@ const actions = {
   "remove-gemini-key": (el) => {
     const i = Number(el.dataset.i);
     if (!confirm(`Remove Gemini key ${i + 1}?`)) return;
-    store.update((s) => (s.settings.geminiKeys = geminiKeysOf(s.settings).filter((_, j) => j !== i)), { touchesData: false });
+    store.update(
+      (s) => {
+        const keys = geminiKeysOf(s.settings);
+        if (keys[i] === s.settings.geminiKeyPick) s.settings.geminiKeyPick = "";
+        s.settings.geminiKeys = keys.filter((_, j) => j !== i);
+      },
+      { touchesData: false },
+    );
     render();
   },
   info: (el) => showInfo(el.dataset.id),
@@ -1618,6 +1650,13 @@ document.addEventListener("change", async (e) => {
       }
     } else toast("Saved");
     await refreshNotify();
+    render();
+    return;
+  }
+  if (t.dataset.keypick != null) {
+    const key = t.value === "" ? "" : geminiKeysOf(settings())[Number(t.value)] || "";
+    store.update((s) => (s.settings.geminiKeyPick = key), { touchesData: false });
+    toast(key ? `Using Gemini key ${Number(t.value) + 1} only.` : "Auto: keys are used in order.");
     render();
     return;
   }

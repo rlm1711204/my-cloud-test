@@ -365,3 +365,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .card.about img { border-radius: 12px; }
 .card.about h3 { margin: 8px 0 2px; }
 .card.about .made-by { margin: 12px 0; font-size: 1rem; }
+
+/* Gemini key picker (Add screen and Settings) */
+.key-pick { margin: 4px 0 8px; }
+.key-pick select { width: 100%; }

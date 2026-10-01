@@ -53,6 +53,18 @@ export function rankModels(models) {
 /** All Gemini keys in Settings, in order (older versions stored a single `geminiKey`). */
 export const geminiKeysOf = (s) => [...new Set([...(s.geminiKeys || []), s.geminiKey].map((k) => String(k || "").trim()).filter(Boolean))];
 
+/** The key chosen by hand on the Add screen, or null for Auto (or if that key was removed). */
+export const pickedGeminiKey = (s) => {
+  const pick = String(s.geminiKeyPick || "").trim();
+  return pick && geminiKeysOf(s).includes(pick) ? pick : null;
+};
+
+/** 1-based position of the hand-picked key ("Key 2"), or 0 for Auto. */
+export const pickedKeyNumber = (s) => {
+  const pick = pickedGeminiKey(s);
+  return pick ? geminiKeysOf(s).indexOf(pick) + 1 : 0;
+};
+
 /**
  * Keys go in the x-goog-api-key header. Google's newer "AQ." auth keys (issued since May 2026) only work
  * there, not as a ?key= URL parameter; older "AIza" keys work either way.
@@ -184,19 +196,15 @@ async function runWithKey(settings, key, body, onProgress, label) {
 /**
  * Try each saved key in turn. A key that hits its free limit rests for 10 minutes and the next key
  * takes over; an invalid key is skipped. Only when every key fails does Gemini report failure.
+ * If a key was picked by hand, only that key is used (even if it was resting), and its errors say which key.
  */
 async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
-  const keys = geminiKeysOf(settings);
-  if (!keys.length) throw new GeminiError("No Gemini key.");
-  const body = {
-    systemInstruction: { parts: [{ text: systemPrompt(settings) }] },
-    contents: [{ role: "user", parts }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      responseSchema: toGeminiSchema(schema),
-      maxOutputTokens: 32768,
-    },
-  };
+  const all = geminiKeysOf(settings);
+  if (!all.length) throw new GeminiError("No Gemini key.");
+  const picked = pickedGeminiKey(settings);
+  if (picked) return runPicked(settings, picked, all.indexOf(picked) + 1, parts, onProgress, schema);
+  const keys = all;
+  const body = requestBody(settings, parts, schema);
   let lastErr = null;
   let anyQuota = false;
   for (const [i, key] of keys.entries()) {
@@ -228,6 +236,37 @@ async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
     });
   }
   throw lastErr ?? new GeminiError("No working Gemini key. Check your keys in Settings.");
+}
+
+function requestBody(settings, parts, schema) {
+  return {
+    systemInstruction: { parts: [{ text: systemPrompt(settings) }] },
+    contents: [{ role: "user", parts }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: toGeminiSchema(schema),
+      maxOutputTokens: 32768,
+    },
+  };
+}
+
+/** Use only the key the learner chose. Failures name the key so they know to pick another. */
+async function runPicked(settings, key, n, parts, onProgress, schema) {
+  try {
+    const res = await runWithKey(settings, key, requestBody(settings, parts, schema), onProgress, ` key ${n}`);
+    keyRest.delete(key);
+    badKeys.delete(key);
+    return res;
+  } catch (e) {
+    if (!(e instanceof GeminiError)) throw e;
+    if (e.quota) keyRest.set(key, Date.now() + KEY_REST_MS);
+    else if (e.status === 400 || e.status === 401 || e.status === 403) badKeys.add(key);
+    const hint = e.quota ? "reached its free limit" : e.message.replace(/\.$/, "");
+    throw new GeminiError(`Key ${n} ${e.quota ? hint : `failed: ${hint}`}. Choose another key (or Auto) on the Add screen.`, {
+      status: e.status,
+      quota: e.quota,
+    });
+  }
 }
 
 /** Step 1: list the words in images/PDFs (or plain text). Resolves {words: [{word, context}], model}. */

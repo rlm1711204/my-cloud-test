@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { geminiEnrich, geminiKeysOf, keyStatus, looksLikeGeminiKey, testKey } from "../src/lib/gemini.js";
+import { geminiEnrich, geminiKeysOf, keyStatus, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "../src/lib/gemini.js";
 
 const ok = (words) => ({ ok: true, status: 200, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ words }) }] } }] }) });
 const fail = (status, message = "x") => ({ ok: false, status, json: async () => ({ error: { message } }) });
@@ -65,5 +65,46 @@ describe("AQ. auth keys", () => {
     expect(bad.ok).toBe(false);
     expect(bad.message).toMatch(/known Google issue/);
     expect(keyStatus("AQ.blocked-xxxxxxxxxxxxxxxx").state).toBe("invalid");
+  });
+});
+
+describe("hand-picked Gemini key", () => {
+  const S = { geminiModel: "gemini-2.5-flash", exam: "general" };
+  const A = "PICK_ONE_eeeeeeeeeeeeeeee";
+  const B = "PICK_TWO_ffffffffffffffff";
+
+  it("uses only the chosen key, even if it was resting", async () => {
+    const calls = [];
+    let bLimited = true;
+    vi.stubGlobal("fetch", async (url, opts) => {
+      calls.push(keyOf(url, opts));
+      return keyOf(url, opts) === B && bLimited ? fail(429) : ok([{ word: "abate" }]);
+    });
+    // Auto mode: B is first, hits its limit, A takes over.
+    await geminiEnrich({ ...S, geminiKeys: [B, A] }, ["abate"], []);
+    expect(keyStatus(B).state).toBe("resting");
+    // Picked B by hand (its limit has reset): B is tried again, and nothing else.
+    bLimited = false;
+    calls.length = 0;
+    const res = await geminiEnrich({ ...S, geminiKeys: [B, A], geminiKeyPick: B }, ["abate"], []);
+    expect(res.words).toEqual([{ word: "abate" }]);
+    expect(calls.every((k) => k === B)).toBe(true);
+    expect(keyStatus(B).state).toBe("ok");
+  });
+
+  it("names the key when the chosen key fails, instead of trying others", async () => {
+    const calls = [];
+    vi.stubGlobal("fetch", async (url, opts) => {
+      calls.push(keyOf(url, opts));
+      return fail(429);
+    });
+    const s = { ...S, geminiKeys: [A, B], geminiKeyPick: B };
+    await expect(geminiEnrich(s, ["abate"], [])).rejects.toMatchObject({ quota: true, message: /Key 2 reached its free limit/ });
+    expect(calls.every((k) => k === B)).toBe(true);
+  });
+
+  it("falls back to Auto if the chosen key was removed", () => {
+    expect(pickedGeminiKey({ geminiKeys: [A], geminiKeyPick: B })).toBeNull();
+    expect(pickedKeyNumber({ geminiKeys: [A, B], geminiKeyPick: B })).toBe(2);
   });
 });

@@ -48,6 +48,8 @@ inputs to improve its products, which is fine for textbook pages but not for per
 **Several Gemini keys:** in Settings you can add more than one key. They're tried in order. A key that hits its
 limit rests for 10 minutes while the next key takes over, and an invalid key is skipped. Each key's status (ready /
 limit reached / invalid) is shown next to it.
+To use one particular key, pick it under **🔑 Gemini key for scanning & adding** on the Add screen (or in Settings).
+Only that key is used until you switch back to **Auto**.
 
 **Optional, paid backup: Claude AI.** Add an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys)
 to use Claude whenever Gemini fails or runs out. A dense page costs roughly US$0.10–0.25 with Opus 5.5, about half with
