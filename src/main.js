@@ -61,7 +61,7 @@ function download(name, text, type) {
   a.href = URL.createObjectURL(new Blob([text], { type }));
   a.download = name;
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000); // Android saves the file asynchronously
 }
 
 /** Escape a sentence and highlight the target word (and its inflections) in it. */
@@ -1514,7 +1514,13 @@ const actions = {
     render();
   },
   "export-csv": () => download(`vocab-master-${todayISO()}.csv`, "﻿" + toCSV(store.get().words), "text/csv;charset=utf-8"),
-  "export-json": () => download(`vocabvault-backup-${todayISO()}.json`, JSON.stringify(store.exportData(), null, 1), "application/json"),
+  "export-json": () => {
+    const data = store.exportData();
+    download(`vocabvault-backup-${todayISO()}.json`, JSON.stringify(data, null, 1), "application/json");
+    const own = store.liveWords().length;
+    const bankN = Object.keys(data.bank).length;
+    toast(`Backup saved: ${plural(own, "of your own word")}${bankN ? ` + progress on ${plural(bankN, "Word Bank word")}` : ""}. Word Bank words are built into the app on every device.`, 7000);
+  },
   reset: () => {
     if (!confirm("Erase all words on this device? (Your Google Drive copy is not touched.)")) return;
     store.resetAll();
@@ -1553,8 +1559,13 @@ document.addEventListener("change", async (e) => {
     t.value = "";
     if (!f) return;
     try {
-      store.importData(JSON.parse(await f.text()), { markDirty: true });
-      toast("Backup restored and merged ✓");
+      const r = store.importData(JSON.parse(await f.text()), { markDirty: true, applyPrefs: true });
+      const parts = [
+        `Backup had ${plural(r.inBackup, "of your own word")}${r.inBackup ? `: ${r.added} new, ${r.updated} updated, ${r.inBackup - r.added - r.updated} already here` : ""}.`,
+        r.bankProgress ? `Word Bank progress restored for ${plural(r.bankProgress, "word")}.` : "",
+        r.prefsApplied ? `Today's words now come from ${store.SOURCES[store.get().settings.dailySource]}.` : "",
+      ];
+      toast(`✓ Restored. ${parts.filter(Boolean).join(" ")}`, 8000);
       render();
     } catch (err) {
       toast(err.message, 5000);

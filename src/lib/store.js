@@ -27,6 +27,9 @@ export const DEFAULT_SETTINGS = {
 
 export const SOURCES = { mine: "My words", bank: "Word Bank", mixed: "Mixed" };
 
+/** Study preferences carried in a backup file (never API keys or the Drive Client ID). */
+const PREF_KEYS = ["exam", "dailyCount", "tamil", "voice", "dailySource", "practiceSource", "practiceKind", "practiceSize", "notify"];
+
 function blank() {
   return {
     words: [],
@@ -204,6 +207,7 @@ export const exportData = () => ({
   activity: state.activity,
   bank: state.bank,
   practice: state.practice,
+  prefs: Object.fromEntries(PREF_KEYS.map((k) => [k, state.settings[k]])),
 });
 
 /** Copy a Word Bank word into the learner's own master list. */
@@ -214,9 +218,25 @@ export function addBankWordToMine(id) {
   return addWords([{ word, pos, meaning, hindi, synonyms, antonyms, sentences, source: "Word Bank", difficulty: 4 }]);
 }
 
-/** Merge a payload from Drive or a backup file into local state. */
-export function importData(data, { markDirty = false } = {}) {
+/**
+ * Merge a payload from Drive or a backup file into local state.
+ * `applyPrefs` (backup files only) also restores study preferences such as where Today's words come from.
+ * Returns a summary for the "restored" message.
+ */
+export function importData(data, { markDirty = false, applyPrefs = false } = {}) {
   if (!data || !Array.isArray(data.words)) throw new Error("That file doesn't look like a VocabVault backup.");
+  const before = new Map(state.words.map((w) => [wordKey(w.word), w]));
+  const incoming = data.words.filter((w) => !w.deleted && wordKey(w.word));
+  const summary = {
+    inBackup: incoming.length,
+    added: incoming.filter((w) => !before.has(wordKey(w.word)) || before.get(wordKey(w.word)).deleted).length,
+    updated: incoming.filter((w) => {
+      const cur = before.get(wordKey(w.word));
+      return cur && !cur.deleted && String(w.updatedAt) > String(cur.updatedAt);
+    }).length,
+    bankProgress: Object.keys(data.bank || {}).length,
+    prefsApplied: false,
+  };
   update(
     (s) => {
       s.words = mergeWordLists(s.words, data.words.map((w) => makeWord(w)));
@@ -226,9 +246,15 @@ export function importData(data, { markDirty = false } = {}) {
         if (!s.bank[id] || String(p.updatedAt) > String(s.bank[id].updatedAt)) s.bank[id] = p;
       }
       s.practice = mergePractice(s.practice, data.practice);
+      if (applyPrefs && data.prefs && typeof data.prefs === "object") {
+        for (const k of PREF_KEYS) if (data.prefs[k] !== undefined) s.settings[k] = data.prefs[k];
+        s.daily = null; // rebuild today's plan with the restored source and count
+        summary.prefsApplied = true;
+      }
     },
     { touchesData: markDirty },
   );
+  return summary;
 }
 
 export function resetAll() {
