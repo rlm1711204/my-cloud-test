@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.3.1';
+  const APP_VERSION = '1.4.0';
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const inr = (n) => (n < 0 ? '−' : '') + '₹' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -389,8 +389,13 @@
     $('#hero-left').textContent = inr(Math.round(plan.totalLeft));
     $('#hero-left').classList.toggle('neg', plan.totalLeft < 0);
     const prevName = new Date(y, m - 1, 1).toLocaleString('en-IN', { month: 'short' });
-    $('#hero-carry').hidden = !plan.carry;
-    $('#hero-carry').textContent = 'This month ' + inr(Math.round(plan.monthLeft)) + ' + carried from ' + prevName + ' ' + inr(Math.round(plan.carry));
+    const showCarry = Store.get().settings.carryForward !== false && (plan.carry || plan.hasEarlier);
+    $('#hero-carry').hidden = !showCarry;
+    if (showCarry) {
+      const sign = plan.carry < 0 ? '−' : '+';
+      $('#hero-carry').innerHTML = 'This month <b>' + inr(Math.round(plan.monthLeft)) + '</b> ' + sign +
+        ' from ' + prevName + ' <b class="' + (plan.carry < 0 ? 'neg-ink' : '') + '">' + inr(Math.abs(Math.round(plan.carry))) + '</b>';
+    }
     renderPlan($('#plan-body'), plan, true);
     $('#plan-title').textContent = 'Budget plan · ' + plan.split.join('/');
     $('#t-spent').textContent = inr(Math.round(t.expense));
@@ -467,7 +472,10 @@
         <div class="meter"><span class="${cls}" style="width:${Math.min(100, ratio * 100)}%"></span></div>
       </div>`;
     }
-    if (plan.carry) html += `<div class="carry-row"><span>↪️ Carried forward from ${prevName}</span><b>${inr(Math.round(plan.carry))}</b></div>`;
+    if (plan.carry) {
+      const short = plan.carry < 0;
+      html += `<div class="carry-row"><span>${short ? '⚠️ Shortfall carried from ' : '↪️ Carried forward from '}${prevName}</span><b class="${short ? 'neg-ink' : 'pos'}">${short ? '−' : '+'}${inr(Math.abs(Math.round(plan.carry)))}</b></div>`;
+    }
     el.innerHTML = html;
   }
 

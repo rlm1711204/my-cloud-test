@@ -393,7 +393,7 @@
     const target = ymKey(y, m0);
     for (let d = new Date(fy, fm, 1); ymKey(d.getFullYear(), d.getMonth()) < target; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
       const [from, to] = monthRange(d.getFullYear(), d.getMonth());
-      carry = Math.max(0, carry + totals(from, to).left);
+      carry += totals(from, to).left; // a shortfall carries over too, as a minus
     }
     return Math.round(carry * 100) / 100;
   }
@@ -422,7 +422,9 @@
       return { key: h.key, label: h.label, pct: split[i], budget, used: Math.round(used[h.key] * 100) / 100, left: Math.round((budget - used[h.key]) * 100) / 100 };
     });
     const carry = carryInto(y, m0);
-    return { base, baseSource, split, heads, carry, monthLeft: t.left, totalLeft: t.left + carry, month: ymKey(y, m0) };
+    const first = active().map((t) => t.date).sort()[0];
+    const hasEarlier = !!first && first.slice(0, 7) < ymKey(y, m0);
+    return { base, baseSource, split, heads, carry, hasEarlier, monthLeft: t.left, totalLeft: t.left + carry, month: ymKey(y, m0) };
   }
 
   /* ---------- Export ------------------------------------------------------ */

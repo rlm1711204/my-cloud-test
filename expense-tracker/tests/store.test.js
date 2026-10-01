@@ -89,8 +89,21 @@ assert.strictEqual(plan2.heads[0].used, 25500);
 // carry off
 Store.setSetting('carryForward', false);
 assert.strictEqual(Store.budgetPlan(2026, 8).carry, 0);
-// overspending isn't carried as a negative
+// a shortfall carries over as a minus (Sept overspent -> Oct starts behind)
 Store.setSetting('carryForward', true);
 add('expense', 90000, 'Travel', '2026-08-20');
-assert.strictEqual(Store.carryInto(2026, 8), 0);
+assert.strictEqual(Store.carryInto(2026, 8), 30000 - 90000);        // Aug: +30000 leftover, then -90000 spent
+const oct = Store.budgetPlan(2026, 9);
+assert.strictEqual(oct.carry, Store.carryInto(2026, 9));
+assert.strictEqual(oct.totalLeft, oct.monthLeft + oct.carry);
+assert.ok(oct.hasEarlier);
+// shortfalls and leftovers add up across several months
+Store.replaceAll(Store.emptyData());
+Store.setSetting('carryForward', true);
+add('income', 50000, 'Salary', '2026-07-01'); add('expense', 20000, 'Rent', '2026-07-05');   // +30000
+add('income', 50000, 'Salary', '2026-08-01'); add('expense', 95000, 'Travel', '2026-08-10'); // -45000
+assert.strictEqual(Store.carryInto(2026, 8), -15000);
+// a first month with no earlier months carries nothing
+assert.strictEqual(Store.carryInto(2026, 6), 0);
+assert.strictEqual(Store.budgetPlan(2026, 6).hasEarlier, false);
 console.log('budget plan ok');

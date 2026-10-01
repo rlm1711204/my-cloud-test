@@ -134,7 +134,7 @@ Kaasu splits your monthly income into three heads. The default is **50 / 30 / 20
 - **A whole category should switch?** Go to Settings → Budget plan and tap the category (e.g. make *Food* a Need).
 - **Change the split:** Settings → Budget plan → **Split**. Choose 50/30/20, 60/20/20, 70/20/10, 40/30/30, 50/20/30, or **Custom** (the three numbers must add up to 100).
 - **Plan based on:** this month's income (the default), or a fixed amount you choose. If this month's salary isn't in yet, Kaasu uses your monthly salary auto entry.
-- **Carry forward:** money left at the end of a month is added to the next month and shown as **"Carried forward from August"**. You can turn this off in Settings. Only leftover money is carried; an overspent month isn't carried as a minus.
+- **Carry forward:** the previous month's balance is carried into the next month, **whether positive or negative**. Home always shows the two parts separately, e.g. *"This month ₹66,207 − from Sept ₹35,527"*, and the budget card shows the carried line (green when money was left, red when the month was overspent). You can turn this off in Settings.
 
 ### Monthly auto entries 🔁 (rent, EMI, SIP, salary…)
 Set these up once, and Kaasu adds them by itself on that day every month. You can do it in any of three ways:

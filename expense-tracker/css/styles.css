@@ -377,3 +377,5 @@ input, select, textarea, .field input, .field select, .toolbar input[type=search
   .pv.err { background: var(--surface-2); }
   .btn.danger { border-color: var(--line); }
 }
+
+.neg-ink { color: var(--danger); }
