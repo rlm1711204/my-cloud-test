@@ -12,6 +12,8 @@ import { isBankId, loadBank } from "./lib/bank.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import * as notify from "./lib/notify.js";
 import * as install from "./lib/install.js";
+import { brand } from "./brand.js";
+import { applyBrand } from "./lib/theme.js";
 import {
   buildIndex,
   cleanHeadword,
@@ -144,6 +146,15 @@ const sourceSelect = (setting, value, extra = "") =>
     .map(([k, l]) => `<option value="${k}" ${value === k ? "selected" : ""}>${l} (${store.wordsFor(k).length})</option>`)
     .join("")}</select>`;
 
+/** "Made by …" credit — shown only when a name is set in src/brand.js. */
+function madeBy({ small = false } = {}) {
+  if (!brand.madeBy) return "";
+  const name = brand.madeByLink
+    ? `<a href="${esc(brand.madeByLink)}" target="_blank" rel="noopener">${esc(brand.madeBy)}</a>`
+    : esc(brand.madeBy);
+  return `<p class="made-by ${small ? "small" : ""}">Made by <b>${name}</b>${brand.madeByNote ? `<span>${esc(brand.madeByNote)}</span>` : ""}</p>`;
+}
+
 // ---------- install as an app ----------
 /** Slim "Install app" banner on Today, until installed or dismissed. */
 function installBanner() {
@@ -154,7 +165,7 @@ function installBanner() {
     <article class="card install-banner">
       <img src="./icon-192.png" alt="" width="44" height="44" />
       <div>
-        <b>Install VocabVault</b>
+        <b>Install ${esc(brand.name)}</b>
         <p class="small muted">${ready ? "Opens like a normal app, works offline and sends your daily words." : install.manualSteps()}</p>
       </div>
       <div class="ib-actions">
@@ -169,8 +180,8 @@ function installCard() {
   const state = install.state();
   const body = {
     standalone: `<p>✅ You're using the installed app.</p>`,
-    installed: `<p>✅ Installed. Open <b>VocabVault</b> from your home screen or app drawer.</p>`,
-    ready: `<p class="muted">Add VocabVault to your home screen. It opens full-screen like a normal app, works offline, and is needed for the daily notification.</p>
+    installed: `<p>✅ Installed. Open <b>${esc(brand.shortName || brand.name)}</b> from your home screen or app drawer.</p>`,
+    ready: `<p class="muted">Add ${esc(brand.name)} to your home screen. It opens full-screen like a normal app, works offline, and is needed for the daily notification.</p>
       <button class="btn primary" type="button" data-action="install">📲 Install app</button>`,
     manual: `<p class="muted">${install.manualSteps()}</p>
       <p class="muted small">Already installed? Open it from your home screen. Chrome only shows an Install button in a normal Chrome tab.</p>`,
@@ -186,15 +197,16 @@ function viewToday() {
     return `${installBanner()}
       <section class="hero">
         <h1>Build your exam vocabulary, one page at a time.</h1>
-        <p>Snap a newspaper editorial, upload a PDF or type words. VocabVault keeps only the hard words,
-        adds Hindi meanings, pronunciation and example sentences, and gives you a Word of the Day plus a
-        daily revision set.</p>
+        <p>${esc(brand.tagline)}</p>
+        <p class="muted">Snap a newspaper editorial, upload a PDF or type words. Only the hard words are kept,
+        with Hindi meanings, pronunciation and example sentences, plus a Word of the Day and a daily revision set.</p>
         <div class="stack">
           <button class="btn primary" data-nav="add" type="button">➕ Add your first words</button>
           <button class="btn" type="button" data-action="use-bank">📚 Start with the built-in Word Bank (${store.bankWords().length} words)</button>
           ${!hasAI(s.settings) ? `<p class="muted small">Works free out of the box. Word cards come from free online dictionaries.</p>` : ""}
         </div>
-      </section>`;
+      </section>
+      ${madeBy()}`;
   }
   const plan = store.todaysPlan();
   const st = stats(pool);
@@ -283,7 +295,8 @@ function viewToday() {
              </div>`
       }
       ${done && done === planWords.length ? `<p class="done-msg">🎉 Done for today! Lock it in with a quick <a href="#" data-nav="practice">practice</a>.</p>` : ""}
-    </article>`;
+    </article>
+    ${madeBy()}`;
 }
 
 function viewAdd() {
@@ -706,8 +719,14 @@ function viewSettings() {
         <button class="btn small danger" type="button" data-action="reset">Erase data on this device</button>
       </div>
     </article>
-    <p class="muted small center">VocabVault · version ${esc(typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev")}<br />
-    Word frequency data from SCOWL (© Kevin Atkinson)</p>`;
+    <article class="card about">
+      <img src="./icon.svg" alt="" width="52" height="52" />
+      <h3>${esc(brand.name)}</h3>
+      <p class="muted small">${esc(brand.tagline)}</p>
+      ${madeBy()}
+      <p class="muted small">Version ${esc(typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev")}<br />
+      Word frequency data from SCOWL (© Kevin Atkinson)</p>
+    </article>`;
 }
 
 // ---------- overlays (word details, editor, flashcards) ----------
@@ -1280,7 +1299,7 @@ function go(v) {
 
 const actions = {
   install: async () => {
-    if (await install.prompt()) toast("Installing… VocabVault will appear on your home screen.");
+    if (await install.prompt()) toast(`Installing… ${brand.shortName || brand.name} will appear on your home screen.`);
   },
   "dismiss-install": () => {
     install.dismiss();
@@ -1704,6 +1723,8 @@ store.subscribe(() => {
 // ---------- start ----------
 const initial = location.hash.slice(1);
 if (VIEWS[initial]) view = initial;
+applyBrand(brand);
+
 let booted = false;
 $("#view").innerHTML = `<section class="card center busy"><div class="spinner" aria-hidden="true"></div><p>Loading…</p></section>`;
 // The Word Bank (1000+ words) loads as a separate chunk; the app renders once it's ready.

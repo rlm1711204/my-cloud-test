@@ -1,12 +1,12 @@
 {
   "id": "./",
-  "name": "VocabVault — Exam Vocabulary",
+  "name": "VocabVault",
   "short_name": "VocabVault",
-  "description": "Scan pages, collect hard words with Hindi meanings, and revise daily with spaced repetition.",
+  "description": "Scan pages, collect hard words with Hindi meanings, and revise daily.",
   "start_url": "./#today",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f6f5f1",
+  "background_color": "#f6f5fc",
   "theme_color": "#4338ca",
   "icons": [
     {

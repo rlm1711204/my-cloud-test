@@ -56,6 +56,11 @@ Sonnet 5.5, and much less with Haiku 4.5.
 **Automatic fallback:** Gemini (free) → Claude (if a key is set) → free dictionaries. A short message tells you when the
 app switched and why. Keys are stored only on your device.
 
+## Make it yours
+
+The app name, colour, icon and a **“Made by …”** credit all come from one small file, `src/brand.js`,
+which you can edit from your phone on GitHub. Step-by-step: [**CUSTOMISE.md**](CUSTOMISE.md).
+
 ## Setup
 
 ### 1. Put it online (free, GitHub Pages)
@@ -114,9 +119,14 @@ src/
   lib/bank.js        Built-in Word Bank loader (data in src/data/bank1-6.js)
   lib/notify.js      Daily 2-word notification schedule (shown by public/sw.js)
   lib/install.js     "Install app" button (Chrome's install prompt) and manual install steps
+  lib/theme.js       Turns the one brand colour into light/dark shades
+  brand.js           ← the app name, colour, icon and your credit (see CUSTOMISE.md)
   lib/store.js       Local storage (offline-first)
   lib/drive.js       Google Drive sync (JSON + Google Sheet mirror)
 ```
+
+The app icon (`public/icon.svg`, `icon-192.png`, `icon-512.png`) and `public/manifest.webmanifest`
+are generated from `src/brand.js` by `scripts/brand-build.mjs` every time the app is built.
 
 * **Sync** merges word by word: the most recently edited copy of each word wins, and deletions sync too.
   This means you can study on your phone and add words on your laptop.

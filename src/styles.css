@@ -357,3 +357,11 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .install-banner > div:nth-child(2) { flex: 1 1 170px; min-width: 0; }
 .install-banner p { margin: 2px 0 0; }
 .install-banner .ib-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+
+/* "Made by …" credit and the About card */
+.made-by { text-align: center; color: var(--ink-2); font-size: .9rem; margin: 18px 0 4px; }
+.made-by span { display: block; font-size: .8rem; opacity: .85; }
+.card.about { text-align: center; }
+.card.about img { border-radius: 12px; }
+.card.about h3 { margin: 8px 0 2px; }
+.card.about .made-by { margin: 12px 0; font-size: 1rem; }
