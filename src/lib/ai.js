@@ -98,7 +98,7 @@ function makeClient(apiKey) {
   return new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 }
 
-async function run(settings, content, onProgress, schema = RESULT_SCHEMA) {
+async function run(settings, content, onProgress, schema = RESULT_SCHEMA, system = systemPrompt(settings)) {
   const client = makeClient(settings.apiKey);
   const stream = client.beta.messages.stream({
     model: settings.model || DEFAULT_MODEL,
@@ -106,13 +106,13 @@ async function run(settings, content, onProgress, schema = RESULT_SCHEMA) {
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     output_config: { effort: "medium", format: { type: "json_schema", schema } },
-    system: systemPrompt(settings),
+    system,
     messages: [{ role: "user", content }],
   });
   let chars = 0;
   stream.on("text", (t) => {
     chars += t.length;
-    onProgress?.(`Writing word cards… (${Math.round(chars / 1000)}k characters)`);
+    onProgress?.(`Claude is writing… (${Math.round(chars / 1000)}k characters)`);
   });
   const msg = await stream.finalMessage();
   if (msg.stop_reason === "refusal") {
@@ -123,7 +123,9 @@ async function run(settings, content, onProgress, schema = RESULT_SCHEMA) {
   }
   const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   const parsed = JSON.parse(text);
-  return Array.isArray(parsed.words) ? parsed.words : [];
+  if (Array.isArray(parsed?.words)) return parsed.words;
+  if (Array.isArray(parsed?.rules)) return parsed.rules;
+  return Object.values(parsed || {}).find(Array.isArray) ?? [];
 }
 
 /** Task text shared by every AI provider. */
@@ -143,8 +145,8 @@ export const enrichInstruction = (words, notes = []) =>
   "sense (reuse a Hindi meaning given there) and `context` must be that line; otherwise leave `context` empty.\n\n" +
   words.map((w, i) => `${i + 1}. ${w}${notes[i] ? `   [source: ${String(notes[i]).slice(0, 300)}]` : ""}`).join("\n");
 
-/** Step 1: list the words in images/PDFs (or plain text). Resolves [{word, context}]. */
-export async function claudeList(settings, sources, onProgress) {
+/** Any AI job (see geminiTask). Resolves the reply's list. */
+export async function claudeTask(settings, { system, schema, sources = [], text = "" }, onProgress) {
   const content = [];
   for (const s of sources) {
     if (s.kind === "image") content.push({ type: "image", source: { type: "base64", media_type: s.mediaType, data: s.data } });
@@ -152,16 +154,18 @@ export async function claudeList(settings, sources, onProgress) {
       content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: s.data } });
     else content.push({ type: "text", text: `Source "${s.name}":\n${s.text}` });
   }
-  content.push({ type: "text", text: listInstruction() });
-  onProgress?.("Claude is reading your material…");
-  return run(settings, content, onProgress, LIST_SCHEMA);
+  if (text) content.push({ type: "text", text });
+  onProgress?.("Claude is working…");
+  return run(settings, content, onProgress, schema, system || systemPrompt(settings));
 }
 
+/** Step 1: list the words in images/PDFs (or plain text). Resolves [{word, context}]. */
+export const claudeList = (settings, sources, onProgress) =>
+  claudeTask(settings, { sources, text: listInstruction(), schema: LIST_SCHEMA }, onProgress);
+
 /** Build full word cards for words the learner typed (or saved without details). */
-export async function claudeEnrich(settings, words, notes, onProgress) {
-  onProgress?.(`Claude is preparing ${words.length} word card${words.length === 1 ? "" : "s"}…`);
-  return run(settings, [{ type: "text", text: enrichInstruction(words, notes) }], onProgress);
-}
+export const claudeEnrich = (settings, words, notes, onProgress) =>
+  claudeTask(settings, { text: enrichInstruction(words, notes), schema: RESULT_SCHEMA }, onProgress);
 
 /** Friendlier messages for the Claude errors people actually hit. */
 export function explainClaudeError(err) {

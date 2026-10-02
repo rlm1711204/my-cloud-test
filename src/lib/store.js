@@ -12,6 +12,8 @@ export const DEFAULT_SETTINGS = {
   geminiKeyPick: "", // "" = Auto (all keys in turn); otherwise the one key chosen on the Add screen
   extraAIs: [], // other free AI services: [{id, provider, key, base?, model}] (see compat.js) — stay on this device
   aiPick: "", // "extra:<id>" = only that service; "" = Auto (or the Gemini key in geminiKeyPick)
+  startSection: "ask", // first screen: "ask" (Vocabulary / Grammar choice) | "vocab" | "grammar" | "last"
+  lastSection: "vocab",
   geminiModel: "auto",
   apiKey: "",
   model: DEFAULT_MODEL,
@@ -227,6 +229,9 @@ export function addBankWordToMine(id) {
  * Returns a summary for the "restored" message.
  */
 export function importData(data, { markDirty = false, applyPrefs = false } = {}) {
+  if (data && (data.app === "VocabVault-Grammar" || (Array.isArray(data.rules) && !Array.isArray(data.words)))) {
+    throw new Error("This is a grammar backup — restore it under 📗 Grammar → Settings.");
+  }
   if (!data || !Array.isArray(data.words)) throw new Error("That file doesn't look like a VocabVault backup.");
   const before = new Map(state.words.map((w) => [wordKey(w.word), w]));
   const incoming = data.words.filter((w) => !w.deleted && wordKey(w.word));

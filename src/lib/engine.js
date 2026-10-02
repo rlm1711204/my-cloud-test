@@ -1,8 +1,8 @@
 // Chooses who writes the word cards: Gemini (free) → other free AI services → Claude (paid) → free dictionaries.
 // Each AI provider is tried in turn; if all fail the caller falls back to the free dictionary path.
-import { claudeEnrich, claudeList, explainClaudeError } from "./ai.js";
-import { geminiEnrich, geminiKeysOf, geminiList, pickedKeyNumber } from "./gemini.js";
-import { compatEnrich, compatList, extraServicesOf, serviceName } from "./compat.js";
+import { claudeEnrich, claudeList, claudeTask, explainClaudeError } from "./ai.js";
+import { geminiEnrich, geminiKeysOf, geminiList, geminiTask, pickedKeyNumber } from "./gemini.js";
+import { compatEnrich, compatList, compatTask, extraServicesOf, serviceName } from "./compat.js";
 import { wordKey } from "./words.js";
 
 export const hasAI = (s) => Boolean(geminiKeysOf(s).length || extraServicesOf(s).length || s.apiKey);
@@ -30,6 +30,7 @@ const extraProvider = (s, entry) => ({
   name: serviceName(s, entry),
   list: (st, sources, onProgress) => compatList(st, entry, sources, onProgress),
   enrich: (st, words, notes, onProgress) => compatEnrich(st, entry, words, notes, onProgress),
+  task: (st, task, onProgress) => compatTask(st, entry, task, onProgress),
   explain: (e) => e.message,
 });
 
@@ -41,7 +42,7 @@ function providers(s) {
   if (geminiKeysOf(s).length) {
     // A hand-picked key gets its own name, so a limit hit in Auto mode doesn't block trying that key.
     const n = pickedKeyNumber(s);
-    list.push({ name: n ? `Gemini key ${n}` : "Gemini", list: geminiList, enrich: geminiEnrich, explain: (e) => e.message });
+    list.push({ name: n ? `Gemini key ${n}` : "Gemini", list: geminiList, enrich: geminiEnrich, task: geminiTask, explain: (e) => e.message });
     if (n) return list;
   }
   for (const entry of extraServicesOf(s)) list.push(extraProvider(s, entry));
@@ -50,6 +51,7 @@ function providers(s) {
       name: "Claude",
       list: async (...a) => ({ words: await claudeList(...a), model: s.model }),
       enrich: async (...a) => ({ words: await claudeEnrich(...a), model: s.model }),
+      task: async (...a) => ({ words: await claudeTask(...a), model: s.model }),
       explain: explainClaudeError,
     });
   }
@@ -89,6 +91,12 @@ export const aiList = (s, sources, onProgress) => tryInOrder(s, "list", [sources
 
 /** Build word cards for one small batch. Resolves {words, provider, skipped}. */
 export const aiEnrich = (s, words, onProgress, notes = []) => tryInOrder(s, "enrich", [words, notes], onProgress);
+
+/**
+ * Any AI job — {system, schema, sources?, text} — tried on each AI in order (see geminiTask).
+ * Resolves {words: the reply's list, provider, skipped}. Used by the grammar part.
+ */
+export const aiTask = (s, task, onProgress) => tryInOrder(s, "task", [task], onProgress);
 
 /**
  * Step 2 — build cards for any number of words, BATCH at a time, so long lists (200+) never get cut off.

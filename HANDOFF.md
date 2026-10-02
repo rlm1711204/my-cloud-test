@@ -10,7 +10,7 @@ Paste this into a new chat to carry the project over.
 
 ## What it is
 
-A phone-friendly PWA for building exam vocabulary (UPSC / RBI Grade B / SSC).
+A phone-friendly PWA with two parts — exam **vocabulary** and **grammar rules** (UPSC / RBI Grade B / SSC).
 Scan a page, upload a screenshot or PDF, or type words. The app keeps the hard words, writes a
 full card for each (meaning, Hindi, pronunciation, 2 sentences, exam tip), and revises them daily
 with spaced repetition. Data is stored on the device and synced to Google Drive.
@@ -44,6 +44,20 @@ src/
 scripts/brand-build.mjs   generates the icon + manifest from brand.js at build time
 ```
 
+## The Grammar Rules part
+
+- Start screen (`#home`) chooses 📘 Vocabulary or 📗 Grammar; a header switch changes part; each part has its own tab
+  bar (`renderChrome` in main.js). Grammar views are `g-today`, `g-add`, `g-practice`, `g-rules`; Settings is shared.
+- Grammar screens live in `src/grammar-ui.js` (created with shared helpers from main.js via a `ctx` object).
+- Data is fully separate: localStorage `vv.grammar.v1`, backup `app: "VocabVault-Grammar"`, Drive `grammar-rules.json`
+  + "Grammar Rules" sheet. Each restore refuses the other part's file.
+- Rule Book: `src/data/rules1-3.js`, a plain-text format parsed by `src/lib/rulebook.js`; the tests fail the build on
+  any malformed line. Ids are `rb:<slug>`; only progress is stored for them.
+- AI: `aiTask` in engine.js runs any job (system prompt + JSON schema + sources) on Gemini → other services → Claude.
+  `grammar-ai.js` lists rules first, then writes cards 6 at a time, checks each card is about the rule asked for,
+  retries left-out rules once, and keeps any still missing "as written".
+- Without AI, typed/scanned text is split into rules (`textToRules`) and matched to the Rule Book (`borrowFromBook`).
+
 ## Decisions worth knowing before changing things
 
 - **Gemini keys go in the `x-goog-api-key` header.** Google's newer `AQ.` keys fail as a `?key=`
@@ -75,7 +89,7 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 
 ## Current state
 
-Done and live: other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
+Done and live: Grammar Rules part (Rule Book, practice, separate backups and Drive file), other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
 practice with full coverage and weak-word repeats, the 1267-word Word Bank, daily notification,
 ⓘ full-details buttons, Google Drive sync, install button, backup/restore with a clear summary,
 one-file branding, and the Gemini key picker.

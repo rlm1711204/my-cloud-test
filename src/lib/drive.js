@@ -7,6 +7,9 @@ const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 export const FOLDER_NAME = "VocabVault";
 export const JSON_NAME = "vocab-master.json";
 export const SHEET_NAME = "Vocab Master List";
+// The grammar part keeps its own files in the same folder, so each part syncs (and restores) separately.
+export const GRAMMAR_JSON = "grammar-rules.json";
+export const GRAMMAR_SHEET = "Grammar Rules";
 const TOKEN_KEY = "vv.driveToken";
 
 let gisPromise = null;
@@ -134,24 +137,24 @@ async function ensureFolder(ids) {
   return { ...ids, folderId };
 }
 
-/** Download the master list from Drive. Returns {data, ids} (data null if none saved yet). */
-export async function pull(ids = {}) {
+/** Download a data file from Drive (the vocabulary master list by default). Returns {data, ids}. */
+export async function pull(ids = {}, jsonName = JSON_NAME) {
   ids = await ensureFolder(ids);
-  if (!(await exists(ids.fileId))) ids.fileId = (await findOne(JSON_NAME, null, ids.folderId))?.id ?? null;
+  if (!(await exists(ids.fileId))) ids.fileId = (await findOne(jsonName, null, ids.folderId))?.id ?? null;
   if (!ids.fileId) return { data: null, ids };
   const res = await gfetch(`${API}/files/${ids.fileId}?alt=media`);
   return { data: await res.json(), ids };
 }
 
-/** Upload the master list JSON (and refresh the readable Google Sheet copy). */
-export async function push(data, csv, ids = {}) {
+/** Upload a data file (and refresh its readable Google Sheet copy). Vocabulary names by default. */
+export async function push(data, csv, ids = {}, { jsonName = JSON_NAME, sheetName = SHEET_NAME } = {}) {
   ids = await ensureFolder(ids);
   const json = JSON.stringify(data);
   if (await exists(ids.fileId)) await mediaUpdate(ids.fileId, json, "application/json");
-  else ids.fileId = await multipartCreate({ name: JSON_NAME, parents: [ids.folderId], mimeType: "application/json" }, json, "application/json");
+  else ids.fileId = await multipartCreate({ name: jsonName, parents: [ids.folderId], mimeType: "application/json" }, json, "application/json");
 
   // Google Sheet mirror so the list can be opened/printed from Drive or the Sheets app.
-  const sheetMeta = { name: SHEET_NAME, parents: [ids.folderId], mimeType: "application/vnd.google-apps.spreadsheet" };
+  const sheetMeta = { name: sheetName, parents: [ids.folderId], mimeType: "application/vnd.google-apps.spreadsheet" };
   try {
     if (await exists(ids.sheetId)) await mediaUpdate(ids.sheetId, csv, "text/csv");
     else ids.sheetId = await multipartCreate(sheetMeta, csv, "text/csv");

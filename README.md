@@ -1,4 +1,4 @@
-# VocabVault 📘: exam vocabulary builder
+# VocabVault 📘📗: exam vocabulary and grammar rules
 
 A phone-friendly web app (you can install it like an app) for building an exam-grade English vocabulary.
 Snap a page, upload a screenshot or PDF, or type words. VocabVault keeps only the **difficult** words
@@ -21,6 +21,21 @@ Every day you get a **Word of the Day** plus **10 words to memorise** (you can c
 | 🎯 **Practice** | Word → meaning, Word → Hindi, Meaning → word, fill in the blank, synonyms, antonyms. Every word is asked once per round before any repeats; wrong answers come back a few questions later and in later sessions until answered right twice in a row |
 | ☁️ **Google Drive** | `VocabVault/vocab-master.json` (the app's data) plus a **"Vocab Master List" Google Sheet** you can open, filter or print. Syncs across phone and laptop |
 | 📤 **Extras** | Share the Word of the Day to WhatsApp, 🔥 streak counter, CSV export for Excel, backup/restore, dark mode, works offline |
+
+## 📗 Grammar Rules (the second part)
+
+Open the app and choose **📘 Vocabulary** or **📗 Grammar Rules** (switch any time with the buttons at the top).
+Grammar works like vocabulary, but for rules:
+
+| | |
+|---|---|
+| 📷 **Add rules** | Scan a grammar book page, upload screenshots/PDFs, or type notes. With AI, every rule becomes a full card; without AI, your text is split into rules and matched with the Rule Book, which lends its examples and questions |
+| 🗂️ **Rule card** | The rule in simple words, a one-line Hindi summary, correct examples, common mistakes (✗ wrong → ✓ right, with why), exceptions and an exam tip |
+| 📗 **Built-in Rule Book** | 105 exam rules in 17 topics (subject–verb agreement, articles, tenses, prepositions, narration, voice, conditionals…), each with a mistake and 2 questions. It is written in plain text you can extend — see [CUSTOMISE.md](CUSTOMISE.md) |
+| ☀️ **Today** | Rule of the Day and N rules to revise, with spaced repetition (rules you forget come back tomorrow) |
+| 🎯 **Practice** | Fill the blank · Which sentence is correct? · Right or wrong? (error spotting) · Which rule does this break? · Recall the rule. Every rule is covered before any repeats; wrong answers come back until right twice in a row |
+| 🔁 **No duplicates** | A rule you already have is recognised even when it is worded differently |
+| 💾 **Separate data** | Grammar has its own backup file and its own Google Drive file (`grammar-rules.json` + a "Grammar Rules" sheet). A vocabulary backup can't be restored into grammar by mistake, or the other way round |
 
 ## Using it
 
@@ -120,6 +135,12 @@ src/
   lib/engine.js      Provider order and automatic fallback: Gemini -> Claude -> free dictionaries
   lib/gemini.js      Google Gemini (free tier): model auto-pick, structured JSON cards
   lib/compat.js      Other free AI services (OpenRouter, Groq, Mistral, Cerebras, OpenAI-compatible)
+  grammar-ui.js      Grammar screens: Today, Add, Practice, Rules, rule card, editor, backups
+  lib/grammar-store.js Grammar data (separate storage, backup and Drive file), daily plan
+  lib/grammar-ai.js  Grammar prompts: read rules from material, then write full rule cards
+  lib/grammar-quiz.js Grammar question types, built from each rule's own examples and mistakes
+  lib/rules.js       Rule records, duplicate detection, Rule Book matching, free-mode text splitting
+  lib/rulebook.js    Rule Book parser + checker (data in src/data/rules1-3.js)
   lib/update.js      Reloads an open app into the newest version, keeping typed words
   lib/ai.js          Claude API + the prompts/card schema shared by both AI providers
   lib/extract.js     Image downscaling, PDF text layer (pdf.js), on-device OCR (Tesseract) for offline mode

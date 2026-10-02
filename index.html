@@ -12,22 +12,20 @@
   </head>
   <body>
     <header class="topbar">
-      <div class="brand">
+      <button class="brand" type="button" data-nav="home" aria-label="Start screen">
         <img src="./icon.svg" alt="" width="28" height="28" />
         <span>%BRAND_NAME%</span>
+      </button>
+      <div class="section-switch" role="group" aria-label="Part of the app">
+        <button type="button" data-nav="today" data-sec="vocab">📘<span class="lbl"> Vocab</span></button>
+        <button type="button" data-nav="g-today" data-sec="grammar">📗<span class="lbl"> Grammar</span></button>
       </div>
       <button class="sync-chip" id="syncChip" data-action="sync" type="button" aria-live="polite">Local only</button>
     </header>
 
     <main id="view" tabindex="-1"></main>
 
-    <nav class="tabbar" aria-label="Main">
-      <button type="button" data-nav="today"><span class="ico" aria-hidden="true">☀️</span><span>Today</span></button>
-      <button type="button" data-nav="add"><span class="ico" aria-hidden="true">➕</span><span>Add</span></button>
-      <button type="button" data-nav="practice"><span class="ico" aria-hidden="true">🎯</span><span>Practice</span></button>
-      <button type="button" data-nav="words"><span class="ico" aria-hidden="true">📚</span><span>Words</span></button>
-      <button type="button" data-nav="settings"><span class="ico" aria-hidden="true">⚙️</span><span>Settings</span></button>
-    </nav>
+    <nav class="tabbar" aria-label="Main"></nav>
 
     <div id="overlay"></div>
     <div id="info"></div>

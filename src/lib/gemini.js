@@ -226,6 +226,10 @@ async function toError(res) {
   return new GeminiError(`Gemini error ${res.status}: ${msg.slice(0, 160)}`, { status: res.status });
 }
 
+/** The list inside a reply: {words: [...]} for vocabulary, {rules: [...]} for grammar, or a bare array. */
+export const firstArray = (parsed) =>
+  Array.isArray(parsed) ? parsed : Array.isArray(parsed?.words) ? parsed.words : Array.isArray(parsed?.rules) ? parsed.rules : (Object.values(parsed || {}).find(Array.isArray) ?? []);
+
 /** Pull the JSON text out of a generateContent response. Pure; unit-tested. */
 export function readResponse(json) {
   if (json?.promptFeedback?.blockReason) throw new GeminiError(`Gemini blocked this content (${json.promptFeedback.blockReason}).`);
@@ -244,7 +248,7 @@ export function readResponse(json) {
     if (!m) throw new GeminiError("Gemini's reply wasn't in the expected format. Try again.");
     parsed = JSON.parse(m[0]);
   }
-  return Array.isArray(parsed.words) ? parsed.words : [];
+  return firstArray(parsed);
 }
 
 async function runWithKey(settings, key, body, onProgress, label) {
@@ -298,13 +302,13 @@ async function runWithKey(settings, key, body, onProgress, label) {
  * takes over; an invalid key is skipped. Only when every key fails does Gemini report failure.
  * If a key was picked by hand, only that key is used (even if it was resting), and its errors say which key.
  */
-async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
+async function run(settings, parts, onProgress, schema = RESULT_SCHEMA, system = systemPrompt(settings)) {
   const all = geminiKeysOf(settings);
   if (!all.length) throw new GeminiError("No Gemini key.");
   const picked = pickedGeminiKey(settings);
-  if (picked) return runPicked(settings, picked, all.indexOf(picked) + 1, parts, onProgress, schema);
+  if (picked) return runPicked(settings, picked, all.indexOf(picked) + 1, parts, onProgress, schema, system);
   const keys = all;
-  const body = requestBody(settings, parts, schema);
+  const body = requestBody(parts, schema, system);
   let lastErr = null;
   let anyQuota = false;
   for (const [i, key] of keys.entries()) {
@@ -341,9 +345,9 @@ async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
   throw lastErr ?? new GeminiError("No working Gemini key. Check your keys in Settings.");
 }
 
-function requestBody(settings, parts, schema) {
+function requestBody(parts, schema, system) {
   return {
-    systemInstruction: { parts: [{ text: systemPrompt(settings) }] },
+    systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts }],
     generationConfig: {
       responseMimeType: "application/json",
@@ -354,9 +358,9 @@ function requestBody(settings, parts, schema) {
 }
 
 /** Use only the key the learner chose. Failures name the key so they know to pick another. */
-async function runPicked(settings, key, n, parts, onProgress, schema) {
+async function runPicked(settings, key, n, parts, onProgress, schema, system) {
   try {
-    const res = await runWithKey(settings, key, requestBody(settings, parts, schema), onProgress, ` key ${n}`);
+    const res = await runWithKey(settings, key, requestBody(parts, schema, system), onProgress, ` key ${n}`);
     keyRest.delete(key);
     badKeys.delete(key);
     checks.set(key, { state: "ok", at: Date.now() });
@@ -376,17 +380,23 @@ async function runPicked(settings, key, n, parts, onProgress, schema) {
   }
 }
 
-/** Step 1: list the words in images/PDFs (or plain text). Resolves {words: [{word, context}], model}. */
-export async function geminiList(settings, sources, onProgress) {
+/**
+ * Any AI job: `system` instructions, the JSON `schema` of the reply, optional `sources` (photos, PDFs, text)
+ * and the task `text`. Resolves {words: the reply's list, model}. Vocabulary and grammar both use this.
+ */
+export async function geminiTask(settings, { system, schema, sources = [], text = "" }, onProgress) {
   const parts = sources.map((s) =>
     s.kind === "text"
       ? { text: `Source "${s.name}":\n${s.text}` }
       : { inlineData: { mimeType: s.kind === "pdf" ? "application/pdf" : s.mediaType, data: s.data } },
   );
-  parts.push({ text: listInstruction() });
-  return run(settings, parts, onProgress, LIST_SCHEMA);
+  if (text) parts.push({ text });
+  return run(settings, parts, onProgress, schema, system || systemPrompt(settings));
 }
 
-export async function geminiEnrich(settings, words, notes, onProgress) {
-  return run(settings, [{ text: enrichInstruction(words, notes) }], onProgress);
-}
+/** Step 1: list the words in images/PDFs (or plain text). Resolves {words: [{word, context}], model}. */
+export const geminiList = (settings, sources, onProgress) =>
+  geminiTask(settings, { sources, text: listInstruction(), schema: LIST_SCHEMA }, onProgress);
+
+export const geminiEnrich = (settings, words, notes, onProgress) =>
+  geminiTask(settings, { text: enrichInstruction(words, notes), schema: RESULT_SCHEMA }, onProgress);

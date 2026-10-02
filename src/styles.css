@@ -98,7 +98,19 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
 }
-.brand { display: flex; align-items: center; gap: 8px; font: 700 1.15rem var(--serif); }
+.brand { display: flex; align-items: center; gap: 8px; font: 700 1.15rem var(--serif); background: none; border: 0; color: var(--ink); padding: 0; cursor: pointer; min-width: 0; }
+.brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Vocabulary / Grammar switch in the header */
+.section-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); padding: 2px; flex: none; }
+.section-switch button {
+  border: 0; background: none; color: var(--ink-2); border-radius: 999px; padding: 4px 10px;
+  font: 600 .8rem var(--sans); cursor: pointer; white-space: nowrap;
+}
+.section-switch button.active { background: var(--primary-soft); color: var(--primary); }
+@media (max-width: 430px) { .section-switch .lbl { display: none; } .section-switch button { padding: 4px 9px; font-size: 1rem; } }
+.topbar { gap: 10px; }
+.tabbar[hidden] { display: none; }
 .sync-chip {
   border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
   border-radius: 999px; padding: 5px 12px; font: 600 .8rem var(--sans); cursor: pointer;
@@ -381,3 +393,57 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .ai-banner.ok { background: var(--ok-soft); color: var(--ink); }
 .ai-banner.warn { background: var(--saffron-soft); color: var(--ink); }
 .ai-banner .block { margin-top: 4px; color: var(--ink-2); }
+
+/* ---------- start screen ---------- */
+.home { padding: 8px 0 16px; }
+.home h1 { margin: 8px 0 16px; }
+.home-card {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 18px 16px; margin-bottom: 14px; cursor: pointer; color: var(--ink); font: inherit;
+}
+.home-card:hover { border-color: var(--primary); }
+.home-ico { font-size: 2.2rem; flex: none; }
+.home-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.home-main b { font: 700 1.25rem var(--serif); }
+.home-main span { color: var(--ink-2); font-size: .92rem; }
+.home-main .small { font-size: .82rem; }
+.home-go { font-size: 1.8rem; color: var(--ink-2); flex: none; }
+.home-card.grammar .home-main b { color: var(--ok); }
+.home-card.vocab .home-main b { color: var(--primary); }
+
+/* ---------- grammar rule card ---------- */
+.rule-head h2 { margin: 6px 0 8px; font: 700 1.2rem var(--serif); }
+.rule-head h2.big { font-size: 1.45rem; }
+.badge.topic { background: var(--ok-soft); color: var(--ok); }
+.rule-text { font-size: 1.02rem; line-height: 1.5; margin: 6px 0 8px; }
+.rule-hindi { color: var(--ink-2); margin: 0 0 10px; }
+.rule-block { border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: .95rem; }
+.rule-block > b { display: block; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+.rule-block ul { margin: 0; padding-left: 18px; }
+.rule-block li { margin: 3px 0; }
+.rule-block.ok { background: var(--ok-soft); }
+.rule-block.ok > b { color: var(--ok); }
+.rule-block.bad { background: var(--bad-soft); }
+.rule-block.bad > b { color: var(--bad); }
+.mistake { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; }
+.mistake .wrong { text-decoration: line-through; text-decoration-color: var(--bad); color: var(--ink-2); }
+.mistake .wrong::before { content: "✗"; color: var(--bad); text-decoration: none; display: inline-block; margin-right: .35em; }
+.mistake .right { color: var(--ink); font-weight: 600; }
+.mistake .right::before { content: "✓ "; color: var(--ok); }
+.mistake small { color: var(--ink-2); }
+.rule-card .eyebrow { display: flex; align-items: center; justify-content: space-between; }
+.flashcard .spot { margin: 14px 0 6px; color: var(--ink-2); }
+.flashcard .spot .sentence, .quiz-prompt.sentence { display: block; font: 600 1.12rem var(--serif); color: var(--ink); margin-top: 6px; }
+.quiz-prompt.sentence { padding: 10px 12px; border-left: 4px solid var(--primary); background: var(--surface-2); border-radius: 8px; }
+.options.two { grid-template-columns: 1fr 1fr; }
+.recall-rule { margin: 8px 0 12px; }
+.rule-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.rule-list li b { font-weight: 600; }
+.cand-list.rules .cand-main { display: flex; flex-direction: column; gap: 3px; }
+.g-explain { align-items: flex-start; }
+.g-explain .explain-text { flex: 1; min-width: 0; }
+.g-explain .explain-text p { margin: 4px 0; }
+.recall-rule { text-align: left; }
+.quiz-card .rule-block ul { text-align: left; }
+.cand-main .badge { align-self: flex-start; }

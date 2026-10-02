@@ -16,6 +16,10 @@ import * as install from "./lib/install.js";
 import { brand } from "./brand.js";
 import { applyBrand } from "./lib/theme.js";
 import { isStaleFileError, liveVersion, reloadForUpdate, takeDraft } from "./lib/update.js";
+import * as gs from "./lib/grammar-store.js";
+import { loadRuleBook } from "./lib/rulebook.js";
+import { rulesToCSV } from "./lib/rules.js";
+import { createGrammarUI } from "./grammar-ui.js";
 import {
   buildIndex,
   cleanHeadword,
@@ -107,6 +111,7 @@ const ui = {
   syncError: "",
   wordsTab: "mine", // Words screen: "mine" | "bank"
   notifyStatus: "",
+  section: "vocab", // which part of the app the tab bar shows: "vocab" | "grammar"
   extraProvider: "openrouter", // service chosen in the "add another AI" form
   extraStatus: {}, // service id -> {ok, message} from the last key test
 };
@@ -328,9 +333,11 @@ const KEY_BADGE = { invalid: "easy", resting: "learning", ok: "mastered", checki
 function checkKeysInBackground() {
   const s = settings();
   const refresh = (ran) => {
-    if (!ran || !["settings", "add"].includes(view) || ui.busy || ui.candidates) return;
+    if (!ran || !["settings", "add", "g-add"].includes(view) || ui.busy || ui.candidates) return;
+    if (grammar.gui.busy || grammar.gui.candidates) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
     if ($("#typed")) ui.typedDraft = $("#typed").value;
+    if ($("#gTyped")) grammar.gui.typedDraft = $("#gTyped").value;
     const y = window.scrollY;
     render();
     window.scrollTo(0, y);
@@ -730,6 +737,24 @@ function viewSettings() {
     ${installCard()}
 
     <article class="card">
+      <h3>🏠 Start screen</h3>
+      <label class="field">When the app opens
+        <select data-setting="startSection">
+          ${[
+            ["ask", "Show the Vocabulary / Grammar choice"],
+            ["vocab", "Go straight to Vocabulary"],
+            ["grammar", "Go straight to Grammar"],
+            ["last", "Where I left off"],
+          ]
+            .map(([v, l]) => `<option value="${v}" ${st.startSection === v ? "selected" : ""}>${l}</option>`)
+            .join("")}
+        </select>
+      </label>
+      <button class="btn small" type="button" data-nav="home">Open the start screen</button>
+    </article>
+
+
+    <article class="card">
       <h3>📖 Word cards</h3>
       <p class="muted">Order used: ${[geminiKeysOf(st).length && `<b>Gemini</b> (free${geminiKeysOf(st).length > 1 ? `, ${geminiKeysOf(st).length} keys` : ""})`, st.apiKey && "<b>Claude</b> (paid)", "<b>free dictionaries</b>"].filter(Boolean).join(" → ")}.
       If one fails or hits its limit, the next one takes over automatically.</p>
@@ -820,6 +845,8 @@ function viewSettings() {
       <button class="btn small" type="button" data-action="speak" data-text="Perspicacious">🔊 Test voice</button>
     </article>
 
+    ${grammar.prefsCard()}
+
     <article class="card">
       <h3>🔔 Daily notification</h3>
       <p class="muted">Get <b>2 words for today</b> as a phone notification, rotating through every word of the chosen source.</p>
@@ -842,7 +869,7 @@ function viewSettings() {
 
     <article class="card">
       <h3>☁️ Google Drive</h3>
-      <p class="muted">Your master list is saved in a <b>${drive.FOLDER_NAME}</b> folder in your Drive: <code>${drive.JSON_NAME}</code> (used by the app)
+      <p class="muted">Your master list is saved in a <b>${drive.FOLDER_NAME}</b> folder in your Drive: <code>${drive.JSON_NAME}</code> and <code>${drive.GRAMMAR_JSON}</code> (used by the app)
       plus a <b>${drive.SHEET_NAME}</b> Google Sheet you can open, filter or print. The app can only see files it created.</p>
       <label class="field">Google OAuth Client ID<input type="text" data-setting="googleClientId" value="${esc(st.googleClientId)}" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off" /></label>
       <p class="muted small">One-time setup, ~5 minutes — see “Google Drive setup” in the README.</p>
@@ -858,13 +885,14 @@ function viewSettings() {
     </article>
 
     <article class="card">
-      <h3>🗂️ Data</h3>
+      <h3>🗂️ Vocabulary data <span class="badge">separate backup</span></h3>
       <div class="row wrap">
         <button class="btn small" type="button" data-action="export-json">⬇ Download backup</button>
         <label class="btn small">⬆ Restore backup<input type="file" accept="application/json,.json" data-input="import" hidden /></label>
         <button class="btn small danger" type="button" data-action="reset">Erase data on this device</button>
       </div>
     </article>
+    ${grammar.dataCard()}
     <article class="card about">
       <img src="./icon.svg" alt="" width="52" height="52" />
       <h3>${esc(brand.name)}</h3>
@@ -889,6 +917,7 @@ function closeOverlay() {
   o.innerHTML = "";
   document.body.classList.remove("no-scroll");
   ui.session = null;
+  grammar?.onCloseOverlay();
 }
 
 function showWord(id) {
@@ -1167,7 +1196,7 @@ function showCandidates(records, opts = {}) {
   const { items, skipped } = prepareCandidates(records, opts);
   if (!items.length) {
     ui.candidates = null;
-    toast(skipped.length ? `All ${plural(skipped.length, "word")} are already in your master list ✓` : "No words found. Try a clearer photo, or type the words.", 6000);
+    toast(skipped.length ? (skipped.length === 1 ? `“${skipped[0]}” is already in your master list ✓` : `All ${skipped.length} words are already in your master list ✓`) : "No words found. Try a clearer photo, or type the words.", 6000);
     return;
   }
   ui.candidates = { items, skipped, typed: Boolean(opts.typed), ai: opts.ai || null };
@@ -1365,7 +1394,7 @@ function updateSyncChip() {
     if (ui.syncState === "syncing") (text = "Syncing…"), (cls = "busy");
     else if (ui.syncState === "error") (text = "Sync error"), (cls = "err");
     else if (!drive.isConnected()) (text = "Tap to sync"), (cls = "warn");
-    else if (s.dirty) (text = "Unsynced"), (cls = "warn");
+    else if (s.dirty || gs.get().dirty) (text = "Unsynced"), (cls = "warn");
     else (text = "Synced ✓"), (cls = "ok");
   }
   chip.textContent = text;
@@ -1403,6 +1432,22 @@ async function sync({ interactive = false } = {}) {
         },
         { touchesData: false },
       );
+      // Grammar has its own file in the same folder (only created once grammar has been used).
+      const g = gs.get();
+      const gIds = { folderId: newIds.folderId, fileId: g.drive.fileId, sheetId: g.drive.sheetId };
+      const gPulled = await drive.pull(gIds, drive.GRAMMAR_JSON);
+      if (gPulled.data) gs.importData(gPulled.data);
+      if (gPulled.data || gs.get().rules.length || Object.keys(gs.get().book).length) {
+        const gPayload = gs.exportData();
+        const gNew = await drive.push(gPayload, rulesToCSV(gPayload.rules), gPulled.ids, { jsonName: drive.GRAMMAR_JSON, sheetName: drive.GRAMMAR_SHEET });
+        gs.update(
+          (st) => {
+            st.drive = { fileId: gNew.fileId, sheetId: gNew.sheetId, lastSync: new Date().toISOString() };
+            st.dirty = false;
+          },
+          { touchesData: false },
+        );
+      }
       ui.syncState = "ok";
       if (interactive) toast("Saved to Google Drive ✓");
     } catch (e) {
@@ -1412,7 +1457,7 @@ async function sync({ interactive = false } = {}) {
     } finally {
       syncing = null;
       updateSyncChip();
-      if (view === "settings" || view === "today" || view === "words") render();
+      if (["settings", "today", "words", "home", "g-today", "g-rules"].includes(view)) render();
     }
   })();
   return syncing;
@@ -1421,20 +1466,132 @@ async function sync({ interactive = false } = {}) {
 let autoSyncTimer;
 function scheduleAutoSync() {
   const s = store.get();
-  if (!s.settings.autoSync || !s.dirty || !drive.isConnected()) return;
+  if (!s.settings.autoSync || !(s.dirty || gs.get().dirty) || !drive.isConnected()) return;
   clearTimeout(autoSyncTimer);
-  autoSyncTimer = setTimeout(() => store.get().dirty && sync(), 2500);
+  autoSyncTimer = setTimeout(() => (store.get().dirty || gs.get().dirty) && sync(), 2500);
+}
+
+// ---------- the Grammar Rules part ----------
+const grammar = createGrammarUI({
+  $,
+  esc,
+  toast,
+  plural,
+  render: () => render(),
+  go: (v) => go(v),
+  view: () => view,
+  openOverlay,
+  closeOverlay,
+  settings,
+  download,
+  keyPicker,
+  aiBanner,
+  afterChange: () => {
+    updateSyncChip();
+    scheduleAutoSync();
+  },
+});
+
+// ---------- the two parts: Vocabulary and Grammar ----------
+const SECTION_TABS = {
+  vocab: [
+    ["today", "☀️", "Today"],
+    ["add", "➕", "Add"],
+    ["practice", "🎯", "Practice"],
+    ["words", "📚", "Words"],
+    ["settings", "⚙️", "Settings"],
+  ],
+  grammar: [
+    ["g-today", "☀️", "Today"],
+    ["g-add", "➕", "Add"],
+    ["g-practice", "🎯", "Practice"],
+    ["g-rules", "📗", "Rules"],
+    ["settings", "⚙️", "Settings"],
+  ],
+};
+const VOCAB_VIEWS = new Set(["today", "add", "practice", "words"]);
+const sectionOf = (v) => (v.startsWith("g-") ? "grammar" : VOCAB_VIEWS.has(v) ? "vocab" : null);
+
+function renderChrome() {
+  const sec = view === "home" ? null : ui.section;
+  const bar = $(".tabbar");
+  bar.hidden = !sec;
+  if (sec && bar.dataset.sec !== sec) {
+    bar.dataset.sec = sec;
+    bar.innerHTML = SECTION_TABS[sec]
+      .map(([v, ico, label]) => `<button type="button" data-nav="${v}"><span class="ico" aria-hidden="true">${ico}</span><span>${label}</span></button>`)
+      .join("");
+  }
+  for (const b of bar.querySelectorAll("[data-nav]")) b.classList.toggle("active", b.dataset.nav === view);
+  for (const b of document.querySelectorAll(".section-switch [data-sec]")) b.classList.toggle("active", b.dataset.sec === sec);
+}
+
+/** The start screen: choose Vocabulary or Grammar. */
+function viewHome() {
+  const st = settings();
+  const words = store.liveWords().length;
+  const vPool = store.wordsFor(st.dailySource);
+  const vStats = stats(vPool);
+  const wotd = vPool.length ? store.byId(store.todaysPlan().wotd) : null;
+  const gPool = gs.rulesFor(gs.get().prefs.dailySource);
+  const gStats = stats(gPool);
+  const rotd = grammar.ruleOfTheDay();
+  return `
+    <section class="home">
+      <h1>What would you like to study?</h1>
+      <button class="home-card vocab" type="button" data-nav="today">
+        <span class="home-ico">📘</span>
+        <span class="home-main">
+          <b>Vocabulary</b>
+          <span>${plural(words, "word")} of your own · ${store.bankWords().length} in the Word Bank</span>
+          <span class="small">${vStats.due} due today · 🔥 ${streak(store.get().activity)}${wotd ? ` · Word of the Day: <i>${esc(wotd.word)}</i>` : ""}</span>
+        </span>
+        <span class="home-go" aria-hidden="true">›</span>
+      </button>
+      <button class="home-card grammar" type="button" data-nav="g-today">
+        <span class="home-ico">📗</span>
+        <span class="home-main">
+          <b>Grammar Rules</b>
+          <span>${plural(gs.liveRules().length, "rule")} of your own · ${gs.rulesFor("book").length} in the Rule Book</span>
+          <span class="small">${gStats.due} due today · 🔥 ${streak(gs.get().activity)}${rotd ? ` · Rule of the Day: <i>${esc(rotd.title)}</i>` : ""}</span>
+        </span>
+        <span class="home-go" aria-hidden="true">›</span>
+      </button>
+      <label class="field small">When the app opens
+        <select data-setting="startSection">
+          ${[
+            ["ask", "Show this screen"],
+            ["vocab", "Go straight to Vocabulary"],
+            ["grammar", "Go straight to Grammar"],
+            ["last", "Where I left off"],
+          ]
+            .map(([v, l]) => `<option value="${v}" ${st.startSection === v ? "selected" : ""}>${l}</option>`)
+            .join("")}
+        </select>
+      </label>
+      ${madeBy()}
+    </section>`;
 }
 
 // ---------- routing & events ----------
-const VIEWS = { today: viewToday, add: viewAdd, practice: viewPractice, words: viewWords, settings: viewSettings };
+const VIEWS = {
+  home: viewHome,
+  today: viewToday,
+  add: viewAdd,
+  practice: viewPractice,
+  words: viewWords,
+  settings: viewSettings,
+  ...grammar.views,
+};
 
 function render() {
   const main = $("#view");
   const searchFocused = document.activeElement?.id === "search";
   main.innerHTML = VIEWS[view]();
-  if ((view === "settings" || view === "add") && !ui.busy && !ui.candidates) checkKeysInBackground();
-  for (const b of document.querySelectorAll(".tabbar [data-nav]")) b.classList.toggle("active", b.dataset.nav === view);
+  if (["settings", "add", "g-add"].includes(view) && !ui.busy && !ui.candidates && !grammar.gui.busy && !grammar.gui.candidates) {
+    checkKeysInBackground();
+  }
+  renderChrome();
   if (searchFocused) {
     const input = $("#search");
     input.focus();
@@ -1444,7 +1601,12 @@ function render() {
 }
 
 function go(v) {
+  if (!VIEWS[v]) v = "home";
   if (view === "add" && v !== "add" && $("#typed")) ui.typedDraft = $("#typed").value;
+  if (view === "g-add" && v !== "g-add" && $("#gTyped")) grammar.gui.typedDraft = $("#gTyped").value;
+  const sec = sectionOf(v);
+  if (sec && sec !== ui.section) ui.section = sec;
+  if (sec && settings().lastSection !== sec) store.update((s) => (s.settings.lastSection = sec), { touchesData: false });
   if (updatePending && safeToReload() && updateNow()) return;
   view = v;
   render();
@@ -1745,6 +1907,8 @@ const actions = {
   },
 };
 
+Object.assign(actions, grammar.actions);
+
 document.addEventListener("click", (e) => {
   const nav = e.target.closest("[data-nav]");
   if (nav) {
@@ -1764,6 +1928,7 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  if (await grammar.onChange(e)) return;
   const t = e.target;
   if (t.dataset.input === "files") {
     const files = [...t.files];
@@ -1855,7 +2020,7 @@ document.addEventListener("change", async (e) => {
     store.update((s) => (s.settings[k] = v), { touchesData: false });
     if (k === "googleClientId") drive.disconnect();
     toast("Saved");
-    if (["dailyCount", "googleClientId", "voice", "apiKey", "dailySource", "practiceSource"].includes(k)) render();
+    if (["dailyCount", "googleClientId", "voice", "apiKey", "dailySource", "practiceSource", "startSection"].includes(k)) render();
     return;
   }
   if (t.id === "sort") {
@@ -1865,6 +2030,7 @@ document.addEventListener("change", async (e) => {
 });
 
 document.addEventListener("input", (e) => {
+  if (grammar.onInput(e)) return;
   if (e.target.id === "search") {
     ui.search = e.target.value;
     render();
@@ -1872,6 +2038,7 @@ document.addEventListener("input", (e) => {
 });
 
 document.addEventListener("submit", (e) => {
+  if (grammar.onSubmit(e)) return;
   if (e.target.id !== "editForm") return;
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -1940,6 +2107,11 @@ const scheduleNotifyRefresh = () => {
   notifyTimer = setTimeout(refreshNotify, 1500);
 };
 
+gs.subscribe(() => {
+  updateSyncChip();
+  scheduleAutoSync();
+});
+
 store.subscribe(() => {
   updateSyncChip();
   scheduleAutoSync();
@@ -1947,8 +2119,26 @@ store.subscribe(() => {
 });
 
 // ---------- start ----------
-const initial = location.hash.slice(1);
-if (VIEWS[initial]) view = initial;
+// First screen: an explicit link (#g-rules, a notification…) wins; a plain open follows the start setting.
+{
+  const initial = location.hash.slice(1);
+  let firstOpen = true;
+  try {
+    firstOpen = !sessionStorage.getItem("vv-opened");
+    sessionStorage.setItem("vv-opened", "1");
+  } catch {
+    /* private mode */
+  }
+  const explicit = new URLSearchParams(location.search).has("open") || (VIEWS[initial] && !(firstOpen && ["", "today"].includes(initial)));
+  if (explicit && VIEWS[initial]) view = initial;
+  else {
+    const st = settings();
+    const start = st.startSection || "ask";
+    view = start === "vocab" ? "today" : start === "grammar" ? "g-today" : start === "last" ? (st.lastSection === "grammar" ? "g-today" : "today") : "home";
+  }
+  ui.section = sectionOf(view) || settings().lastSection || "vocab";
+  history.replaceState(null, "", `${location.pathname}#${view}`);
+}
 applyBrand(brand);
 
 // ---------- staying on the newest version ----------
@@ -1956,12 +2146,14 @@ const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev
 let updatePending = false;
 
 /** Nothing in progress that a reload would interrupt. */
-const safeToReload = () => !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !$("#overlay").classList.contains("open");
+const safeToReload = () =>
+  !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !grammar.busy() && !$("#overlay").classList.contains("open");
 
 /** Reload into the newest version, keeping typed words. Returns true if the page is reloading. */
 function updateNow() {
   const typed = $("#typed")?.value ?? ui.typedDraft;
-  return reloadForUpdate({ typed, view });
+  const gTyped = $("#gTyped")?.value ?? grammar.gui.typedDraft;
+  return reloadForUpdate({ typed, gTyped, view });
 }
 
 async function checkForUpdate() {
@@ -1985,14 +2177,15 @@ window.addEventListener("unhandledrejection", (e) => {
   // Back from an automatic update: put typed words back (the screen is kept by the address's #hash).
   const { draft, updated } = takeDraft();
   if (draft?.typed) ui.typedDraft = draft.typed;
+  if (draft?.gTyped) grammar.gui.typedDraft = draft.gTyped;
   if (updated) setTimeout(() => toast("✨ Updated to the latest version. If you were adding a photo or PDF, pick it again.", 6000), 600);
 }
 
 let booted = false;
 $("#view").innerHTML = `<section class="card center busy"><div class="spinner" aria-hidden="true"></div><p>Loading…</p></section>`;
 // The Word Bank (1000+ words) loads as a separate chunk; the app renders once it's ready.
-loadBank()
-  .catch(() => toast("Couldn't load the built-in Word Bank. Check your connection and reopen the app."))
+Promise.all([loadBank(), loadRuleBook()])
+  .catch(() => toast("Couldn't load the built-in Word Bank or Rule Book. Check your connection and reopen the app."))
   .finally(() => {
     booted = true;
     render();

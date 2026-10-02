@@ -167,6 +167,13 @@ async function toError(res, entry) {
 
 /** Pull {words: [...]} out of a chat reply, tolerating ```json fences and text around it. Pure; unit-tested. */
 export function parseWords(text) {
+  return firstArray(parseJSON(text));
+}
+
+const firstArray = (parsed) =>
+  Array.isArray(parsed) ? parsed : Array.isArray(parsed?.words) ? parsed.words : Array.isArray(parsed?.rules) ? parsed.rules : (Object.values(parsed || {}).find(Array.isArray) ?? []);
+
+function parseJSON(text) {
   const t = String(text || "").replace(/```(?:json)?/gi, "").trim();
   let parsed;
   try {
@@ -180,8 +187,7 @@ export function parseWords(text) {
       throw new CompatError("The reply was cut off or not valid JSON.");
     }
   }
-  if (Array.isArray(parsed)) return parsed;
-  return Array.isArray(parsed?.words) ? parsed.words : [];
+  return parsed;
 }
 
 const jsonRule = (schema) =>
@@ -200,7 +206,7 @@ async function chat(entry, model, messages, jsonMode) {
 }
 
 /** Try the ranked models in turn: a retired or unsuitable model is skipped and remembered. */
-async function run(s, entry, userContent, schema, { needVision = false, onProgress } = {}) {
+async function run(s, entry, userContent, schema, { needVision = false, onProgress, system } = {}) {
   const name = serviceName(s, entry);
   const id = serviceBase(entry) + entry.key;
   const models = await candidateModels(entry, needVision);
@@ -211,7 +217,7 @@ async function run(s, entry, userContent, schema, { needVision = false, onProgre
     );
   }
   const messages = [
-    { role: "system", content: `${systemPrompt(s)}\n\n${jsonRule(schema)}` },
+    { role: "system", content: `${system || systemPrompt(s)}\n\n${jsonRule(schema)}` },
     { role: "user", content: userContent },
   ];
   let lastErr;
@@ -252,8 +258,8 @@ async function run(s, entry, userContent, schema, { needVision = false, onProgre
   throw lastErr;
 }
 
-/** Step 1: list the words in photos/PDFs/text. Scanned PDF pages are sent as pictures. */
-export async function compatList(s, entry, sources, onProgress) {
+/** Any AI job (see geminiTask). Scanned PDF pages are sent as pictures; text PDFs as text. */
+export async function compatTask(s, entry, { system, schema, sources = [], text = "" }, onProgress) {
   const content = [];
   let needVision = false;
   for (const src of sources) {
@@ -271,15 +277,18 @@ export async function compatList(s, entry, sources, onProgress) {
       content.push({ type: "text", text: `Source "${src.name}":\n${src.text}` });
     }
   }
-  content.push({ type: "text", text: listInstruction() });
+  if (text) content.push({ type: "text", text });
   // Text-only models get a plain string (some reject the array form).
   const userContent = needVision ? content : content.map((c) => c.text).join("\n\n");
-  return run(s, entry, userContent, LIST_SCHEMA, { needVision, onProgress });
+  return run(s, entry, userContent, schema, { needVision, onProgress, system });
 }
 
-export async function compatEnrich(s, entry, words, notes, onProgress) {
-  return run(s, entry, enrichInstruction(words, notes), RESULT_SCHEMA, { onProgress });
-}
+/** Step 1: list the words in photos/PDFs/text. */
+export const compatList = (s, entry, sources, onProgress) =>
+  compatTask(s, entry, { sources, text: listInstruction(), schema: LIST_SCHEMA }, onProgress);
+
+export const compatEnrich = (s, entry, words, notes, onProgress) =>
+  compatTask(s, entry, { text: enrichInstruction(words, notes), schema: RESULT_SCHEMA }, onProgress);
 
 /** Check a key when it's added: lists the models it can use. Resolves {ok, message}. */
 export async function testService(entry) {

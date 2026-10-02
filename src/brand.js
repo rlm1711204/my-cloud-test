@@ -19,7 +19,7 @@
 export const brand = {
   name: "VocabVault",
   shortName: "VocabVault",
-  tagline: "Scan pages, collect hard words with Hindi meanings, and revise daily.",
+  tagline: "Exam vocabulary and grammar rules: scan pages, keep what's hard, revise daily.",
   madeBy: "Ram",
   madeByNote: "",
   madeByLink: "",

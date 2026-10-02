@@ -67,7 +67,7 @@ async function showDailyWords() {
     icon: "icon-192.png",
     badge: "icon-192.png",
     tag: "vv-daily",
-    data: { url: "./#today" },
+    data: { url: "./?open=today#today" },
   });
   p.lastShown = today;
   await cache.put(key, new Response(JSON.stringify(p), { headers: { "Content-Type": "application/json" } }));

@@ -88,6 +88,39 @@ keeps the old icon otherwise.
 
 ---
 
+## Adding rules to the built-in Rule Book
+
+The Rule Book lives in three plain-text files: `src/data/rules1.js`, `rules2.js` and `rules3.js`.
+Open one on GitHub, tap the ✏️ pencil, and add a rule anywhere between the two back-ticks, like this:
+
+```
+# 'Despite' and 'in spite of'
+R: 'Despite' and 'in spite of' are followed by a noun or -ing form, never by 'of' after 'despite'.
+E: Despite the rain, we went out.
+X: Despite of the rain, we went out. => Despite the rain, we went out.
+W: 'Despite' never takes 'of'.
+T: A favourite of SSC error spotting.
+Q: ___ being tired, he kept working. | *Despite; Despite of; Inspite; In spite
+```
+
+| Letter | Means |
+|---|---|
+| `## Topic` | starts a new topic (e.g. `## Prepositions`) |
+| `# Title` | starts a new rule |
+| `R:` | the rule in simple words |
+| `E:` | a correct example (add as many as you like) |
+| `X:` | a mistake: `wrong sentence => right sentence` |
+| `W:` | why (explains the `X:` line just above it) |
+| `N:` | an exception or note |
+| `T:` | an exam tip |
+| `Q:` | a question: `question with ___ | option; *right option; option` — put `*` before the one right answer |
+
+Only `#` and `R:` are required; the rest are optional but make practice better (`X:` lines power the
+"Right or wrong?" and "Which rule?" questions, `Q:` lines the "Fill the blank" ones).
+
+Every build checks the Rule Book. If a line is wrong (for example a question with no `*`), the build stops and
+the live app keeps the last good version, so a typing mistake can never break your app.
+
 ## Changing the words inside the app
 
 Any sentence you see in the app can be changed in `src/main.js`. Use GitHub's search

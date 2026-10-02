@@ -45,7 +45,7 @@ export const manifestJson = (brand) => ({
   name: brand.name,
   short_name: brand.shortName || brand.name,
   description: brand.tagline,
-  start_url: "./#today",
+  start_url: "./",
   scope: "./",
   display: "standalone",
   background_color: shade(brand.color, 0.95),

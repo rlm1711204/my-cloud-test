@@ -6,6 +6,7 @@ let impl = async () => ({ words: [] });
 vi.mock("../src/lib/gemini.js", () => ({
   geminiEnrich: (...a) => (calls.push(a), impl(...a)),
   geminiList: async () => ({ words: [] }),
+  geminiTask: async () => ({ words: [] }),
   geminiKeysOf: (s) => (s.geminiKeys || []).filter(Boolean),
   pickedKeyNumber: () => 0,
 }));
