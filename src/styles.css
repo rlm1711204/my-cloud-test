@@ -450,3 +450,37 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .badge.adv { background: var(--saffron-soft); color: var(--saffron); }
 .adv-mark { font-size: .8rem; }
 .source-line { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+
+/* ---------- GK ---------- */
+.home-card.gk .home-main b { color: var(--saffron); }
+.badge.topic { white-space: normal; }
+.gk-q { font: 600 1.1rem/1.45 var(--serif); margin: 8px 0; }
+.gk-a { font-weight: 700; color: var(--ok); margin: 6px 0; }
+.gk-prompt { font: 600 1.12rem/1.45 var(--serif); }
+.claim { padding: 8px 12px; border-left: 4px solid var(--saffron); background: var(--saffron-soft); border-radius: 8px; }
+.seg:has(button:nth-child(3)) { grid-template-columns: 1fr 1fr 1fr; }
+.gk-cands .cand { margin: 8px 0; }
+.gk-cands .cand label { margin: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.gk-cands .cand-main { display: flex; flex-direction: column; gap: 3px; }
+.cand-topic { display: flex; gap: 6px; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; }
+.cand-topic select { flex: 1; min-width: 0; font-size: .85rem; }
+.cand-topic input { width: 5.5em; font-size: .85rem; }
+.picker, .picker ul { list-style: none; margin: 0; padding: 0; }
+.picker { margin: 10px 0; }
+.picker ul { padding-left: 22px; }
+.pick-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.pick-box { border: 0; background: none; font-size: 1.35rem; line-height: 1; padding: 2px; cursor: pointer; color: var(--primary); }
+.pick-box.off { color: var(--ink-2); }
+.pick.off > .pick-row .pick-label { color: var(--ink-2); text-decoration: line-through; }
+.pick-label { flex: 1; min-width: 0; }
+.row.wrap { flex-wrap: wrap; }
+.crumbs { font-size: .88rem; color: var(--ink-2); margin: 6px 0; }
+.topic-list { list-style: none; margin: 8px 0; padding: 0; }
+.topic-list li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin: 8px 0; cursor: pointer; }
+.topic-list .t-name { font-weight: 700; }
+.topic-list .cov { grid-column: 1; display: grid; gap: 4px; }
+.topic-list .home-go { grid-column: 2; grid-row: 1 / span 2; font-size: 1.4rem; }
+.cov .bar { position: relative; display: block; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.cov .bar span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+.cov .bar .seen { background: var(--primary-soft); }
+.cov .bar .mast { background: var(--ok); }

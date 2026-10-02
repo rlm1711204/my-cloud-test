@@ -1,4 +1,4 @@
-# VocabVault 📘📗: exam vocabulary and grammar rules
+# VocabVault 📘📗🌍: exam vocabulary, grammar rules and GK
 
 A phone-friendly web app (you can install it like an app) for building an exam-grade English vocabulary.
 Snap a page, upload a screenshot or PDF, or type words. VocabVault keeps only the **difficult** words
@@ -36,6 +36,22 @@ Grammar works like vocabulary, but for rules:
 | 🎯 **Practice** | Fill the blank · Which sentence is correct? · Right or wrong? (error spotting) · Which rule does this break? · Recall the rule. Every rule is covered before any repeats; wrong answers come back until right twice in a row |
 | 🔁 **No duplicates** | A rule you already have is recognised even when it is worded differently |
 | 💾 **Separate data** | Grammar has its own backup file and its own Google Drive file (`grammar-rules.json` + a "Grammar Rules" sheet). A vocabulary backup can't be restored into grammar by mistake, or the other way round |
+
+## 🌍 GK (the third part)
+
+Choose **🌍 GK** on the start screen (or the 🌍 button at the top). It works like the other two parts, for
+general-knowledge questions:
+
+| | |
+|---|---|
+| 📷 **Add questions** | Scan a quiz book or newspaper page, upload screenshots or a monthly current-affairs PDF, or paste questions. Understood formats: numbered MCQs with `(a) … (d)` and `Ans: (b)`, `Q: … A: …`, `Capital of Japan - Tokyo`, `Who wrote Godan? Premchand`, and plain facts/news (with AI these become questions). `Explanation:` and `Trick:` lines are kept |
+| 🗂️ **Filed automatically** | Every question goes under a subject and chapter: History (Ancient, Medieval, Modern, World, Art & Culture), Polity, Economy, Banking & Finance, Geography, Biology, Physics, Chemistry, Science & Tech and **Static GK** (Books & Authors, Awards, Sports, Important Days, National Symbols, Firsts, Organisations & HQs, Countries/Capitals/Currencies, Personalities, Abbreviations, Indian States). **Current affairs are filed by year, then topic** (National, International, Economy, Banking, Schemes, Sports, Appointments, Reports & Indices, Defence…). You can change the topic on the review screen |
+| 💡 **Memory tricks** | With AI, each question gets 3 believable wrong options, a 1–2 line explanation and a mnemonic/trick. Answers the AI had to fill in are marked **"AI answer · check"** |
+| 🌍 **Built-in Question Bank** | 311 stable static-GK and subject questions in 58 chapters, each with a memory trick. Current affairs are not built in (they change too fast); add them from your PDFs |
+| ☀️ **Today** | Question of the Day + N questions, **spread across topics**: due revisions first, then new questions taking turns between chapters, starting with the chapters you have not revised for longest. A "Not revised for a while" card lists the stalest chapters with a one-tap practice button |
+| 🎯 **Practice** | Multiple choice, True or false, Recall (and fill-the-gap for facts). **Untick any subject, chapter or Current Affairs year** (optionally for Today too). Every selected question is asked once per round before any repeats, chapters are interleaved, and wrong answers come back until right twice in a row |
+| 🗺️ **Topics (coverage map)** | Subject → chapter (Current Affairs → year → topic) with how much of each was covered this round, mastered, weak and due. Search, edit, star, "Complete with AI", practise one chapter, CSV export |
+| 💾 **Separate data** | Own backup file and own Drive file (`gk-questions.json` + a "GK Questions" sheet). Restoring twice never duplicates |
 
 ## Using it
 
@@ -139,6 +155,14 @@ src/
   lib/grammar-store.js Grammar data (separate storage, backup and Drive file), daily plan
   lib/grammar-ai.js  Grammar prompts: read rules from material, then write full rule cards
   lib/grammar-quiz.js Grammar question types, built from each rule's own examples and mistakes
+  gk-ui.js           GK screens: Today, Add, Practice (topic picker), Topics (coverage map), editor, backups
+  lib/gk-taxonomy.js GK subjects/chapters/Current Affairs topics + the offline classifier
+  lib/gk.js          GK question records, duplicate detection, free-mode text parsing, CSV
+  lib/gk-store.js    GK data (separate storage, backup, Drive file), topic-balanced daily plan
+  lib/gk-topics.js   Topic tree and tick/untick logic for practice
+  lib/gk-quiz.js     GK question types (MCQ, true/false, recall, fill-the-gap)
+  lib/gk-ai.js       GK prompts: list questions, then write cards with topic, year, options and a trick
+  lib/gkbank.js      Question Bank parser + checker (data in src/data/gk1-4.js)
   lib/rules.js       Rule records, duplicate detection, Rule Book matching, free-mode text splitting
   lib/rulebook.js    Rule Book parser + checker (data in src/data/rules1-5.js; 4-5 are the advanced rules)
   lib/update.js      Reloads an open app into the newest version, keeping typed words

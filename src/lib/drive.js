@@ -10,6 +10,8 @@ export const SHEET_NAME = "Vocab Master List";
 // The grammar part keeps its own files in the same folder, so each part syncs (and restores) separately.
 export const GRAMMAR_JSON = "grammar-rules.json";
 export const GRAMMAR_SHEET = "Grammar Rules";
+export const GK_JSON = "gk-questions.json";
+export const GK_SHEET = "GK Questions";
 const TOKEN_KEY = "vv.driveToken";
 
 let gisPromise = null;

@@ -90,7 +90,7 @@ keeps the old icon otherwise.
 
 ## Adding rules to the built-in Rule Book
 
-The Rule Book lives in three plain-text files: `src/data/rules1.js`, `rules2.js` and `rules3.js`.
+The Rule Book lives in five plain-text files: `src/data/rules1.js` to `rules5.js` (4 and 5 are the advanced rules).
 Open one on GitHub, tap the ✏️ pencil, and add a rule anywhere between the two back-ticks, like this:
 
 ```
@@ -155,3 +155,31 @@ Or just edit the file again and retype the old words.
 - The build status is at **github.com/rlm1711204/vocab-vault/actions**. A green ✓ means the
   live app has your change; a red ✗ means a quote mark or comma is missing in `brand.js`
   (the live app keeps working on the last good version).
+
+---
+
+## Adding questions to the built-in GK Question Bank
+
+The Question Bank is in `src/data/gk1.js` (Polity, History), `gk2.js` (Geography, Economy, Banking), `gk3.js`
+(Biology, Physics, Chemistry, Science & Tech) and `gk4.js` (Static GK). Add a question between the back-ticks:
+
+```
+## Static GK › Books & Authors
+Q: Who wrote 'Godan'?
+A: Munshi Premchand
+O: Rabindranath Tagore; Sarat Chandra Chattopadhyay; Bankim Chandra Chatterjee
+T: Go-dan = "gift of a cow" — Premchand's village farmer Hori dreams of one.
+E: Premchand's last completed novel (1936).
+```
+
+| Letter | Means |
+|---|---|
+| `## Subject › Chapter` | the chapter the questions below belong to (copy the exact names used in the file or in `src/lib/gk-taxonomy.js`) |
+| `Q:` | the question |
+| `A:` | the right answer |
+| `O:` | exactly 3 wrong options, separated by `;` |
+| `T:` | the memory trick |
+| `E:` | an explanation (optional) |
+
+Keep to facts that don't change (no current office-holders). The tests check every question when the app is built.
+Your own questions are better added in the app itself (🌍 GK → Add).

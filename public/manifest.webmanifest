@@ -2,7 +2,7 @@
   "id": "./",
   "name": "VocabVault",
   "short_name": "VocabVault",
-  "description": "Exam vocabulary and grammar rules: scan pages, keep what's hard, revise daily.",
+  "description": "Exam vocabulary, grammar rules and GK: scan pages, keep what's hard, revise daily.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

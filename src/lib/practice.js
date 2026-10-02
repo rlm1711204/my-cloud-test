@@ -39,7 +39,25 @@ export const weakWords = (pool, practice) =>
  * at random. When the round runs out, a new round starts, so every word is covered periodically.
  * Returns the chosen ids and the updated practice state (round bookkeeping happens here).
  */
-export function pickSession(pool, practice, source, size, rand = Math.random) {
+/**
+ * Order ids so groups (topics) take turns: one from each topic, then the next round, … — so a session
+ * mixes topics instead of finishing one chapter first. Order within a topic and of the topics is shuffled.
+ */
+export function interleave(ids, groupOf, rand = Math.random) {
+  const groups = new Map();
+  for (const id of ids) {
+    const g = groupOf(id);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(id);
+  }
+  // Without `rand`, topics keep the order they first appear in (e.g. "revised longest ago" first).
+  const lanes = rand ? shuffle([...groups.values()], rand) : [...groups.values()];
+  const out = [];
+  for (let i = 0; out.length < ids.length; i++) for (const lane of lanes) if (i < lane.length) out.push(lane[i]);
+  return out;
+}
+
+export function pickSession(pool, practice, source, size, rand = Math.random, groupOf = null) {
   const state = structuredClone(practice);
   const r = (state.rounds[source] ??= { round: 1, seen: {} });
   const ids = new Set(pool.map((w) => w.id));
@@ -48,7 +66,10 @@ export function pickSession(pool, practice, source, size, rand = Math.random) {
   const weak = weakWords(pool, state).map((w) => w.id);
   for (const id of weak.slice(0, Math.ceil(size * 0.4))) chosen.push(id);
 
-  const take = () => shuffle(pool.filter((w) => r.seen[w.id] !== r.round && !chosen.includes(w.id)).map((w) => w.id), rand);
+  const take = () => {
+    const ids = shuffle(pool.filter((w) => r.seen[w.id] !== r.round && !chosen.includes(w.id)).map((w) => w.id), rand);
+    return groupOf ? interleave(ids, groupOf, rand) : ids;
+  };
   // Words from the current round come first, so a round always finishes before the next begins.
   const segments = [chosen];
   let fresh = take();

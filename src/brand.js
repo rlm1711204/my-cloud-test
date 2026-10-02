@@ -19,7 +19,7 @@
 export const brand = {
   name: "VocabVault",
   shortName: "VocabVault",
-  tagline: "Exam vocabulary and grammar rules: scan pages, keep what's hard, revise daily.",
+  tagline: "Exam vocabulary, grammar rules and GK: scan pages, keep what's hard, revise daily.",
   madeBy: "Ram",
   madeByNote: "",
   madeByLink: "",

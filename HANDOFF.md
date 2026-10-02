@@ -10,7 +10,7 @@ Paste this into a new chat to carry the project over.
 
 ## What it is
 
-A phone-friendly PWA with two parts — exam **vocabulary** and **grammar rules** (UPSC / RBI Grade B / SSC).
+A phone-friendly PWA with three parts — exam **vocabulary**, **grammar rules** and **GK** (UPSC / RBI Grade B / SSC).
 Scan a page, upload a screenshot or PDF, or type words. The app keeps the hard words, writes a
 full card for each (meaning, Hindi, pronunciation, 2 sentences, exam tip), and revises them daily
 with spaced repetition. Data is stored on the device and synced to Google Drive.
@@ -60,6 +60,23 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   retries left-out rules once, and keeps any still missing "as written".
 - Without AI, typed/scanned text is split into rules (`textToRules`) and matched to the Rule Book (`borrowFromBook`).
 
+## The GK part
+
+- Views `k-today`, `k-add`, `k-practice`, `k-topics` in `src/gk-ui.js` (same `ctx` pattern as grammar). Header switch 🌍,
+  start-section option `gk`.
+- Data: localStorage `vv.gk.v1`, backup `app: "VocabVault-GK"`, Drive `gk-questions.json` + "GK Questions" sheet (created
+  only once GK has been used). Restores refuse vocab/grammar files and vice versa.
+- Topic key = `Subject › Chapter`, or `Current Affairs › <year> › <topic>` (`topicKey` in gk-taxonomy.js). The taxonomy
+  and CA topics are in `gk-taxonomy.js`; `classify()` files a question offline by keyword weights (a recent year or news
+  words → Current Affairs).
+- Balanced revision: `buildGkPlan` (gk-store.js) takes due → new → weakest, interleaving topics and starting with the
+  topic in `topicSeen` revised longest ago. Practice uses `pickSession` with `groupOf = topicKey` (every question once per
+  round, topics interleaved). `prefs.excluded` holds left-out topic keys; `gk-topics.js` handles ticking/unticking.
+- Question Bank `src/data/gk1-4.js` (311 questions), ids `qb:<slug>`, progress-only storage like the Word Bank. No current
+  affairs on purpose.
+- AI (`gk-ai.js`): list questions (facts → questions), then cards 10 at a time with category/sub/year/month/options/
+  explain/trick; `aiAnswered` marks answers the AI supplied. Cards are checked to match the question asked.
+
 ## Decisions worth knowing before changing things
 
 - **Gemini keys go in the `x-goog-api-key` header.** Google's newer `AQ.` keys fail as a `?key=`
@@ -91,7 +108,7 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 
 ## Current state
 
-Done and live: Grammar Rules part (Rule Book, practice, separate backups and Drive file), other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
+Done and live: GK part (Question Bank, current affairs by year, topic picker, balanced revision, separate backups and Drive file), Grammar Rules part (Rule Book, practice, separate backups and Drive file), other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
 practice with full coverage and weak-word repeats, the 1267-word Word Bank, daily notification,
 ⓘ full-details buttons, Google Drive sync, install button, backup/restore with a clear summary,
 one-file branding, and the Gemini key picker.
