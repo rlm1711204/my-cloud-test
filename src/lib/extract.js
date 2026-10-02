@@ -73,6 +73,31 @@ export async function filesToSources(files) {
   return out;
 }
 
+/** Scanned PDFs: at most this many pages are sent as pictures to AI services that can't read PDFs. */
+const MAX_SCANNED_PAGES = 8;
+
+/**
+ * For AI services that take text and pictures but not PDFs: the PDF's text, or (scanned PDF) its pages as
+ * JPEG pictures. `data` is the base64 PDF from filesToSources. Resolves {text, images: base64[]}.
+ */
+export async function pdfForChat(data, onProgress) {
+  const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+  const doc = await openPdf({ arrayBuffer: async () => bytes.buffer });
+  try {
+    const text = await pdfDocText(doc, onProgress);
+    if (text.replace(/\s/g, "").length > 50) return { text, images: [] };
+    const images = [];
+    for (let i = 1; i <= Math.min(doc.numPages, MAX_SCANNED_PAGES); i++) {
+      onProgress?.(`Preparing scanned page ${i} of ${Math.min(doc.numPages, MAX_SCANNED_PAGES)}…`);
+      const png = await renderPage(doc, i);
+      images.push(await blobToBase64(await normaliseImage(png)));
+    }
+    return { text: "", images };
+  } finally {
+    await doc.loadingTask.destroy();
+  }
+}
+
 async function openPdf(file) {
   // The "legacy" build includes polyfills: the modern build needs very new browser features
   // (e.g. Math.sumPrecise) that many phone browsers lack, and then silently fails to read text.

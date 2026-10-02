@@ -10,6 +10,8 @@ const KEY = "vv.state.v1";
 export const DEFAULT_SETTINGS = {
   geminiKeys: [], // several free keys: when one hits its limit the next is used
   geminiKeyPick: "", // "" = Auto (all keys in turn); otherwise the one key chosen on the Add screen
+  extraAIs: [], // other free AI services: [{id, provider, key, base?, model}] (see compat.js) — stay on this device
+  aiPick: "", // "extra:<id>" = only that service; "" = Auto (or the Gemini key in geminiKeyPick)
   geminiModel: "auto",
   apiKey: "",
   model: DEFAULT_MODEL,

@@ -34,6 +34,9 @@ describe("rankModels", () => {
     expect(rankModels(models)).toEqual(["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-2.5-flash-lite"]);
     const v35 = ["gemini-3.5-flash-preview", "gemini-3.5-flash", "gemini-3.5-flash-lite"].map((id) => ({ name: `models/${id}` }));
     expect(rankModels(v35)).toEqual(["gemini-3.5-flash", "gemini-3.5-flash-preview", "gemini-3.5-flash-lite"]);
+    // "-latest" aliases always point at Google's newest model, so they come first.
+    const withAlias = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-flash"].map((id) => ({ name: `models/${id}` }));
+    expect(rankModels(withAlias)).toEqual(["gemini-flash-latest", "gemini-3.5-flash", "gemini-flash-lite-latest"]);
   });
   it("ignores models that can't generate content", () => {
     expect(rankModels([{ name: "models/gemini-2.5-flash", supportedGenerationMethods: ["embedContent"] }])).toEqual([]);

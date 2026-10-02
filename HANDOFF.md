@@ -52,6 +52,14 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 - **Gemini models get retired for new accounts** (2.5 Flash returned 404 in Oct 2026). The app ranks the
   newest model first, follows the replacement named in Google's 404 message, remembers 404'd models per
   key, and tries the last model that worked first.
+- **Gemini model names are never trusted to last.** `gemini-flash-latest` / `gemini-flash-lite-latest` aliases come
+  first; a 404, or a 400 that names the model, skips that model but never marks the key invalid.
+- **Other free AI services** (`src/lib/compat.js`) use the OpenAI chat-completions format and rank models from each
+  service's live `/models` list (free-only on OpenRouter; picture-reading models when a photo is involved). Whether a
+  service allows calls from a browser (CORS) can only be known from a real key: the key test on Add says so.
+- **Open apps update themselves.** Each build writes `version.json`; the app checks it when reopened and every 30
+  minutes, and reloads at a safe moment. A "Failed to fetch dynamically imported module" error (a file from an older
+  version) also triggers one reload, with typed words saved in sessionStorage.
 - **pdf.js must be the *legacy* build.** The modern build needs `Math.sumPrecise`, which phones
   don't have; without it text PDFs silently fell back to slow OCR.
 - **Word matching is by normalised spelling** (`wordKey`), so restoring a backup twice never
@@ -67,7 +75,7 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 
 ## Current state
 
-Done and live: capture + extraction, duplicate checking, word cards, daily plan and flashcards,
+Done and live: other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
 practice with full coverage and weak-word repeats, the 1267-word Word Bank, daily notification,
 ⓘ full-details buttons, Google Drive sync, install button, backup/restore with a clear summary,
 one-file branding, and the Gemini key picker.

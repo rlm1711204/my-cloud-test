@@ -52,11 +52,17 @@ limit reached / invalid) is shown next to it.
 To use one particular key, pick it under **🔑 Gemini key for scanning & adding** on the Add screen (or in Settings).
 Only that key is used until you switch back to **Auto**.
 
+**More free AI services.** In **Settings → More free AI services** you can add free keys from
+[OpenRouter](https://openrouter.ai/keys), [Groq](https://console.groq.com/keys), [Mistral](https://console.mistral.ai/api-keys),
+[Cerebras](https://cloud.cerebras.ai) or any OpenAI-compatible service. Each key is tested when you add it. They're used after
+Gemini, and each service picks its own best free model from its live model list, so new models are picked up without an
+app update. On the Add screen, **🔑 AI for scanning & adding** lets you use one of them (or one Gemini key) on its own.
+
 **Optional, paid backup: Claude AI.** Add an API key from [console.anthropic.com](https://console.anthropic.com/settings/keys)
 to use Claude whenever Gemini fails or runs out. A dense page costs roughly US$0.10–0.25 with Opus 5.5, about half with
 Sonnet 5.5, and much less with Haiku 4.5.
 
-**Automatic fallback:** Gemini (free) → Claude (if a key is set) → free dictionaries. A short message tells you when the
+**Automatic fallback:** Gemini (free) → other free services you added → Claude (if a key is set) → free dictionaries. A short message tells you when the
 app switched and why. Keys are stored only on your device.
 
 ## Make it yours
@@ -113,6 +119,8 @@ src/
   lib/freedict.js    Free word cards: dictionaryapi.dev + Wiktionary + MyMemory, IPA -> easy respelling
   lib/engine.js      Provider order and automatic fallback: Gemini -> Claude -> free dictionaries
   lib/gemini.js      Google Gemini (free tier): model auto-pick, structured JSON cards
+  lib/compat.js      Other free AI services (OpenRouter, Groq, Mistral, Cerebras, OpenAI-compatible)
+  lib/update.js      Reloads an open app into the newest version, keeping typed words
   lib/ai.js          Claude API + the prompts/card schema shared by both AI providers
   lib/extract.js     Image downscaling, PDF text layer (pdf.js), on-device OCR (Tesseract) for offline mode
   lib/difficulty.js  Offline difficulty filter using SCOWL word-frequency levels

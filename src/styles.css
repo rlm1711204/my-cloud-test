@@ -369,3 +369,9 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 /* Gemini key picker (Add screen and Settings) */
 .key-pick { margin: 4px 0 8px; }
 .key-pick select { width: 100%; }
+
+/* Other AI services list (Settings) */
+.key-list li.svc { align-items: flex-start; }
+.key-list li.svc > div { flex: 1; min-width: 0; }
+.key-list li.svc .model-in { display: block; width: 100%; margin-top: 4px; font-size: .85rem; }
+.block { display: block; }

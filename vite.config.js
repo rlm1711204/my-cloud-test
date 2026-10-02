@@ -19,6 +19,10 @@ const escAttr = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").re
 const brandPlugin = () => ({
   name: "vocabvault-brand",
   buildStart: () => buildBrandFiles(brand),
+  // The open app compares this with its own version to know when to reload (see src/lib/update.js).
+  generateBundle() {
+    this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify({ version }) });
+  },
   transformIndexHtml: (html) =>
     html
       .replace(/%BRAND_NAME%/g, escAttr(brand.name))

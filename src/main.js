@@ -2,7 +2,8 @@ import "./styles.css";
 import * as store from "./lib/store.js";
 import * as drive from "./lib/drive.js";
 import { DEFAULT_MODEL, EXAMS } from "./lib/ai.js";
-import { AllProvidersFailed, aiEnrichAll, aiList, fallbackNote, hasAI } from "./lib/engine.js";
+import { AllProvidersFailed, aiEnrichAll, aiList, fallbackNote, hasAI, pickedAI } from "./lib/engine.js";
+import { SERVICES, extraServicesOf, serviceName, testService } from "./lib/compat.js";
 import { GEMINI_AUTO, geminiKeysOf, keyStatus, knownModels, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "./lib/gemini.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
@@ -14,6 +15,7 @@ import * as notify from "./lib/notify.js";
 import * as install from "./lib/install.js";
 import { brand } from "./brand.js";
 import { applyBrand } from "./lib/theme.js";
+import { isStaleFileError, liveVersion, reloadForUpdate, takeDraft } from "./lib/update.js";
 import {
   buildIndex,
   cleanHeadword,
@@ -35,6 +37,12 @@ const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 let toastTimer;
 function toast(msg, ms = 3200) {
+  // A file from an older version of the app couldn't load: reload into the new version instead of showing it.
+  if (isStaleFileError(msg)) {
+    if (updateNow()) return;
+    msg = "Part of the app couldn't load. Check your internet, then close and reopen the app.";
+    ms = 7000;
+  }
   const t = $("#toast");
   t.textContent = msg;
   t.classList.add("show");
@@ -99,6 +107,8 @@ const ui = {
   syncError: "",
   wordsTab: "mine", // Words screen: "mine" | "bank"
   notifyStatus: "",
+  extraProvider: "openrouter", // service chosen in the "add another AI" form
+  extraStatus: {}, // service id -> {ok, message} from the last key test
 };
 
 // ---------- shared word rendering ----------
@@ -307,22 +317,28 @@ function keyStateText(k) {
   return "ready";
 }
 
-/** Choose which Gemini key scans and writes cards: Auto (all keys in turn) or one key by hand. */
+/** Choose which AI scans and writes cards: Auto (all of them in order) or one Gemini key / one service by hand. */
 function keyPicker() {
   const s = settings();
   const keys = geminiKeysOf(s);
-  if (keys.length < 2) return "";
-  const picked = pickedGeminiKey(s);
+  const extras = extraServicesOf(s);
+  if (keys.length + extras.length < 2) return "";
+  const picked = pickedAI(s);
+  const pickedKey = pickedGeminiKey(s);
+  const value = picked?.kind === "extra" ? `x:${picked.entry.id}` : pickedKey ? `g:${keys.indexOf(pickedKey)}` : "";
+  const opts = [
+    ["", "Auto — use them in order, switch when one runs out"],
+    ...keys.map((k, i) => [`g:${i}`, `Gemini key ${i + 1} only (${k.slice(0, 4)}…${k.slice(-4)}) · ${keyStateText(k)}`]),
+    ...extras.map((e) => [`x:${e.id}`, `${serviceName(s, e)} only${ui.extraStatus[e.id] ? ` · ${ui.extraStatus[e.id].ok ? "ready" : "check key"}` : ""}`]),
+  ];
+  const name = picked?.kind === "extra" ? serviceName(s, picked.entry) : pickedKey ? `Gemini key ${keys.indexOf(pickedKey) + 1}` : "";
   return `
-    <label class="field key-pick">🔑 Gemini key for scanning & adding
+    <label class="field key-pick">🔑 AI for scanning & adding
       <select data-keypick>
-        <option value="" ${picked ? "" : "selected"}>Auto — use keys in order, switch when one runs out</option>
-        ${keys
-          .map((k, i) => `<option value="${i}" ${k === picked ? "selected" : ""}>Key ${i + 1} only (${esc(k.slice(0, 4))}…${esc(k.slice(-4))}) · ${esc(keyStateText(k))}</option>`)
-          .join("")}
+        ${opts.map(([v, l]) => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`).join("")}
       </select>
     </label>
-    ${picked ? `<p class="muted small">Only key ${pickedKeyNumber(s)} is used. If it runs out, choose another key or Auto.</p>` : ""}`;
+    ${name ? `<p class="muted small">Only ${esc(name)} is used. If it runs out, choose another or Auto (the free dictionary fills in meanwhile).</p>` : ""}`;
 }
 
 function viewAdd() {
@@ -334,7 +350,19 @@ function viewAdd() {
   const aiOn = hasAI(s);
   const nKeys = geminiKeysOf(s).length;
   const pickN = pickedKeyNumber(s);
-  const aiName = [nKeys && (pickN ? `Gemini key ${pickN}` : nKeys > 1 ? `Gemini ×${nKeys} keys` : "Gemini"), s.apiKey && "Claude"].filter(Boolean).join(" → ");
+  const picked = pickedAI(s);
+  const aiName =
+    picked?.kind === "extra"
+      ? serviceName(s, picked.entry)
+      : pickN
+        ? `Gemini key ${pickN}`
+        : [
+            nKeys && (nKeys > 1 ? `Gemini ×${nKeys} keys` : "Gemini"),
+            ...extraServicesOf(s).map((e) => serviceName(s, e)),
+            s.apiKey && "Claude",
+          ]
+            .filter(Boolean)
+            .join(" → ");
   return `
     <h1>Add words</h1>
     <p class="mode ${aiOn ? "on" : "off"}">
@@ -603,6 +631,48 @@ function viewWords() {
     }`;
 }
 
+/** Settings card: other free AI services (OpenRouter, Groq, Mistral, Cerebras, any OpenAI-compatible one). */
+function extraServicesCard(st) {
+  const list = extraServicesOf(st);
+  const svc = SERVICES[ui.extraProvider] || SERVICES.openrouter;
+  return `
+    <article class="card">
+      <h3>🧩 More free AI services <span class="badge">optional</span></h3>
+      <p class="muted">Add free keys from other AI services as extra backups. They're used after Gemini, in this order,
+      and each picks its own best free model automatically — new models are picked up without an app update.</p>
+      ${
+        list.length
+          ? `<ul class="key-list">${list
+              .map((e) => {
+                const st2 = ui.extraStatus[e.id];
+                const badge = st2 ? `<span class="badge ${st2.ok ? "mastered" : "easy"}">${st2.ok ? "ready" : "check"}</span>` : "";
+                return `<li class="svc">
+                  <div><b>${esc(serviceName(st, e))}</b> <code>${esc(e.key.slice(0, 4))}…${esc(e.key.slice(-4))}</code> ${badge}
+                    ${st2 ? `<span class="muted small block">${esc(st2.message)}</span>` : ""}
+                    <label class="small muted">Model <input type="text" class="model-in" data-extra-model="${esc(e.id)}" value="${esc(e.model && e.model !== "auto" ? e.model : "")}" placeholder="auto — best free model" autocomplete="off" /></label>
+                  </div>
+                  <button class="icon-btn small" type="button" data-action="test-extra-ai" data-id="${esc(e.id)}" aria-label="Test">⟳</button>
+                  <button class="icon-btn small" type="button" data-action="remove-extra-ai" data-id="${esc(e.id)}" aria-label="Remove">✕</button>
+                </li>`;
+              })
+              .join("")}</ul>`
+          : ""
+      }
+      <label class="field">Service
+        <select data-extra-provider>
+          ${Object.entries(SERVICES)
+            .map(([k, v]) => `<option value="${k}" ${ui.extraProvider === k ? "selected" : ""}>${esc(v.label)}</option>`)
+            .join("")}
+        </select>
+      </label>
+      <p class="muted small">${esc(svc.note)}${svc.keys ? ` Free key: <a href="${esc(svc.keys)}" target="_blank" rel="noopener">${esc(svc.keys.replace(/^https:\/\//, ""))}</a>` : ""}</p>
+      ${ui.extraProvider === "custom" ? `<label class="field">API address<input type="url" id="newExtraBase" placeholder="https://…/v1" autocomplete="off" /></label>` : ""}
+      <div class="row"><input type="password" id="newExtraKey" placeholder="Paste the API key" autocomplete="off" />
+        <button class="btn small primary" type="button" data-action="add-extra-ai">Add</button></div>
+      <p class="muted small">Keys stay on this phone and are never put in backups.</p>
+    </article>`;
+}
+
 function viewSettings() {
   const s = store.get();
   const st = s.settings;
@@ -661,6 +731,8 @@ function viewSettings() {
         </select>
       </label>
     </article>
+
+    ${extraServicesCard(st)}
 
     <article class="card">
       <h3>🤖 Claude AI <span class="badge">optional · paid</span></h3>
@@ -1318,6 +1390,7 @@ function render() {
 
 function go(v) {
   if (view === "add" && v !== "add" && $("#typed")) ui.typedDraft = $("#typed").value;
+  if (updatePending && safeToReload() && updateNow()) return;
   view = v;
   render();
   window.scrollTo(0, 0);
@@ -1493,6 +1566,41 @@ const actions = {
     );
     render();
   },
+  "add-extra-ai": async () => {
+    const key = $("#newExtraKey").value.trim();
+    const provider = ui.extraProvider;
+    const base = provider === "custom" ? ($("#newExtraBase")?.value || "").trim() : "";
+    if (!/^\S{12,}$/.test(key)) return toast("Paste the full API key first.");
+    if (provider === "custom" && !/^https:\/\/\S+$/.test(base)) return toast("Enter the service's API address (starting with https://).");
+    if (extraServicesOf(settings()).some((e) => e.key === key)) return toast("That key is already added.");
+    const entry = { id: Math.random().toString(36).slice(2, 10), provider, key, base, model: "auto" };
+    store.update((s) => (s.settings.extraAIs = [...(s.settings.extraAIs || []), entry]), { touchesData: false });
+    toast(`${SERVICES[provider].label} added — testing the key…`);
+    render();
+    ui.extraStatus[entry.id] = await testService(entry);
+    toast(`${SERVICES[provider].label}: ${ui.extraStatus[entry.id].message}`, 7000);
+    render();
+  },
+  "test-extra-ai": async (el) => {
+    const entry = extraServicesOf(settings()).find((e) => e.id === el.dataset.id);
+    if (!entry) return;
+    toast("Testing…");
+    ui.extraStatus[entry.id] = await testService(entry);
+    toast(ui.extraStatus[entry.id].message, 6000);
+    render();
+  },
+  "remove-extra-ai": (el) => {
+    const id = el.dataset.id;
+    if (!confirm("Remove this AI service?")) return;
+    store.update(
+      (s) => {
+        s.settings.extraAIs = (s.settings.extraAIs || []).filter((e) => e.id !== id);
+        if (s.settings.aiPick === `extra:${id}`) s.settings.aiPick = "";
+      },
+      { touchesData: false },
+    );
+    render();
+  },
   info: (el) => showInfo(el.dataset.id),
   "close-info": () => closeInfo(),
   "info-add": (el) => {
@@ -1656,10 +1764,32 @@ document.addEventListener("change", async (e) => {
     return;
   }
   if (t.dataset.keypick != null) {
-    const key = t.value === "" ? "" : geminiKeysOf(settings())[Number(t.value)] || "";
-    store.update((s) => (s.settings.geminiKeyPick = key), { touchesData: false });
-    toast(key ? `Using Gemini key ${Number(t.value) + 1} only.` : "Auto: keys are used in order.");
+    const v = t.value;
+    const keys = geminiKeysOf(settings());
+    store.update(
+      (s) => {
+        s.settings.geminiKeyPick = v.startsWith("g:") ? keys[Number(v.slice(2))] || "" : "";
+        s.settings.aiPick = v.startsWith("x:") ? `extra:${v.slice(2)}` : "";
+      },
+      { touchesData: false },
+    );
+    const p = pickedAI(settings());
+    toast(p?.kind === "extra" ? `Using ${serviceName(settings(), p.entry)} only.` : p ? `Using Gemini key ${Number(v.slice(2)) + 1} only.` : "Auto: all AIs are used in order.");
     render();
+    return;
+  }
+  if (t.dataset.extraProvider != null) {
+    ui.extraProvider = t.value;
+    render();
+    return;
+  }
+  if (t.dataset.extraModel != null) {
+    const id = t.dataset.extraModel;
+    const model = t.value.trim() || "auto";
+    store.update((s) => (s.settings.extraAIs = (s.settings.extraAIs || []).map((e) => (e.id === id ? { ...e, model } : e))), {
+      touchesData: false,
+    });
+    toast(model === "auto" ? "Model: auto" : `Model set to ${model}`);
     return;
   }
   if (t.dataset.setting) {
@@ -1765,6 +1895,43 @@ store.subscribe(() => {
 const initial = location.hash.slice(1);
 if (VIEWS[initial]) view = initial;
 applyBrand(brand);
+
+// ---------- staying on the newest version ----------
+const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
+let updatePending = false;
+
+/** Nothing in progress that a reload would interrupt. */
+const safeToReload = () => !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !$("#overlay").classList.contains("open");
+
+/** Reload into the newest version, keeping typed words. Returns true if the page is reloading. */
+function updateNow() {
+  const typed = $("#typed")?.value ?? ui.typedDraft;
+  return reloadForUpdate({ typed, view });
+}
+
+async function checkForUpdate() {
+  if (APP_VERSION === "dev") return;
+  const live = await liveVersion();
+  if (!live || live === APP_VERSION) return;
+  updatePending = true;
+  if (safeToReload()) updateNow();
+}
+document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && checkForUpdate());
+setInterval(checkForUpdate, 30 * 60 * 1000);
+// Vite reports a missing file from an older version here; reload instead of failing.
+window.addEventListener("vite:preloadError", (e) => {
+  if (updateNow()) e.preventDefault();
+});
+window.addEventListener("unhandledrejection", (e) => {
+  if (isStaleFileError(e.reason) && updateNow()) e.preventDefault();
+});
+
+{
+  // Back from an automatic update: put typed words back (the screen is kept by the address's #hash).
+  const { draft, updated } = takeDraft();
+  if (draft?.typed) ui.typedDraft = draft.typed;
+  if (updated) setTimeout(() => toast("✨ Updated to the latest version. If you were adding a photo or PDF, pick it again.", 6000), 600);
+}
 
 let booted = false;
 $("#view").innerHTML = `<section class="card center busy"><div class="spinner" aria-hidden="true"></div><p>Loading…</p></section>`;

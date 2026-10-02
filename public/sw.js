@@ -15,6 +15,7 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return; // never cache API calls
+  if (url.pathname.endsWith("/version.json")) return; // always ask the server which version is live
   if (e.request.mode === "navigate") {
     // Always fetch the page fresh (skip the browser's HTTP cache) so a new version shows up on the
     // very next open; fall back to the cached shell only when offline.

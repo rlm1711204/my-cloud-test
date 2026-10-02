@@ -5,16 +5,30 @@ import { LIST_SCHEMA, RESULT_SCHEMA, enrichInstruction, listInstruction, systemP
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 export const GEMINI_AUTO = "auto";
 // Used when the model list can't be fetched, and as extra fallbacks. Tried in order; free-tier Flash models.
-// Google retires older models for new accounts (2.5 in 2026), so the newest come first.
-const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
-// At most this many models per request, so a key that is out of quota fails fast.
+// The "-latest" aliases always point at Google's newest Flash, so they keep working when versions are retired
+// (2.5 was closed to new accounts in 2026). Named versions follow in case an alias is ever unavailable.
+const FALLBACK_MODELS = [
+  "gemini-flash-latest",
+  "gemini-flash-lite-latest",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+];
+// At most this many models per request (retired ones don't count against the second limit), so a key
+// that is out of quota hands over to the next key or service quickly.
 const MAX_MODEL_TRIES = 6;
+const MAX_QUOTA_TRIES = 3;
 
 export class GeminiError extends Error {
-  constructor(message, { status = 0, quota = false } = {}) {
+  /** badKey: the key itself was refused. modelGone: this model is retired or not open to the key. */
+  constructor(message, { status = 0, quota = false, badKey = false, modelGone = false } = {}) {
     super(message);
     this.status = status;
     this.quota = quota;
+    this.badKey = badKey;
+    this.modelGone = modelGone;
   }
 }
 
@@ -40,11 +54,12 @@ export function toGeminiSchema(schema) {
  * Special-purpose variants (image, audio, TTS, live, experimental) are skipped. Pure; unit-tested.
  */
 export function rankModels(models) {
-  const version = (id) => Number((/gemini-(\d+(?:\.\d+)?)/.exec(id) || [])[1] || 0);
+  // "-latest" aliases count as the newest version of all.
+  const version = (id) => (id.endsWith("-latest") ? Infinity : Number((/gemini-(\d+(?:\.\d+)?)/.exec(id) || [])[1] || 0));
   return models
     .filter((m) => (m.supportedGenerationMethods || ["generateContent"]).includes("generateContent"))
     .map((m) => String(m.name || "").replace(/^models\//, ""))
-    .filter((id) => /^gemini-[\d.]+-flash(-lite)?(-\d{3})?(-preview(-[\d-]+)?)?$/.test(id))
+    .filter((id) => /^gemini-([\d.]+-)?flash(-lite)?(-\d{3})?(-preview(-[\d-]+)?)?(-latest)?$/.test(id) && !/^gemini-flash(-lite)?$/.test(id))
     .sort(
       (a, b) =>
         Number(a.includes("-lite")) - Number(b.includes("-lite")) ||
@@ -87,7 +102,7 @@ export async function testKey(key) {
       return { ok: true, message: "Key works ✓" };
     }
     const err = await toError(res);
-    if (err.status === 400 || err.status === 401 || err.status === 403) badKeys.add(key);
+    if (err.badKey) badKeys.add(key);
     return { ok: err.quota, message: err.message };
   } catch {
     return { ok: true, message: "Saved — couldn't test it now (no internet?)." };
@@ -126,8 +141,9 @@ async function candidateModels(settings, key) {
           modelCache.set(key, ranked);
           lastRanked = ranked;
         }
-      } else if (res.status === 400 || res.status === 401 || res.status === 403) {
-        throw await toError(res);
+      } else {
+        const err = await toError(res);
+        if (err.badKey) throw err;
       }
     } catch (e) {
       if (e instanceof GeminiError) throw e;
@@ -156,19 +172,29 @@ async function toError(res) {
     /* not JSON */
   }
   if (res.status === 429) return new GeminiError("Gemini free limit reached for now.", { status: 429, quota: true });
-  if (res.status === 400 && /API key/i.test(msg)) return new GeminiError("Gemini API key is not valid. Check it in Settings.", { status: 400 });
+  if (res.status === 400 && /API key/i.test(msg)) {
+    return new GeminiError("Gemini API key is not valid. Check it in Settings.", { status: 400, badKey: true });
+  }
   if (res.status === 401) {
     return new GeminiError(
       /ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(msg)
         ? "Google rejected this key type for your account (a known Google issue with some new AQ. keys). Try a key from another Google account."
         : "Gemini key not accepted (401). Check the key or create a new one.",
-      { status: 401 },
+      { status: 401, badKey: true },
     );
   }
-  if (res.status === 403) return new GeminiError("Gemini refused this key (API not enabled or region not supported).", { status: 403 });
+  if (res.status === 403) {
+    return new GeminiError("Gemini refused this key (API not enabled or region not supported).", { status: 403, badKey: true });
+  }
+  if (res.status === 400 && /model/i.test(msg) && /not found|not supported|deprecat|unavailable|no longer|retired/i.test(msg)) {
+    // A model problem, not a key problem: skip this model, keep the key.
+    const err = new GeminiError("This Gemini model can't be used for this.", { status: 400, modelGone: true });
+    err.detail = msg;
+    return err;
+  }
   if (res.status >= 500) return new GeminiError("Gemini is busy right now.", { status: res.status });
   if (res.status === 404) {
-    const err = new GeminiError("This Gemini model isn't available to your account any more.", { status: 404 });
+    const err = new GeminiError("This Gemini model isn't available to your account any more.", { status: 404, modelGone: true });
     err.detail = msg;
     return err;
   }
@@ -198,6 +224,7 @@ export function readResponse(json) {
 
 async function runWithKey(settings, key, body, onProgress, label) {
   let lastErr;
+  let quotaHits = 0;
   const queue = await candidateModels(settings, key);
   const tried = new Set();
   for (let i = 0; i < queue.length && tried.size < MAX_MODEL_TRIES; i++) {
@@ -221,18 +248,22 @@ async function runWithKey(settings, key, body, onProgress, label) {
       return { words, model };
     }
     lastErr = await toError(res);
-    if (lastErr.status === 404) {
+    if (lastErr.modelGone) {
       // Retired or closed to new accounts: never try it again with this key, and try Google's suggestion next.
       if (!goneModels.has(key)) goneModels.set(key, new Set());
       goneModels.get(key).add(model);
       for (const m of suggestedModels(lastErr.detail, model).reverse()) if (!tried.has(m)) queue.splice(i + 1, 0, m);
       continue;
     }
-    // Quota or overload: try the next model; a bad key won't work on any model.
+    // Quota or overload: try the next model (each has its own free allowance); a bad key won't work on any model.
+    if (lastErr.quota && ++quotaHits >= MAX_QUOTA_TRIES) break;
     if (!(lastErr.quota || lastErr.status >= 500)) break;
   }
-  if (lastErr?.status === 404) {
-    throw new GeminiError("None of the Gemini models tried are open to this key. Set Settings → Gemini → Model to Auto, or try another key.", { status: 404 });
+  if (lastErr?.modelGone) {
+    throw new GeminiError("None of the Gemini models tried are open to this key. Set Settings → Gemini → Model to Auto, or try another key.", {
+      status: 404,
+      modelGone: true,
+    });
   }
   throw lastErr ?? new GeminiError("No Gemini model available.");
 }
@@ -265,9 +296,9 @@ async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
       if (e.quota) {
         anyQuota = true;
         keyRest.set(key, Date.now() + KEY_REST_MS);
-      } else if (e.status === 400 || e.status === 401 || e.status === 403) {
+      } else if (e.badKey) {
         badKeys.add(key);
-      } else if (e.status !== 404 && (!e.status || e.status < 500)) {
+      } else if (!e.modelGone && (!e.status || e.status < 500)) {
         throw e; // network or content problem: another key won't help
       }
       if (keys.length > 1) onProgress?.(`Gemini key ${i + 1}: ${e.message} Trying the next key…`);
@@ -304,7 +335,7 @@ async function runPicked(settings, key, n, parts, onProgress, schema) {
   } catch (e) {
     if (!(e instanceof GeminiError)) throw e;
     if (e.quota) keyRest.set(key, Date.now() + KEY_REST_MS);
-    else if (e.status === 400 || e.status === 401 || e.status === 403) badKeys.add(key);
+    else if (e.badKey) badKeys.add(key);
     const hint = e.quota ? "reached its free limit" : e.message.replace(/\.$/, "");
     throw new GeminiError(`Key ${n} ${e.quota ? hint : `failed: ${hint}`}. Choose another key (or Auto) on the Add screen.`, {
       status: e.status,

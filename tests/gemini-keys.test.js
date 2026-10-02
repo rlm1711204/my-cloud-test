@@ -143,3 +143,16 @@ describe("retired models (404 for new accounts)", () => {
     expect(res.words).toEqual([{ word: "abate" }]);
   });
 });
+
+describe("model problems never mark a key invalid", () => {
+  it("skips a model that answers 400 'not supported' and keeps the key usable", async () => {
+    const KEY = "MODEL_400_kkkkkkkkkkkkkkkk";
+    vi.stubGlobal("fetch", async (url, opts) => {
+      if (!opts?.method) return { ok: true, status: 200, json: async () => ({ models: [{ name: "models/gemini-9-flash" }] }) };
+      return /gemini-9-flash:/.test(url) ? fail(400, "Model gemini-9-flash is not supported for generateContent") : ok([{ word: "abate" }]);
+    });
+    const res = await geminiEnrich({ geminiModel: "auto", exam: "general", geminiKeys: [KEY] }, ["abate"], []);
+    expect(res.words).toEqual([{ word: "abate" }]);
+    expect(keyStatus(KEY).state).toBe("ok");
+  });
+});
