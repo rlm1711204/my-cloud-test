@@ -3,7 +3,7 @@
 import * as gs from "./lib/grammar-store.js";
 import { GRAMMAR_KINDS, makeGrammarQuestion } from "./lib/grammar-quiz.js";
 import { rulesFromFiles, rulesFromText, completeRule } from "./lib/grammar-ai.js";
-import { isBookId, loadRuleBook } from "./lib/rulebook.js";
+import { isAdvanced, isBookId, loadRuleBook } from "./lib/rulebook.js";
 import { TOPICS, borrowFromBook, findSimilarRule, makeRule, needsDetails, ruleKey, rulesToCSV, textToRules, SAME_RULE } from "./lib/rules.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import { review, stage, stats, streak } from "./lib/srs.js";
@@ -28,6 +28,7 @@ export function createGrammarUI(ctx) {
     topic: "all",
     tab: "book", // Rules screen: "mine" | "book"
     filter: "all",
+    level: "all", // Rules list filter: "all" | "basic" | "advanced"
   };
 
   const prefs = () => gs.get().prefs;
@@ -36,6 +37,10 @@ export function createGrammarUI(ctx) {
     gui.busy = text;
     if (view() === "g-add") render();
   };
+  const levelSelect = () =>
+    `<select data-gpref="bookLevel" aria-label="Rule Book level">${Object.entries(gs.LEVELS)
+      .map(([k, l]) => `<option value="${k}" ${prefs().bookLevel === k ? "selected" : ""}>${l}</option>`)
+      .join("")}</select>`;
   const sourceSelect = (key, value, extra = "") =>
     `<select data-gpref="${key}" ${extra}>${Object.entries(gs.SOURCES)
       .map(([k, l]) => `<option value="${k}" ${value === k ? "selected" : ""}>${l} (${gs.rulesFor(k).length})</option>`)
@@ -68,7 +73,9 @@ export function createGrammarUI(ctx) {
 
   const ruleHead = (r, { big = false } = {}) => `
     <div class="rule-head">
-      <span class="badge topic">${esc(r.topic)}</span>${r.book ? ` <span class="badge bank">Rule Book</span>` : ""}${r.starred ? ' <span class="star">★</span>' : ""}
+      <span class="badge topic">${esc(r.topic)}</span>${r.book ? ` <span class="badge bank">Rule Book</span>` : ""}${
+        isAdvanced(r) ? ` <span class="badge adv" title="Advanced — RBI Grade B level">⭐ Advanced</span>` : ""
+      }${r.starred ? ' <span class="star">★</span>' : ""}
       <h2 class="${big ? "big" : ""}">${esc(r.title)}</h2>
     </div>`;
 
@@ -103,7 +110,10 @@ export function createGrammarUI(ctx) {
         <div><p class="eyebrow">${esc(date)}</p><h1>Today’s grammar</h1></div>
         <div class="streak" title="Days in a row with grammar revision">🔥 ${streak(st.activity)}</div>
       </section>
-      <label class="source-line">Rules from ${sourceSelect("dailySource", source)}</label>
+      <div class="source-line">
+        <label>Rules from ${sourceSelect("dailySource", source)}</label>
+        ${source !== "mine" ? `<label>Level ${levelSelect()}</label>` : ""}
+      </div>
       <section class="stats">
         <div><b>${s.total}</b><span>rules</span></div>
         <div><b>${s.due}</b><span>due</span></div>
@@ -324,6 +334,7 @@ export function createGrammarUI(ctx) {
       in later sessions until you get them right twice in a row.</p>
       <article class="card">
         <label class="field">Practise rules from ${sourceSelect("practiceSource", source)}</label>
+        ${source !== "mine" ? `<label class="field">Rule Book level ${levelSelect()}</label>` : ""}
         ${
           pool.length >= 4
             ? `<p class="small">Round ${cov.round}: <b>${cov.covered}</b> of ${cov.total} rules covered</p>
@@ -444,11 +455,12 @@ export function createGrammarUI(ctx) {
   // ---------- Rules list ----------
   function viewRules() {
     const bookTab = gui.tab === "book";
-    const all = bookTab ? gs.rulesFor("book") : gs.liveRules();
+    const all = bookTab ? gs.bookRules() : gs.liveRules();
     const term = gui.search.trim().toLowerCase();
     const topics = [...new Set(all.map((r) => r.topic))].sort((a, b) => TOPICS.indexOf(a) - TOPICS.indexOf(b));
     const list = all.filter((r) => {
       if (gui.topic !== "all" && r.topic !== gui.topic) return false;
+      if (gui.level !== "all" && !gs.levelOk(r, gui.level)) return false;
       if (gui.filter === "starred" && !r.starred) return false;
       if (["new", "learning", "mastered"].includes(gui.filter) && stage(r) !== gui.filter) return false;
       if (gui.filter === "weak" && !gs.get().practice.weak[r.id]?.need) return false;
@@ -458,7 +470,7 @@ export function createGrammarUI(ctx) {
     return `
       <div class="seg" role="tablist">
         <button type="button" class="${bookTab ? "" : "active"}" data-action="g-rules-tab" data-tab="mine">My rules (${gs.liveRules().length})</button>
-        <button type="button" class="${bookTab ? "active" : ""}" data-action="g-rules-tab" data-tab="book">📗 Rule Book (${gs.rulesFor("book").length})</button>
+        <button type="button" class="${bookTab ? "active" : ""}" data-action="g-rules-tab" data-tab="book">📗 Rule Book (${gs.bookRules().length})</button>
       </div>
       <div class="row between">
         <h1>${bookTab ? "Rule Book" : "My rules"}</h1>
@@ -484,13 +496,18 @@ export function createGrammarUI(ctx) {
             .join("")}</select>
         </label>
       </div>
+      <label class="field">Level
+        <select data-gfilter="level">${Object.entries(gs.LEVELS)
+          .map(([k, l]) => `<option value="${k}" ${gui.level === k ? "selected" : ""}>${l} (${all.filter((r) => gs.levelOk(r, k)).length})</option>`)
+          .join("")}</select>
+      </label>
       ${
         list.length
           ? `<ul class="word-list rule-list">${list
               .slice(0, LIST_SHOWN)
               .map(
                 (r) => `<li data-action="g-open" data-id="${esc(r.id)}">
-                  <div><b>${esc(r.title)}</b>${r.starred ? ' <span class="star">★</span>' : ""}<span class="muted small block">${esc(r.topic)}${needsDetails(r) ? " · needs details" : ""}</span></div>
+                  <div><b>${esc(r.title)}</b>${isAdvanced(r) ? ' <span class="adv-mark" title="Advanced">⭐</span>' : ""}${r.starred ? ' <span class="star">★</span>' : ""}<span class="muted small block">${esc(r.topic)}${needsDetails(r) ? " · needs details" : ""}</span></div>
                   <span class="badge ${stage(r)}">${STAGE_LABEL[stage(r)]}</span>
                 </li>`,
               )
@@ -746,6 +763,7 @@ export function createGrammarUI(ctx) {
     "g-rules-tab": (el) => {
       gui.tab = el.dataset.tab;
       gui.topic = "all";
+      gui.level = el.dataset.level || "all";
       if (view() !== "g-rules") go("g-rules");
       else render();
     },
@@ -912,7 +930,10 @@ export function createGrammarUI(ctx) {
             .map((n) => `<option value="${n}" ${Number(p.dailyCount) === n ? "selected" : ""}>${n}</option>`)
             .join("")}</select>
         </label>
-        <p class="muted small">The built-in Rule Book has ${gs.rulesFor("book").length} exam rules. Choose where Today's rules come from on the Grammar Today screen.</p>
+        <label class="field">Rule Book level for Today and Practice ${levelSelect()}</label>
+        <p class="muted small">The built-in Rule Book has ${gs.bookRules().length} exam rules — ${
+          gs.bookRules().filter(isAdvanced).length
+        } of them advanced (RBI Grade B level), most with an exception note. Your own rules are always included.</p>
       </article>`;
   }
 

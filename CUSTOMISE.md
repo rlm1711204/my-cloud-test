@@ -94,13 +94,15 @@ The Rule Book lives in three plain-text files: `src/data/rules1.js`, `rules2.js`
 Open one on GitHub, tap the ✏️ pencil, and add a rule anywhere between the two back-ticks, like this:
 
 ```
-# 'Despite' and 'in spite of'
-R: 'Despite' and 'in spite of' are followed by a noun or -ing form, never by 'of' after 'despite'.
-E: Despite the rain, we went out.
-X: Despite of the rain, we went out. => Despite the rain, we went out.
-W: 'Despite' never takes 'of'.
-T: A favourite of SSC error spotting.
-Q: ___ being tired, he kept working. | *Despite; Despite of; Inspite; In spite
+# 'Amount' and 'number'
+R: Use 'amount' with things you cannot count and 'number' with things you can count.
+N: 'A large amount of money' but 'a large number of notes' — money is uncountable, notes are countable.
+E: A large number of people attended the rally.
+X: A large amount of students failed. => A large number of students failed.
+W: Students can be counted, so 'number'.
+T: Asked in RBI and SSC error spotting.
+Q: The bank received a huge ___ of applications. | *number; amount; deal; quantity
+D: 4
 ```
 
 | Letter | Means |
@@ -113,6 +115,7 @@ Q: ___ being tired, he kept working. | *Despite; Despite of; Inspite; In spite
 | `W:` | why (explains the `X:` line just above it) |
 | `N:` | an exception or note |
 | `T:` | an exam tip |
+| `D:` | the level, 1–5 (optional). `D: 4` or `D: 5` marks the rule as **advanced** (RBI Grade B level), so it appears under the Advanced level filter |
 | `Q:` | a question: `question with ___ | option; *right option; option` — put `*` before the one right answer |
 
 Only `#` and `R:` are required; the rest are optional but make practice better (`X:` lines power the

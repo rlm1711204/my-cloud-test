@@ -4,12 +4,14 @@
 //   R: the rule         N: note / exception        T: exam tip
 //   E: correct example  X: wrong => right          W: why (for the X line above)
 //   Q: question with ___ | option; *right option; option; option
+//   D: level 1–5 (optional; 4–5 = advanced, RBI Grade B level)
 // You can add rules here yourself on GitHub — keep the same letters and the app picks them up.
 export default `
 ## Subject–Verb Agreement
 
 # Singular subject, singular verb
 R: A singular subject takes a singular verb and a plural subject takes a plural verb. Find the real subject first; ignore words that come between the subject and the verb.
+N: Exception: after a fraction, a percentage, or 'all/most/some/half of', the noun after 'of' decides the verb: 'Half of the mangoes are rotten.'
 E: The quality of the mangoes was not good.
 X: The quality of the mangoes were not good. => The quality of the mangoes was not good.
 W: The subject is 'quality' (singular), not 'mangoes'.
@@ -19,6 +21,7 @@ Q: The cost of all these articles ___ risen. | *has; have; are; were
 
 # Each, every, either, neither take a singular verb
 R: 'Each', 'every', 'either', 'neither', 'everyone', 'everybody', 'no one', 'nobody', 'anyone' and 'someone' are singular and take a singular verb and singular pronouns.
+N: 'Each' placed AFTER a plural subject does not change the verb: 'The boys each have a pen.' And 'every' with a number is fine: 'every two hours', 'every few days'.
 E: Each of the boys has brought his book.
 E: Every man and every woman was given a ticket.
 X: Each of the students have submitted their assignment. => Each of the students has submitted his or her assignment.
@@ -29,6 +32,7 @@ Q: Every boy and girl ___ present in the hall. | *was; were; are; have been
 
 # Two subjects joined by 'and'
 R: Two subjects joined by 'and' take a plural verb. But if both nouns refer to the same person or thing, or form one idea, the verb is singular.
+N: Also singular when 'each' or 'every' comes before the nouns ('Every boy and girl was present'). The proverb 'Time and tide wait for no man' is plural, because time and tide are two things.
 E: Ram and Shyam are brothers.
 E: The secretary and treasurer has been arrested.
 E: Bread and butter is his favourite breakfast.
@@ -40,6 +44,7 @@ Q: The collector and the magistrate ___ arrived. | *have; has; is; was
 
 # Either…or, neither…nor: verb agrees with the nearer subject
 R: When subjects are joined by 'either…or', 'neither…nor', 'not only…but also' or 'or', the verb agrees with the subject nearer to it.
+N: With pronouns of different persons, the verb still follows the nearer one: 'Either you or I am wrong.' Putting the plural subject last sounds better: 'Neither the captain nor the players were…'
 E: Neither the teacher nor the students were present.
 E: Either you or he is to blame.
 X: Neither Ram nor his friends was there. => Neither Ram nor his friends were there.
@@ -50,6 +55,7 @@ Q: Either the manager or his assistants ___ the files. | *have; has; is; was
 
 # 'As well as', 'with', 'along with', 'together with', 'besides'
 R: When two subjects are joined by 'as well as', 'with', 'along with', 'together with', 'besides', 'in addition to' or 'like', the verb agrees with the FIRST subject.
+N: The same applies to 'no less than', 'rather than', 'and not', 'accompanied by', 'except' and 'including': 'The teacher, and not the students, was blamed.'
 E: The captain, along with his players, was honoured.
 E: He as well as his brothers is coming.
 X: The minister, together with his advisers, are expected today. => The minister, together with his advisers, is expected today.
@@ -60,6 +66,7 @@ Q: My friends as well as I ___ invited. | *were; was; am; has been
 
 # 'The number of' vs 'a number of'
 R: 'A number of' means 'many' and takes a plural verb. 'The number of' refers to the number itself and takes a singular verb.
+N: Likewise 'a total of' + plural noun takes a plural verb ('A total of 50 people were hired'), but 'the total' is singular.
 E: A number of students were absent.
 E: The number of students is increasing.
 X: The number of accidents are rising. => The number of accidents is rising.
@@ -69,6 +76,7 @@ Q: The number of applicants this year ___ very high. | *is; are; were; have been
 
 # 'One of the' + plural noun + singular verb
 R: 'One of the + plural noun' takes a singular verb, because the subject is 'one'. But in 'one of those who / that…', the relative clause refers to the plural noun and takes a plural verb.
+N: With 'the only one of … who', the relative clause refers to 'one', so it is singular: 'He is the only one of the boys who has passed.'
 E: One of my friends is a doctor.
 E: He is one of those people who never give up.
 X: One of the boys were absent. => One of the boys was absent.
@@ -78,6 +86,7 @@ Q: She is one of the best players who ___ ever played for India. | *have; has; w
 
 # Collective nouns
 R: A collective noun (team, jury, committee, family, crowd) takes a singular verb when the group acts as one unit, and a plural verb when the members act separately or disagree.
+N: 'Police', 'cattle', 'people' and 'clergy' are always plural (see 'Nouns always plural'). 'Staff' is usually plural when its members are meant: 'The staff are on strike.'
 E: The jury has given its verdict.
 E: The jury were divided in their opinions.
 X: The committee have submitted its report. => The committee has submitted its report.
@@ -98,6 +107,7 @@ Q: No news ___ good news. | *is; are; were; be
 
 # Nouns always plural
 R: Some nouns are always plural and take a plural verb: scissors, trousers, spectacles, tongs, riches, thanks, premises, alms, cattle, police, people, clergy, gentry, poultry.
+N: 'Mathematics', 'news' and 'innings' look plural but are singular. 'Means' and 'headquarters' can be singular or plural; 'scissors' and 'trousers' become singular after 'a pair of'.
 E: The police have arrested the thief.
 E: The cattle are grazing in the field.
 X: The police has arrested the culprit. => The police have arrested the culprit.
@@ -108,6 +118,7 @@ Q: A pair of scissors ___ on the table. | *is; are; were; have been
 
 # Amounts of money, time, distance and weight
 R: An amount of money, a period of time, a distance or a weight thought of as one whole takes a singular verb.
+N: When the separate units are meant, the verb is plural: 'Ten rupees were found scattered on the floor.' 'Twenty years have passed since we met' is also accepted.
 E: Ten thousand rupees is a large sum.
 E: Five kilometres is too far to walk.
 X: Twenty years are a long time. => Twenty years is a long time.
@@ -117,6 +128,7 @@ Q: Three hours ___ too short for this paper. | *is; are; were; have been
 
 # 'There is' / 'there are'
 R: After 'there', the verb agrees with the noun that follows it.
+N: With a list, the verb usually agrees with the nearest noun: 'There is a pen and two pencils' but 'There are two pencils and a pen.'
 E: There are many reasons for his failure.
 E: There is a pen and two pencils on the desk.
 X: There is many problems in this plan. => There are many problems in this plan.
@@ -126,6 +138,7 @@ Q: There ___ a box of chocolates on the table. | *is; are; were; have been
 
 # 'Many a' + singular noun + singular verb
 R: 'Many a' is followed by a singular noun and a singular verb. 'A great many' is followed by a plural noun and a plural verb.
+N: The pronoun stays singular too: 'Many a student has lost his way.'
 E: Many a man has fallen into this trap.
 E: A great many students have joined the course.
 X: Many a soldiers were killed in the war. => Many a soldier was killed in the war.
@@ -135,6 +148,7 @@ Q: A great many people ___ attended the meeting. | *have; has; is; was
 
 # Relative pronoun agrees with its antecedent
 R: The verb after 'who', 'which' or 'that' agrees with the noun or pronoun the relative pronoun refers to.
+N: After 'one of the + plural noun + who', the verb is plural because 'who' refers to the plural noun: 'He is one of the players who have scored centuries.'
 E: It is I who am to blame.
 E: He is one of the officers who have been transferred.
 X: It is you who is responsible. => It is you who are responsible.
@@ -144,6 +158,7 @@ Q: This is the boy who ___ won the prize. | *has; have; are; were
 
 # Percentage, fractions, 'most', 'all', 'some', 'half'
 R: With fractions, percentages and words like 'all', 'most', 'some', 'half', 'none', 'the rest', the verb agrees with the noun after 'of': singular with an uncountable or singular noun, plural with a plural noun.
+N: 'None of' + plural noun is seen with both verbs; formal exams prefer singular: 'None of the answers is correct.'
 E: Half of the cake has been eaten.
 E: Half of the students have passed.
 E: Forty per cent of the land is barren.
@@ -156,6 +171,7 @@ Q: Some of the books ___ torn. | *are; is; was; has been
 
 # Uncountable nouns have no plural
 R: Uncountable nouns are not used with 'a/an' and have no plural form: information, advice, furniture, luggage, baggage, equipment, machinery, scenery, poetry, stationery, hair (all of it), news, knowledge, evidence, work, homework.
+N: Some become countable with a different meaning: 'works' (books or factories), 'papers' (documents), 'a wood' (a forest), 'hairs' (separate strands: 'two hairs in my soup').
 E: He gave me some useful advice.
 E: All the furniture was sold.
 X: She gave me many informations. => She gave me a lot of information.
@@ -166,6 +182,7 @@ Q: The ___ of this valley is beautiful. | *scenery; sceneries; scenaries; a scen
 
 # Nouns with the same singular and plural form
 R: Some nouns have the same form in singular and plural: sheep, deer, swine, series, species, aircraft, crossroads, means, headquarters. The verb shows the number.
+N: 'Fish' has the plural 'fishes' for different species. 'A means' and 'a series' are singular; several means or series are plural.
 E: A series of lectures was arranged.
 E: Several aircraft were on the runway.
 X: He saw three deers in the forest. => He saw three deer in the forest.
@@ -184,6 +201,7 @@ Q: She bought two ___ bananas. | *dozen; dozens; dozens of; dozen of
 
 # 'People' and 'peoples'
 R: 'People' (persons) is plural. 'Peoples' means nations or ethnic groups.
+N: 'Persons' is the formal or legal plural of 'person': 'Not more than four persons are allowed.'
 E: Many people were waiting outside.
 E: The peoples of Asia have many cultures.
 X: The people is unhappy with the new rules. => The people are unhappy with the new rules.
@@ -193,6 +211,7 @@ Q: The ___ of Europe speak many languages. | *peoples; people; peoples'; peopls
 
 # Possessive case ('s) — mainly for living things
 R: The apostrophe-s possessive is used mainly for people and animals. For lifeless things use 'of': the leg of the table, not the table's leg. Exceptions: time, distance, personified things (a day's work, a mile's walk, the sun's rays, the nation's pride).
+N: Time, distance, weight and value also take 's: 'a stone's throw', 'a rupee's worth', 'two weeks' notice' (a plural ending in -s takes only the apostrophe).
 E: The legs of the table are broken.
 E: He took a week's leave.
 X: The book's cover is torn. => The cover of the book is torn.
@@ -203,6 +222,7 @@ Q: This is ___ (one shop owned by both). | *Ram and Shyam's shop; Ram's and Shya
 
 # 'Each other' and 'one another'
 R: Traditionally, 'each other' is used for two people and 'one another' for more than two. (Modern English often mixes them, but exams follow the traditional rule.)
+N: The possessives are 'each other's' and 'one another's' — never 'each others''.
 E: The two brothers love each other.
 E: The members of the team helped one another.
 X: The five friends talked to each other. => The five friends talked to one another.
@@ -214,6 +234,7 @@ Q: All the students in the class help ___. | *one another; each other; themselve
 
 # Pronoun after 'than' and 'as'
 R: After 'than' or 'as' in a comparison, use the pronoun form the hidden verb needs: 'He is taller than I (am).' 'I like you more than him' means 'more than I like him'.
+N: Use the object form only when the pronoun is really the object: 'I like him more than her' means 'more than I like her'.
 E: She sings better than I.
 E: He is as clever as she.
 X: My brother is taller than me. => My brother is taller than I.
@@ -224,6 +245,7 @@ Q: She is as intelligent as ___. | *he; him; his; himself
 
 # 'Between you and me' — object pronoun after a preposition
 R: After a preposition, use the object form of the pronoun: me, him, her, us, them, whom.
+N: The same after 'let' and after 'but/except' meaning 'except': 'Let you and me go.' 'Everyone came but him.'
 E: This is between you and me.
 E: The letter was addressed to him and me.
 X: Let this remain between you and I. => Let this remain between you and me.
@@ -233,6 +255,7 @@ Q: He sent invitations to my wife and ___. | *me; I; myself; mine
 
 # Order of personal pronouns
 R: When pronouns come together: second person, then third, then first (2-3-1: 'you, he and I') for good actions. When admitting a fault, the first person comes first (1-2-3: 'I, you and he are to blame').
+N: In the plural, the order is first, second, third: 'We, you and they must work together.'
 E: You, he and I will go together.
 E: I, you and he are guilty.
 X: I, you and he will attend the function. => You, he and I will attend the function.
@@ -252,6 +275,7 @@ Q: You should avail ___ of this opportunity. | *yourself; you; your; yours
 
 # 'Who' and 'whom'
 R: 'Who' is a subject (does the action); 'whom' is an object (receives it, or follows a preposition).
+N: 'Whoever/whomever' follow the same test inside their own clause: 'Give it to whoever needs it' — 'whoever' is the subject of 'needs'.
 E: The man who came yesterday is my uncle.
 E: The man whom you met is my uncle.
 X: Whom do you think is the best candidate? => Who do you think is the best candidate?
@@ -262,6 +286,7 @@ Q: The boy ___ won the race is my cousin. | *who; whom; which; whose
 
 # Pronoun must agree with its noun
 R: A pronoun agrees with the noun it stands for in number, gender and person. 'One' is followed by 'one's', not 'his'.
+N: A collective noun acting as one body takes 'it/its': 'The committee gave its report.'
 E: One should keep one's promises.
 E: Every student must bring his or her own book.
 X: One must do his duty. => One must do one's duty.
@@ -271,6 +296,7 @@ Q: Each of the girls brought ___ own lunch. | *her; their; his; theirs
 
 # 'Who', 'which', 'that'
 R: Use 'who' for people, 'which' for things and animals, and 'that' for both. 'That' is preferred after superlatives, 'all', 'same', 'only', 'any', 'nothing', and after a mix of people and things.
+N: 'That' is not used after a comma (a non-defining clause): 'My car, which is red, …' — never ', that is red'.
 E: This is the best book that I have read.
 E: All that glitters is not gold.
 E: The man and his dog that were here have left.
@@ -281,6 +307,7 @@ Q: The car ___ he bought is red. | *which; who; whom; whose
 
 # 'It is I' — subject form after 'be'
 R: After forms of 'be' (is, am, are, was, were), formal English uses the subject form of the pronoun: 'It is I', 'It was he'.
+N: 'It's me' is normal in everyday speech; exams follow the formal rule.
 E: It was she who called.
 X: It was him who broke the glass. => It was he who broke the glass.
 W: After 'was', use the subject form 'he'.
@@ -297,6 +324,7 @@ Q: Choose the correct sentence. | *My brother is a lawyer.; My brother he is a l
 
 # 'Either' and 'neither' for two; 'any' and 'none' for more
 R: 'Either' and 'neither' are used for two people or things. For more than two, use 'any', 'none' or 'no one'.
+N: 'Each' can be used for two or more; 'every' only for three or more.
 E: Either of the two roads leads to the station.
 E: None of the five answers is correct.
 X: Neither of the three boys came. => None of the three boys came.
@@ -308,6 +336,7 @@ Q: You may take ___ of the two books. | *either; any; none; all
 
 # 'A' or 'an' depends on sound, not spelling
 R: Use 'a' before a consonant sound and 'an' before a vowel sound — it's the first SOUND that matters, not the letter.
+N: Abbreviations follow the sound of the first letter: 'an MBA', 'an SP', 'an NGO', but 'a UPSC exam' (yoo) and 'a one-rupee coin' (wun).
 E: an hour, an honest man, an MLA, an X-ray
 E: a university, a European, a one-day match, a useful book
 X: He is a honest officer. => He is an honest officer.
@@ -327,6 +356,7 @@ Q: He reads ___ Hindu every day. | *The; A; An; no article
 
 # No article before uncountable and plural nouns in a general sense
 R: Don't use an article before uncountable or plural nouns used in a general sense: 'Honesty is the best policy', 'Books are our friends'. Use 'the' only when they are made specific.
+N: Use 'a' when an uncountable noun is described as a kind: 'a good education', 'a strong sense of duty'.
 E: Gold is a precious metal.
 E: The gold in this ring is pure.
 X: The honesty is the best policy. => Honesty is the best policy.
@@ -336,6 +366,7 @@ Q: ___ water in this well is not fit to drink. | *The; A; An; (no article)
 
 # No article before meals, games, languages and institutions used for their purpose
 R: No article before names of meals (breakfast, lunch), games (cricket), languages (English), and school, college, church, hospital, prison, bed when used for their main purpose.
+N: Use 'the' for a particular meal or game: 'The dinner we had was superb.' 'The cricket match was exciting.'
 E: He goes to school every day.
 E: We had lunch at noon.
 E: She went to the school to meet the principal.
@@ -357,6 +388,7 @@ Q: I know ___ people in this city, so I can ask for help. | *a few; few; little;
 
 # 'The' with adjectives for a whole class
 R: 'The + adjective' stands for a whole class of people and takes a plural verb: the rich, the poor, the young, the old, the blind.
+N: For one person, add a noun: 'The poor man was helped' — never 'The poor was helped'.
 E: The rich are not always happy.
 X: The poor is often neglected. => The poor are often neglected.
 W: 'The poor' means poor people (plural).
@@ -386,6 +418,7 @@ Q: Mount Everest is ___ peak in the world. | *the highest; higher; the higher; m
 
 # No double comparatives or superlatives
 R: Never use 'more' or 'most' with a word that already has -er or -est.
+N: 'Lesser' is a correct exception, used before a noun: 'the lesser evil', 'a lesser-known writer'. 'Worser' is never correct.
 E: She is more intelligent than her sister.
 X: This is the most cheapest shop. => This is the cheapest shop.
 W: 'Cheapest' is already a superlative.
@@ -394,6 +427,7 @@ Q: This is ___ book I have ever read. | *the best; the most best; the most good;
 
 # Latin comparatives take 'to', not 'than'
 R: Adjectives ending in -or (superior, inferior, senior, junior, prior, anterior, posterior, preferable) are followed by 'to', not 'than', and never by 'more'.
+N: 'Major', 'minor', 'interior', 'exterior' and 'ulterior' are Latin too but are not used to compare, so they take neither 'than' nor 'to'.
 E: He is senior to me.
 E: Death is preferable to dishonour.
 X: This cloth is superior than that. => This cloth is superior to that.
@@ -404,6 +438,7 @@ Q: I prefer tea ___ coffee. | *to; than; over than; from
 
 # Absolute adjectives have no degrees
 R: Adjectives with an absolute meaning have no comparative or superlative: unique, perfect, ideal, complete, entire, round, square, excellent, extreme, chief, universal, infinite.
+N: 'More nearly perfect' and 'almost unique' are accepted, because they mean 'closer to' the absolute.
 E: This painting is unique.
 X: This is the most unique idea. => This is a unique idea.
 W: 'Unique' means one of a kind — it can't be more or most.
@@ -420,6 +455,7 @@ Q: The roads of Chandigarh are wider than ___ Delhi. | *those of; that of; of; t
 
 # 'Other' or 'else' when comparing within a group
 R: When a comparative compares one member with the rest of its own group, add 'other' or 'else' so it isn't compared with itself.
+N: No 'other' is needed when the thing is outside the group: 'Delhi is bigger than any city in Nepal.'
 E: He is taller than any other boy in the class.
 E: Rama is wiser than anyone else here.
 X: Delhi is bigger than any city in India. => Delhi is bigger than any other city in India.
@@ -429,6 +465,7 @@ Q: She is cleverer than anyone ___ in her family. | *else; other; another; more
 
 # 'Elder/eldest' and 'older/oldest'
 R: 'Elder' and 'eldest' are for members of the same family and are not followed by 'than'. 'Older' and 'oldest' are for people and things in general and can take 'than'.
+N: 'Elder' is also a noun: 'Respect your elders.'
 E: My elder brother is a doctor.
 E: He is older than me.
 X: He is elder than his sister. => He is older than his sister.
@@ -438,6 +475,7 @@ Q: This building is ___ than that one. | *older; elder; eldest; more elder
 
 # 'Less' and 'fewer'
 R: 'Fewer' is used with countable nouns (fewer books); 'less' with uncountable nouns (less sugar).
+N: 'Less' is used with numbers that are amounts of money, time, distance or weight: 'less than ten rupees', 'less than 5 km'.
 E: There were fewer accidents this year.
 E: Use less salt.
 X: There are less students in the class today. => There are fewer students in the class today.

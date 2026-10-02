@@ -31,7 +31,7 @@ Grammar works like vocabulary, but for rules:
 |---|---|
 | 📷 **Add rules** | Scan a grammar book page, upload screenshots/PDFs, or type notes. With AI, every rule becomes a full card; without AI, your text is split into rules and matched with the Rule Book, which lends its examples and questions |
 | 🗂️ **Rule card** | The rule in simple words, a one-line Hindi summary, correct examples, common mistakes (✗ wrong → ✓ right, with why), exceptions and an exam tip |
-| 📗 **Built-in Rule Book** | 105 exam rules in 17 topics (subject–verb agreement, articles, tenses, prepositions, narration, voice, conditionals…), each with a mistake and 2 questions. It is written in plain text you can extend — see [CUSTOMISE.md](CUSTOMISE.md) |
+| 📗 **Built-in Rule Book** | 164 exam rules in 17 topics (subject–verb agreement, articles, tenses, prepositions, narration, voice, conditionals…), each with a common mistake and 2 questions, and most with an **exception note**. **59 are advanced, RBI Grade B–level rules** (inversion, 'whoever/whomever', mixed and inverted conditionals, 'comprise', 'due to' vs 'owing to', subjunctive phrases…). Choose **All / Basic / Advanced** for Today and Practice. Written in plain text you can extend — see [CUSTOMISE.md](CUSTOMISE.md) |
 | ☀️ **Today** | Rule of the Day and N rules to revise, with spaced repetition (rules you forget come back tomorrow) |
 | 🎯 **Practice** | Fill the blank · Which sentence is correct? · Right or wrong? (error spotting) · Which rule does this break? · Recall the rule. Every rule is covered before any repeats; wrong answers come back until right twice in a row |
 | 🔁 **No duplicates** | A rule you already have is recognised even when it is worded differently |
@@ -140,7 +140,7 @@ src/
   lib/grammar-ai.js  Grammar prompts: read rules from material, then write full rule cards
   lib/grammar-quiz.js Grammar question types, built from each rule's own examples and mistakes
   lib/rules.js       Rule records, duplicate detection, Rule Book matching, free-mode text splitting
-  lib/rulebook.js    Rule Book parser + checker (data in src/data/rules1-3.js)
+  lib/rulebook.js    Rule Book parser + checker (data in src/data/rules1-5.js; 4-5 are the advanced rules)
   lib/update.js      Reloads an open app into the newest version, keeping typed words
   lib/ai.js          Claude API + the prompts/card schema shared by both AI providers
   lib/extract.js     Image downscaling, PDF text layer (pdf.js), on-device OCR (Tesseract) for offline mode

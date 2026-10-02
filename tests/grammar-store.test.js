@@ -72,6 +72,23 @@ describe("grammar store", () => {
     expect(g.todaysPlan().wotd).toBe(plan.wotd); // stable through the day
   });
 
+  it("filters the Rule Book by level for Today and Practice, but keeps own rules and the whole book browsable", () => {
+    g.addRules([{ title: "My own basic rule", rule: "Something simple to remember here." }]);
+    const all = g.rulesFor("book").length;
+    g.update((s) => (s.prefs.bookLevel = "advanced"));
+    const adv = g.rulesFor("book");
+    expect(adv.length).toBeGreaterThanOrEqual(55);
+    expect(adv.length).toBeLessThan(all);
+    expect(adv.every((r) => r.difficulty >= 4)).toBe(true);
+    expect(g.rulesFor("mixed").some((r) => r.title === "My own basic rule")).toBe(true);
+    expect(g.bookRules().length).toBe(all);
+    const plan = g.todaysPlan();
+    expect([plan.wotd, ...plan.ids].map(g.byId).filter((r) => r.book).every((r) => r.difficulty >= 4)).toBe(true);
+    g.update((s) => (s.prefs.bookLevel = "basic"));
+    expect(g.rulesFor("book").every((r) => r.difficulty < 4)).toBe(true);
+    expect(g.todaysPlan().level).toBe("basic"); // the plan rebuilds when the level changes
+  });
+
   it("restores preferences from a backup file only when asked", () => {
     g.update((s) => (s.prefs.dailyCount = 9));
     const backup = JSON.parse(JSON.stringify(g.exportData()));

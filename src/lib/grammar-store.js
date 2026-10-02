@@ -3,7 +3,7 @@
 import { emptyPractice, mergePractice } from "./practice.js";
 import { buildDailyPlan } from "./srs.js";
 import { todayISO } from "./words.js";
-import { BOOK_PREFIX, bookRecord, isBookId, ruleBookLoaded } from "./rulebook.js";
+import { BOOK_PREFIX, bookRecord, isAdvanced, isBookId, ruleBookLoaded } from "./rulebook.js";
 import { SAME_RULE, findSimilarRule, makeRule, mergeRuleLists, ruleKey } from "./rules.js";
 
 const KEY = "vv.grammar.v1";
@@ -11,6 +11,8 @@ export const BACKUP_APP = "VocabVault-Grammar";
 export const DATA_VERSION = 1; // bump with a migration in load() if the stored shape ever changes
 
 export const SOURCES = { mine: "My rules", book: "Rule Book", mixed: "Mixed" };
+/** Which Rule Book rules Today and Practice use (the learner's own rules are always included). */
+export const LEVELS = { all: "All levels", basic: "Basic", advanced: "Advanced (RBI Grade B)" };
 
 /** Grammar study preferences. They travel with the grammar backup (never API keys). */
 export const DEFAULT_PREFS = {
@@ -19,6 +21,7 @@ export const DEFAULT_PREFS = {
   practiceSource: "mixed",
   practiceKind: "mixed",
   practiceSize: 15,
+  bookLevel: "all", // "all" | "basic" | "advanced"
 };
 
 function blank() {
@@ -78,12 +81,20 @@ export const liveRules = () => state.rules.filter((r) => !r.deleted);
 export const bookRules = () => (ruleBookLoaded() || []).map((e, i) => bookRecord(e, state.book[e.id], i));
 
 /** Rules for a source: "mine", "book" or "mixed" (a learner's rule replaces the Rule Book rule it came from). */
+export const levelOk = (r, level = state.prefs.bookLevel) =>
+  level === "advanced" ? isAdvanced(r) : level === "basic" ? !isAdvanced(r) : true;
+
+/**
+ * Rules for a source: "mine", "book" or "mixed" (a learner's rule replaces the Rule Book rule it came from).
+ * Rule Book rules are filtered by the chosen level; the whole book is always browsable via bookRules().
+ */
 export function rulesFor(source) {
   if (source === "mine") return liveRules();
-  if (source === "book") return bookRules();
+  const book = bookRules().filter((r) => levelOk(r));
+  if (source === "book") return book;
   const mine = liveRules();
   const covered = new Set(mine.flatMap((r) => [r.bookId, ruleKey(r.title)]).filter(Boolean));
-  return [...mine, ...bookRules().filter((b) => !covered.has(b.id) && !covered.has(ruleKey(b.title)))];
+  return [...mine, ...book.filter((b) => !covered.has(b.id) && !covered.has(ruleKey(b.title)))];
 }
 
 export function byId(id) {
@@ -161,10 +172,10 @@ export function addBookRuleToMine(id) {
 export function todaysPlan() {
   const today = todayISO();
   const d = state.daily;
-  const { dailySource: source, dailyCount: count } = state.prefs;
+  const { dailySource: source, dailyCount: count, bookLevel: level } = state.prefs;
   const pool = rulesFor(source);
   const asWords = pool.map((r) => ({ ...r, word: ruleKey(r.title) }));
-  const stale = !d || d.date !== today || d.count !== count || d.source !== source;
+  const stale = !d || d.date !== today || d.count !== count || d.source !== source || (d.level || "all") !== level;
   const build = () => buildDailyPlan(asWords, { count, date: today, featured: state.featured });
   const feature = (s, id) => {
     const r = pool.find((x) => x.id === id);
@@ -175,7 +186,7 @@ export function todaysPlan() {
     const done = d && d.date === today ? d.done : {};
     update(
       (s) => {
-        s.daily = { ...plan, count, source, done };
+        s.daily = { ...plan, count, source, level, done };
         feature(s, plan.wotd);
       },
       { touchesData: false },

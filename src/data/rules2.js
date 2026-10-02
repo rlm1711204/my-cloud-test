@@ -4,6 +4,7 @@ export default `
 
 # Adjective or adverb after a verb
 R: Use an adverb to describe how an action is done. After linking verbs (be, seem, look, feel, smell, taste, sound, become, appear, grow) use an adjective, because it describes the subject.
+N: Some verbs are both: 'He looked angrily at me' (an action: adverb) but 'He looked angry' (linking: adjective).
 E: She sings beautifully.
 E: The rose smells sweet.
 E: He looks sad.
@@ -15,6 +16,7 @@ Q: She answered the questions ___. | *correctly; correct; corrected; correctness
 
 # 'Too' and 'very'
 R: 'Very' strengthens an adjective or adverb. 'Too' means 'more than enough' and has a negative sense; it is usually followed by 'to + verb' or used where there is a problem.
+N: 'Only too' means 'very': 'I shall be only too glad to help.'
 E: The tea is very hot.
 E: The tea is too hot to drink.
 X: I am too glad to meet you. => I am very glad to meet you.
@@ -24,6 +26,7 @@ Q: She is ___ kind to everyone. | *very; too; much; so much
 
 # 'Much' and 'very'
 R: 'Very' is used with adjectives and adverbs in the positive degree and with present participles (very interesting). 'Much' is used with comparatives and past participles (much better, much surprised).
+N: Past participles used as adjectives of feeling take 'very': 'very tired', 'very pleased', 'very interested'.
 E: This book is much better than that one.
 E: I was much pleased with his work.
 X: He is very taller than his brother. => He is much taller than his brother.
@@ -33,6 +36,7 @@ Q: It was a ___ exciting match. | *very; much; too much; more
 
 # 'Hardly', 'scarcely', 'seldom' are already negative
 R: 'Hardly', 'scarcely', 'barely', 'seldom' and 'rarely' have a negative meaning, so don't use another negative (not, no, never) with them. 'Hardly…when' and 'scarcely…when' go together.
+N: Use 'any'-words after them: 'hardly any', 'scarcely anyone' — never 'hardly no' or 'scarcely nobody'.
 E: I can hardly believe it.
 E: Hardly had he arrived when it started raining.
 X: I could not hardly hear him. => I could hardly hear him.
@@ -43,6 +47,7 @@ Q: He ___ visits us these days. | *seldom; does not seldom; not seldom; never se
 
 # Position of 'only' and 'enough'
 R: Put 'only' just before the word it limits, because its position changes the meaning. 'Enough' comes AFTER an adjective or adverb but BEFORE a noun.
+N: 'Enough' used as a pronoun can begin a sentence: 'Enough has been said.'
 E: He is old enough to vote.
 E: We have enough money.
 X: He is enough old to understand. => He is old enough to understand.
@@ -54,6 +59,7 @@ Q: Is there ___ for everyone? | *enough food; food enough of; enough of food; fo
 
 # 'Since' and 'for'
 R: Use 'since' with a point of time (since Monday, since 2019) and 'for' with a period of time (for three days, for a long time). Both are used with perfect tenses.
+N: 'Since' can also mean 'because': 'Since it was raining, we stayed in.'
 E: He has been ill since Monday.
 E: He has been ill for three days.
 X: I have been living here since five years. => I have been living here for five years.
@@ -63,6 +69,7 @@ Q: We have known each other ___ ten years. | *for; since; from; by
 
 # 'Between' and 'among'
 R: Use 'between' for two people or things and 'among' for more than two.
+N: 'Between' is used for more than two when each is thought of separately: 'a treaty between three nations'.
 E: Divide the sweets between the two children.
 E: Divide the sweets among the five children.
 X: The property was divided between his four sons. => The property was divided among his four sons.
@@ -72,6 +79,7 @@ Q: He distributed the books ___ the students of the class. | *among; between; wi
 
 # 'In', 'at' and 'on' for time
 R: 'At' for clock time and festivals (at 6 o'clock, at Diwali), 'on' for days and dates (on Monday, on 15 August), 'in' for months, years, seasons and parts of the day (in May, in 2024, in the morning).
+N: No preposition before next, last, this, every, today, tomorrow, yesterday: 'I'll meet you next Monday' — never 'on next Monday'.
 E: The train leaves at 7 p.m.
 E: He was born on 2 October.
 X: I will meet you in Sunday. => I will meet you on Sunday.
@@ -81,6 +89,7 @@ Q: She was born ___ 1998. | *in; on; at; by
 
 # 'In', 'at' and 'on' for place
 R: 'At' for a point or small place (at the station, at the door), 'in' for a larger area or inside something (in Delhi, in the room), 'on' for a surface (on the table).
+N: Addresses: 'at 15 MG Road' (with a number), 'on MG Road' (the street), 'in Bengaluru' (the city).
 E: He lives in Mumbai.
 E: Wait for me at the bus stop.
 X: He lives at Delhi. => He lives in Delhi.
@@ -100,6 +109,7 @@ Q: She ___ her mother. | *resembles; resembles to; resembles with; resembles lik
 
 # Fixed prepositions after common words
 R: Many words take a fixed preposition: afraid of, aware of, capable of, fond of, proud of, good at, interested in, married to, different from, similar to, consist of, depend on, insist on, accused of, charged with, angry with (a person), angry at (a thing), deal in (trade), deal with (handle).
+N: Some change meaning: angry WITH a person but AT a thing; agree WITH a person, TO a proposal, ON a point; die OF a disease, FROM a wound.
 E: She is fond of music.
 E: He was accused of theft.
 X: He is married with a teacher. => He is married to a teacher.
@@ -119,6 +129,7 @@ Q: ___ being a singer, she is a dancer. | *Besides; Beside; Beside of; Besides o
 
 # 'Till', 'until' and 'by' for deadlines
 R: 'By' means 'not later than' (a deadline). 'Till' / 'until' means 'up to a point in time', for something that continues.
+N: 'Till' is not used for place; use 'as far as': 'We walked as far as the river.'
 E: Submit the form by Friday.
 E: I will wait till 5 o'clock.
 X: You must finish this work till Monday. => You must finish this work by Monday.
@@ -130,6 +141,7 @@ Q: Please wait here ___ I come back. | *until; by; since; for
 
 # 'Though…yet' and paired conjunctions
 R: Some conjunctions come in pairs and must be used together correctly: though…yet, although…yet, both…and, either…or, neither…nor, not only…but also, whether…or, so…that, such…that/as, no sooner…than, hardly…when.
+N: 'Yet' is optional: 'Though he is poor, he is honest' is also correct. But 'though … but' is always wrong.
 E: Though he is poor, yet he is honest.
 E: Both Ram and Shyam passed.
 X: Both Ram as well as Shyam passed. => Both Ram and Shyam passed.
@@ -140,6 +152,7 @@ Q: No sooner did he reach the station ___ the train left. | *than; when; then; t
 
 # 'Lest' is followed by 'should'
 R: 'Lest' means 'so that… not'. It is followed by 'should' (or the base verb) and never by 'not'.
+N: Formal English also allows the base verb after 'lest': 'lest he fall'.
 E: Walk carefully lest you should fall.
 X: Work hard lest you should not fail. => Work hard lest you should fail.
 W: 'Lest' already contains 'not'.
@@ -148,6 +161,7 @@ Q: He hid lest he ___ be seen. | *should; would not; will; can
 
 # 'Unless' and 'until' are already negative
 R: 'Unless' means 'if not' and 'until' means 'up to the time when'. Neither takes another 'not' in its clause.
+N: 'Not' is fine in the MAIN clause: 'He did not come until six' is correct.
 E: You will fail unless you work hard.
 E: Wait here until I return.
 X: Unless you do not work hard, you will fail. => Unless you work hard, you will fail.
@@ -157,6 +171,7 @@ Q: Don't leave ___ I tell you. | *until; until not; unless not; while
 
 # 'Because' and 'the reason is that'
 R: Don't use 'because' after 'the reason is' or 'the reason why'; use 'that'. Also avoid 'because… so' together.
+N: 'Because of' is followed by a noun ('because of the rain'); 'because' by a clause ('because it rained').
 E: The reason he failed is that he did not study.
 X: The reason for his absence is because he was ill. => The reason for his absence is that he was ill.
 W: 'Reason' already carries the idea of cause.
@@ -165,6 +180,7 @@ Q: Choose the correct sentence. | *Because it was raining, we stayed home.; Beca
 
 # 'Such…as' and 'such…that'
 R: 'Such' is followed by 'as' when it introduces examples or a relative clause, and by 'that' to show a result. 'So' + adjective + 'that' also shows a result.
+N: 'Such that' can also mean 'of such a kind': 'His behaviour was such that everyone was upset.'
 E: Such books as these are useful.
 E: It was such a hot day that we stayed indoors.
 X: He is such a man who can be trusted. => He is such a man as can be trusted.
@@ -185,6 +201,7 @@ Q: Hardly had we started ___ it began to rain. | *when; than; then; that
 
 # No future tense after 'if', 'when', 'unless', 'as soon as'
 R: In clauses of time and condition (if, when, unless, until, as soon as, before, after), use the simple present for a future action, not 'will'.
+N: 'Will' is correct after 'if' when it means willingness or a polite request: 'If you will help me, I shall be grateful.'
 E: I will call you when I reach home.
 E: If it rains, we will stay inside.
 X: I will wait here till he will come. => I will wait here till he comes.
@@ -194,6 +211,7 @@ Q: If you ___ hard, you will pass. | *work; will work; would work; worked
 
 # Present perfect not with past time words
 R: The present perfect (has/have + past participle) is not used with words that show a finished past time: yesterday, last week, ago, in 2010. Use the simple past instead.
+N: 'Just now' (a moment ago) takes the simple past: 'He left just now'; but 'just' alone takes the present perfect: 'He has just left.'
 E: I saw him yesterday.
 E: I have seen this film twice.
 X: I have met him last week. => I met him last week.
@@ -203,6 +221,7 @@ Q: I ___ my homework already. | *have finished; finished yesterday; finish; am f
 
 # Past perfect for the earlier of two past actions
 R: When two actions happened in the past, use the past perfect (had + past participle) for the one that happened first and the simple past for the later one.
+N: When 'before' or 'after' already shows the order, the simple past is also accepted: 'He left after he finished the work.'
 E: The train had left before we reached the station.
 X: The patient died before the doctor had come. => The patient had died before the doctor came.
 W: The death happened first: past perfect.
@@ -221,6 +240,7 @@ Q: I ___ what you mean. | *understand; am understanding; was understanding; unde
 
 # Perfect continuous for an action that started earlier and is still going on
 R: Use the present perfect continuous (has/have been + -ing) with 'since' or 'for' for an action that started in the past and is still continuing.
+N: Verbs not used in the continuous (know, own, believe) take the present perfect instead: 'I have known him since 2010.'
 E: She has been teaching here since 2015.
 X: He is working in this office for ten years. => He has been working in this office for ten years.
 W: Started in the past and still going on, with 'for': present perfect continuous.
@@ -229,6 +249,7 @@ Q: I ___ for you for an hour. | *have been waiting; am waiting; wait; was wait
 
 # Sequence of tenses: past in the main clause
 R: If the main verb is in the past tense, the verb in the following clause is usually in a past form too. Exception: universal truths and habits stay in the present.
+N: Also unchanged: habits still true now ('He said he gets up at five') and anything reported with a present-tense verb ('He says he is busy').
 E: He said that he was busy.
 E: The teacher said that the earth moves round the sun.
 X: He told me that he will come tomorrow. => He told me that he would come the next day.
@@ -238,6 +259,7 @@ Q: Our teacher said that honesty ___ the best policy. | *is; was; had been; woul
 
 # 'Used to' and 'be used to'
 R: 'Used to + verb' describes a past habit. 'Be/get used to + noun or -ing' means 'be accustomed to'.
+N: After 'did', it is 'use to': 'He didn't use to smoke.' 'Did you use to live here?'
 E: I used to live in Chennai.
 E: I am used to waking up early.
 X: He is used to work late at night. => He is used to working late at night.
@@ -247,6 +269,7 @@ Q: I am not used to ___ such spicy food. | *eating; eat; ate; eaten
 
 # 'It is time' + past tense
 R: After 'It is time', 'It is high time' or 'It is about time', use the simple past tense (or 'for + someone + to + verb').
+N: 'It is time to go' (with the infinitive) is also correct when no subject is named.
 E: It is high time we left.
 E: It is time for us to leave.
 X: It is high time you go to bed. => It is high time you went to bed.
@@ -258,6 +281,7 @@ Q: It's about time you ___ your room. | *cleaned; clean; will clean; are cleanin
 
 # Verbs followed by the gerund (-ing)
 R: Some verbs are followed by the -ing form, not 'to + verb': avoid, enjoy, finish, mind, consider, deny, admit, suggest, practise, risk, keep, miss, postpone, can't help, look forward to, object to.
+N: 'Stop', 'remember', 'forget', 'try' and 'regret' take both forms with different meanings — see the advanced rule on them.
 E: He avoided meeting me.
 E: I look forward to hearing from you.
 X: I look forward to meet you. => I look forward to meeting you.
@@ -268,6 +292,7 @@ Q: He admitted ___ the money. | *stealing; to steal; steal; to stealing
 
 # Verbs followed by the infinitive (to + verb)
 R: Some verbs take 'to + verb': want, hope, decide, agree, refuse, promise, plan, expect, afford, manage, fail, pretend, learn.
+N: After how, what, when, where and whether, use the infinitive: 'I don't know how to swim.'
 E: She decided to leave early.
 X: He refused helping me. => He refused to help me.
 W: 'Refuse' takes the infinitive.
@@ -296,6 +321,7 @@ Q: Choose the correct sentence. | *Entering the room, I found it empty.; Enterin
 
 # Possessive before a gerund
 R: Before a gerund, use the possessive form of a noun or pronoun: 'I don't mind your coming', not 'you coming'.
+N: With lifeless nouns or long phrases, the plain form is normal: 'There is no chance of the train arriving on time.'
 E: I don't like his smoking.
 E: We were surprised at Rahul's leaving early.
 X: I object to him going alone. => I object to his going alone.
@@ -307,6 +333,7 @@ Q: She was angry at ___ the secret. | *his revealing; him revealing; he revealin
 
 # 'Ought' is followed by 'to'
 R: 'Ought' always takes 'to' (ought to go), unlike other modals. 'Need' and 'dare' can work as modals (need not go) or as main verbs (doesn't need to go).
+N: Negative: 'ought not to'. Past: 'ought to have + past participle' ('You ought to have told me').
 E: You ought to respect your elders.
 E: You need not worry.
 X: You ought respect your teachers. => You ought to respect your teachers.
@@ -316,6 +343,7 @@ Q: You ___ come if you don't want to. | *need not; need not to; don't need; need
 
 # 'Can' / 'may' and 'could' / 'might'
 R: 'Can' shows ability; 'may' shows permission or possibility. In formal English, ask permission with 'may'. In reported speech and after a past verb, 'can' becomes 'could' and 'may' becomes 'might'.
+N: 'Could' and 'might' are also polite present forms: 'Could you help me?' 'Might I ask a question?'
 E: May I come in, sir?
 E: He said that he could swim.
 X: He said that he can swim. => He said that he could swim.
@@ -325,6 +353,7 @@ Q: She told me that she ___ come later. | *might; may; can; will
 
 # Modal + perfect for the past
 R: 'Should have', 'could have', 'must have', 'might have' + past participle talk about the past: something advisable that didn't happen, a past possibility, or a logical conclusion.
+N: 'Can't have' is the opposite of 'must have': 'He can't have left — his bag is still here.'
 E: You should have told me earlier.
 E: He must have missed the bus.
 X: You should have came earlier. => You should have come earlier.
@@ -334,6 +363,7 @@ Q: You ___ me; I would have helped. | *should have asked; should asked; should h
 
 # 'Would rather' and 'had better'
 R: 'Would rather' and 'had better' are followed by the base verb without 'to'. 'Would rather' + 'than' compares two choices.
+N: With a DIFFERENT subject, 'would rather' takes the past tense: 'I would rather you stayed.'
 E: I would rather walk than wait for the bus.
 E: You had better hurry.
 X: I would rather to stay at home. => I would rather stay at home.

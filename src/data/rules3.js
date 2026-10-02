@@ -4,6 +4,7 @@ export default `
 
 # Three types of conditional sentences
 R: Type 1 (possible): If + present, will + verb. Type 2 (imaginary present): If + past, would + verb. Type 3 (imaginary past): If + had + past participle, would have + past participle.
+N: Types can be mixed ('If I had studied, I would be a doctor now'), and 'if' can be dropped by inversion ('Had you worked hard, …') — see the advanced rules.
 E: If it rains, we will cancel the match.
 E: If I had wings, I would fly.
 E: If you had worked hard, you would have passed.
@@ -15,6 +16,7 @@ Q: If she had left earlier, she ___ the train. | *would have caught; would catch
 
 # 'Were' for all persons in wishes and imaginary situations
 R: In wishes and imaginary conditions (if, as if, as though, I wish), use 'were' for all persons, not 'was'.
+N: For a REAL past possibility, 'was' is right: 'If he was ill, he didn't tell me.'
 E: I wish I were a bird.
 E: He talks as if he were the boss.
 X: If I was you, I would accept the offer. => If I were you, I would accept the offer.
@@ -24,6 +26,7 @@ Q: I wish I ___ taller. | *were; was; am; will be
 
 # Wishes about the past
 R: To wish about the past, use 'had + past participle' after 'wish'. To wish about the present, use the past tense.
+N: 'Wish + would' expresses annoyance or a wish for change: 'I wish you would stop talking.'
 E: I wish I had studied harder last year.
 X: I wish I studied for the exam yesterday. => I wish I had studied for the exam yesterday.
 W: A wish about the past: past perfect.
@@ -44,6 +47,7 @@ Q: It is necessary that he ___ the form today. | *submit; submits; submitted; wi
 
 # Forming the passive
 R: Passive = object becomes subject + correct form of 'be' (in the same tense as the active verb) + past participle. The doer is added with 'by' only if it matters.
+N: Leave out 'by …' when the doer is unknown or obvious: 'My purse was stolen.'
 E: The letter was written by Ravi.
 E: The work is being done.
 X: The thief has caught by the police. => The thief has been caught by the police.
@@ -53,6 +57,7 @@ Q: English ___ all over the world. | *is spoken; is speak; speaks; is speaking
 
 # Intransitive verbs have no passive
 R: Only transitive verbs (that take an object) can be made passive. Intransitive verbs (happen, occur, die, arrive, come, go, sleep, seem) cannot.
+N: Some verbs are intransitive in one sense and transitive in another: 'The bell rang' (no passive) but 'He rang the bell' → 'The bell was rung.'
 E: The accident happened last night.
 X: The accident was happened last night. => The accident happened last night.
 W: 'Happen' is intransitive and can't be passive.
@@ -72,6 +77,7 @@ Q: This work ___ today. | *should be finished; should finished; should be finish
 
 # Changes of tense in reported speech
 R: When the reporting verb is in the past, the reported verb moves one step back: present → past, present perfect → past perfect, past → past perfect, will → would, can → could, may → might. Universal truths do not change.
+N: No change when the reporting verb is in the present or future ('He says that he is busy'), or for universal truths, habits and historical facts.
 E: He said, 'I am tired.' → He said that he was tired.
 E: She said, 'I have finished.' → She said that she had finished.
 X: He said that he is going to the market. => He said that he was going to the market.
@@ -81,6 +87,7 @@ Q: The teacher said, 'The sun rises in the east.' → The teacher said that the 
 
 # Changes of time and place words
 R: In reported speech, words of nearness change to distance: now → then, today → that day, tomorrow → the next day, yesterday → the previous day, here → there, this → that, ago → before, next week → the following week.
+N: If the report is made on the same day or in the same place, these words need not change: 'He said this morning that he would come today.'
 E: He said, 'I will come tomorrow.' → He said that he would come the next day.
 X: She said that she had met him yesterday. => She said that she had met him the previous day.
 W: 'Yesterday' becomes 'the previous day'.
@@ -89,6 +96,7 @@ Q: She said, 'I came here two years ago.' → She said that she had come there t
 
 # Reporting questions and orders
 R: A reported question uses 'asked' + if/whether (yes-no questions) or the question word, and normal statement order (no question mark, no 'did'). An order uses 'told/ordered/requested' + 'to' + verb.
+N: Negative orders use 'not to': 'Don't go' → 'He told me not to go.'
 E: He asked me where I lived.
 E: She asked me whether I was ready.
 E: The officer ordered the soldiers to fire.
@@ -101,6 +109,7 @@ Q: He said to me, 'Please help me.' → He ___ me to help him. | *requested; sai
 
 # Positive statement, negative tag — and the reverse
 R: A positive statement takes a negative tag and a negative statement takes a positive tag. The tag uses the same auxiliary and a pronoun for the subject.
+N: 'Let's' (a suggestion) takes 'shall we?', but 'Let us' asking permission takes 'will you?': 'Let us go, will you?'
 E: She is a doctor, isn't she?
 E: They didn't come, did they?
 X: He can swim, can he? => He can swim, can't he?
@@ -123,6 +132,7 @@ Q: Nobody called me, ___? | *did they; didn't they; did he; didn't he
 
 # Parallel structure
 R: Items joined by and, or, but, not only…but also, either…or must have the same grammatical form: all nouns, all -ing forms, all infinitives, or all clauses.
+N: The words after each part of a pair must match too: 'He is not only rich but also generous' (adjective and adjective).
 E: She likes reading, writing and painting.
 E: He is not only intelligent but also hard-working.
 X: He likes swimming, to read and play football. => He likes swimming, reading and playing football.
@@ -143,6 +153,7 @@ Q: She is my ___. | *cousin; cousin sister; cousin-sister sibling; sister cousin
 
 # Position of adverbs of frequency
 R: Adverbs of frequency (always, often, usually, never, seldom, sometimes) come before the main verb but after 'am/is/are/was/were' and after the first auxiliary.
+N: 'Sometimes', 'usually' and 'often' can also begin a sentence for emphasis: 'Sometimes I walk to work.'
 E: He always comes late.
 E: She is never rude.
 E: I have often seen him there.
@@ -153,6 +164,7 @@ Q: They ___ on time. | *are always; always are; are always being; always is
 
 # 'Inversion' after negative words at the start
 R: When a sentence begins with a negative or limiting word (never, seldom, rarely, not only, no sooner, hardly, scarcely, little, under no circumstances, only then), the auxiliary comes before the subject, as in a question.
+N: No inversion when the negative word is not at the start: 'I have never seen such a sight.'
 E: Never have I seen such a sight.
 E: Not only did he lie, but he also cheated.
 X: Seldom he visits his parents. => Seldom does he visit his parents.
@@ -172,6 +184,7 @@ Q: Please tell me why ___ late. | *you were; were you; did you; you did were
 
 # 'Lay' and 'lie'
 R: 'Lie' (lie–lay–lain) means to rest or recline and takes no object. 'Lay' (lay–laid–laid) means to put something down and needs an object. 'Lie' meaning 'tell an untruth' is lie–lied–lied.
+N: The confusion comes from 'lay' also being the past of 'lie': 'Yesterday he lay down' (lie) vs 'Yesterday he laid the table' (lay).
 E: He lay on the bed yesterday.
 E: She laid the book on the table.
 X: He laid down for a rest. => He lay down for a rest.
@@ -181,6 +194,7 @@ Q: Yesterday I ___ in bed till noon. | *lay; laid; lied; lain
 
 # 'Some' and 'any'
 R: 'Some' is used in positive sentences and in offers or requests. 'Any' is used in negative sentences and questions.
+N: 'Any' in a positive sentence means 'it doesn't matter which': 'Take any book you like.'
 E: I have some money.
 E: Do you have any money?
 E: Would you like some tea?

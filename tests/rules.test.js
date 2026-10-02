@@ -4,8 +4,10 @@ import { parseRuleBook } from "../src/lib/rulebook.js";
 import r1 from "../src/data/rules1.js";
 import r2 from "../src/data/rules2.js";
 import r3 from "../src/data/rules3.js";
+import r4 from "../src/data/rules4.js";
+import r5 from "../src/data/rules5.js";
 
-const book = parseRuleBook([r1, r2, r3].join("\n")).rules.map((r) => makeRule(r));
+const book = parseRuleBook([r1, r2, r3, r4, r5].join("\n")).rules.map((r) => makeRule(r));
 
 describe("textToRules (no AI)", () => {
   it("splits notes on blank lines and picks up headings, examples and wrong => right lines", () => {

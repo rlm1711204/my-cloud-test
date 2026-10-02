@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { loadRuleBook, parseRuleBook } from "../src/lib/rulebook.js";
+import { isAdvanced, loadRuleBook, parseRuleBook } from "../src/lib/rulebook.js";
 import r1 from "../src/data/rules1.js";
 import r2 from "../src/data/rules2.js";
 import r3 from "../src/data/rules3.js";
+import r4 from "../src/data/rules4.js";
+import r5 from "../src/data/rules5.js";
 import { availableKinds, makeGrammarQuestion } from "../src/lib/grammar-quiz.js";
 import { TOPICS } from "../src/lib/rules.js";
 
-const { rules, problems } = parseRuleBook([r1, r2, r3].join("\n"));
+const { rules, problems } = parseRuleBook([r1, r2, r3, r4, r5].join("\n"));
 
 describe("built-in Rule Book", () => {
   it("parses with no problems", () => {
@@ -26,7 +28,21 @@ describe("built-in Rule Book", () => {
     const complete = rules.filter(
       (r) => r.mistakes.length && r.mistakes.every((m) => m.why) && r.questions.length >= 2 && TOPICS.includes(r.topic),
     );
-    expect(complete.length).toBeGreaterThanOrEqual(105);
+    expect(complete.length).toBeGreaterThanOrEqual(164);
+  });
+
+  it("has an advanced (RBI Grade B) level across the topics, and exception notes on most rules", () => {
+    const adv = rules.filter(isAdvanced);
+    expect(adv.length).toBeGreaterThanOrEqual(55);
+    expect(new Set(adv.map((r) => r.topic)).size).toBeGreaterThanOrEqual(15);
+    expect(rules.filter((r) => r.note).length / rules.length).toBeGreaterThan(0.85);
+  });
+
+  it("reads the level tag and rejects a bad one", () => {
+    const ok = parseRuleBook("# A\nR: something long enough.\nD: 5");
+    expect(ok.rules[0].difficulty).toBe(5);
+    expect(parseRuleBook("# A\nR: something.").rules[0].difficulty).toBe(2);
+    expect(parseRuleBook("# A\nR: x is y.\nD: 9").problems.join()).toMatch(/level from 1 to 5/);
   });
 
   it("every question has one right answer among unique options", () => {

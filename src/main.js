@@ -1552,7 +1552,7 @@ function viewHome() {
         <span class="home-ico">📗</span>
         <span class="home-main">
           <b>Grammar Rules</b>
-          <span>${plural(gs.liveRules().length, "rule")} of your own · ${gs.rulesFor("book").length} in the Rule Book</span>
+          <span>${plural(gs.liveRules().length, "rule")} of your own · ${gs.bookRules().length} in the Rule Book</span>
           <span class="small">${gStats.due} due today · 🔥 ${streak(gs.get().activity)}${rotd ? ` · Rule of the Day: <i>${esc(rotd.title)}</i>` : ""}</span>
         </span>
         <span class="home-go" aria-hidden="true">›</span>

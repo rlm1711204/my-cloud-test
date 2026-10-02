@@ -51,8 +51,10 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 - Grammar screens live in `src/grammar-ui.js` (created with shared helpers from main.js via a `ctx` object).
 - Data is fully separate: localStorage `vv.grammar.v1`, backup `app: "VocabVault-Grammar"`, Drive `grammar-rules.json`
   + "Grammar Rules" sheet. Each restore refuses the other part's file.
-- Rule Book: `src/data/rules1-3.js`, a plain-text format parsed by `src/lib/rulebook.js`; the tests fail the build on
-  any malformed line. Ids are `rb:<slug>`; only progress is stored for them.
+- Rule Book: `src/data/rules1-5.js` (164 rules; parts 4–5 are 59 advanced RBI Grade B rules tagged `D: 4/5`; `N:` lines are
+  exception notes), a plain-text format parsed by `src/lib/rulebook.js`; the tests fail the build on
+  any malformed line. Ids are `rb:<slug>`; only progress is stored for them. `prefs.bookLevel`
+  (all/basic/advanced) filters Rule Book rules for Today and Practice; the Rules list browses the whole book.
 - AI: `aiTask` in engine.js runs any job (system prompt + JSON schema + sources) on Gemini → other services → Claude.
   `grammar-ai.js` lists rules first, then writes cards 6 at a time, checks each card is about the rule asked for,
   retries left-out rules once, and keeps any still missing "as written".

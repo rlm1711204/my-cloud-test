@@ -3,6 +3,10 @@
 import { makeRule, ruleKey } from "./rules.js";
 
 export const BOOK_PREFIX = "rb:";
+const BASIC = 2; // rules without a D: line
+/** Level 4–5 rules are the advanced, RBI Grade B–style ones. */
+export const ADVANCED = 4;
+export const isAdvanced = (r) => (r.difficulty ?? BASIC) >= ADVANCED;
 export const isBookId = (id) => String(id).startsWith(BOOK_PREFIX);
 
 /** "Q: text | a; *b; c" → {q, options, answer}. The option starting with * is the right one. */
@@ -46,7 +50,7 @@ export function parseRuleBook(text) {
         const key = ruleKey(title);
         if (seen.has(key)) problems.push(`${at}: duplicate rule "${title}"`);
         seen.add(key);
-        cur = { id: BOOK_PREFIX + key.replace(/ /g, "-"), title, topic, rule: "", note: "", tip: "", examples: [], mistakes: [], questions: [] };
+        cur = { id: BOOK_PREFIX + key.replace(/ /g, "-"), title, topic, rule: "", note: "", tip: "", examples: [], mistakes: [], questions: [], difficulty: BASIC };
         return;
       }
       const m = /^([A-Z]):\s*(.*)$/.exec(line);
@@ -58,6 +62,11 @@ export function parseRuleBook(text) {
       if (tag === "R") cur.rule = cur.rule ? `${cur.rule} ${body}` : body;
       else if (tag === "N") cur.note = cur.note ? `${cur.note} ${body}` : body;
       else if (tag === "T") cur.tip = cur.tip ? `${cur.tip} ${body}` : body;
+      else if (tag === "D") {
+        const d = Number(body);
+        if (!Number.isInteger(d) || d < 1 || d > 5) problems.push(`${at}: D: must be a level from 1 to 5`);
+        else cur.difficulty = d;
+      }
       else if (tag === "E") cur.examples.push(body);
       else if (tag === "X") {
         const [wrong, right] = body.split(/\s*=>\s*/);
@@ -84,10 +93,16 @@ export function parseRuleBook(text) {
 let book = null;
 let loading = null;
 
-/** Load the Rule Book (three lazily loaded parts). Resolves the parsed rules. */
+/** Load the Rule Book (lazily loaded parts; 4 and 5 are the advanced RBI Grade B rules). Resolves the parsed rules. */
 export function loadRuleBook() {
   if (book) return Promise.resolve(book);
-  loading ??= Promise.all([import("../data/rules1.js"), import("../data/rules2.js"), import("../data/rules3.js")]).then((parts) => {
+  loading ??= Promise.all([
+    import("../data/rules1.js"),
+    import("../data/rules2.js"),
+    import("../data/rules3.js"),
+    import("../data/rules4.js"),
+    import("../data/rules5.js"),
+  ]).then((parts) => {
     book = parseRuleBook(parts.map((p) => p.default).join("\n")).rules;
     return book;
   });
@@ -103,7 +118,7 @@ export function bookRecord(entry, progress = {}, rank = 0) {
       ...entry,
       ...progress,
       id: entry.id,
-      difficulty: 3,
+      difficulty: entry.difficulty ?? BASIC,
       source: "Rule Book",
       addedAt: `9${String(rank).padStart(4, "0")}`, // sorts after the learner's own rules, in book order
       updatedAt: progress.updatedAt || "0",
