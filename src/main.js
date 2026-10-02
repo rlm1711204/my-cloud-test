@@ -3,7 +3,7 @@ import * as store from "./lib/store.js";
 import * as drive from "./lib/drive.js";
 import { DEFAULT_MODEL, EXAMS } from "./lib/ai.js";
 import { AllProvidersFailed, aiEnrichAll, aiList, fallbackNote, hasAI } from "./lib/engine.js";
-import { GEMINI_AUTO, geminiKeysOf, keyStatus, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "./lib/gemini.js";
+import { GEMINI_AUTO, geminiKeysOf, keyStatus, knownModels, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "./lib/gemini.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
@@ -650,11 +650,13 @@ function viewSettings() {
       <label class="field">Model
         <select data-setting="geminiModel">
           ${[
-            [GEMINI_AUTO, "Auto · best free model"],
-            ["gemini-2.5-flash", "2.5 Flash"],
-            ["gemini-2.5-flash-lite", "2.5 Flash-Lite · more per day"],
+            [GEMINI_AUTO, "Auto · newest free model (recommended)"],
+            ...[...new Set([...knownModels(), st.geminiModel].filter((m) => m && m !== GEMINI_AUTO))].map((m) => [
+              m,
+              m.replace(/^gemini-/, "").replace(/-/g, " ") + (m.includes("-lite") ? " · more per day" : ""),
+            ]),
           ]
-            .map(([v, l]) => `<option value="${v}" ${st.geminiModel === v ? "selected" : ""}>${l}</option>`)
+            .map(([v, l]) => `<option value="${esc(v)}" ${st.geminiModel === v ? "selected" : ""}>${esc(l)}</option>`)
             .join("")}
         </select>
       </label>

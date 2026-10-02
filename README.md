@@ -41,7 +41,8 @@ Every day you get a **Word of the Day** plus **10 words to memorise** (you can c
 **Free AI upgrade: Google Gemini.** Get a free key (no card needed) at
 [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and paste it in **Settings → Google Gemini**. Gemini then
 judges difficulty for your exam (UPSC, RBI Grade B, SSC…), writes an exam tip and 2 sentences for every word, and reads
-handwriting and idioms far better than the free dictionaries. The app picks the best free Flash model automatically.
+handwriting and idioms far better than the free dictionaries. The app picks the newest free Flash model automatically.
+When Google retires a model for your account it moves to the replacement Google suggests and stops trying the old one.
 If Flash hits its daily limit it switches to Flash-Lite, which has a bigger allowance. Note: Google may use free-tier
 inputs to improve its products, which is fine for textbook pages but not for personal documents.
 

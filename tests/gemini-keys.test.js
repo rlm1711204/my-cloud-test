@@ -108,3 +108,38 @@ describe("hand-picked Gemini key", () => {
     expect(pickedKeyNumber({ geminiKeys: [A, B], geminiKeyPick: B })).toBe(2);
   });
 });
+
+describe("retired models (404 for new accounts)", () => {
+  const S = { geminiModel: "auto", exam: "general" };
+  const RETIRED = (m) => `This model models/${m} is no longer available to new users. Please update your code to use models/gemini-3.5-flash-lite for the latest features.`;
+
+  it("follows Google's suggested model, then skips the retired ones next time", async () => {
+    const posts = [];
+    vi.stubGlobal("fetch", async (url, opts) => {
+      if (!opts?.method) {
+        // Google still lists the old models, which is how the app ended up choosing them.
+        return { ok: true, status: 200, json: async () => ({ models: ["gemini-2.5-flash", "gemini-2.5-flash-lite"].map((id) => ({ name: `models/${id}` })) }) };
+      }
+      const model = /models\/([^:]+):/.exec(url)[1];
+      posts.push(model);
+      return model.startsWith("gemini-2.5") ? fail(404, RETIRED(model)) : ok([{ word: "abate" }]);
+    });
+    const s = { ...S, geminiKeys: ["NEW_ACCOUNT_gggggggggggggggg"] };
+    const first = await geminiEnrich(s, ["abate"], []);
+    expect(first.words).toEqual([{ word: "abate" }]);
+    expect(posts).toEqual(["gemini-2.5-flash", "gemini-3.5-flash-lite"]);
+    posts.length = 0;
+    const second = await geminiEnrich(s, ["abate"], []);
+    expect(second.model).toBe("gemini-3.5-flash-lite");
+    expect(posts.some((m) => m.startsWith("gemini-2.5"))).toBe(false);
+  });
+
+  it("moves on to the next key when no model is open to the first", async () => {
+    vi.stubGlobal("fetch", async (url, opts) => {
+      if (!opts?.method) return { ok: true, status: 200, json: async () => ({ models: [] }) };
+      return keyOf(url, opts) === "OLD_LOCKED_hhhhhhhhhhhhhhhh" ? fail(404, "not found") : ok([{ word: "abate" }]);
+    });
+    const res = await geminiEnrich({ ...S, geminiKeys: ["OLD_LOCKED_hhhhhhhhhhhhhhhh", "SECOND_KEY_iiiiiiiiiiiiiiii"] }, ["abate"], []);
+    expect(res.words).toEqual([{ word: "abate" }]);
+  });
+});

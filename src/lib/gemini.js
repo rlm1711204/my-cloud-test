@@ -4,8 +4,11 @@ import { LIST_SCHEMA, RESULT_SCHEMA, enrichInstruction, listInstruction, systemP
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 export const GEMINI_AUTO = "auto";
-// Used when the model list can't be fetched. Tried in order; free-tier Flash models.
-const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+// Used when the model list can't be fetched, and as extra fallbacks. Tried in order; free-tier Flash models.
+// Google retires older models for new accounts (2.5 in 2026), so the newest come first.
+const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+// At most this many models per request, so a key that is out of quota fails fast.
+const MAX_MODEL_TRIES = 6;
 
 export class GeminiError extends Error {
   constructor(message, { status = 0, quota = false } = {}) {
@@ -32,8 +35,9 @@ export function toGeminiSchema(schema) {
 }
 
 /**
- * Rank Gemini models for this job: stable Flash before previews, newest first, then Flash-Lite (larger free
- * quota). Special-purpose variants (image, audio, TTS, live, experimental) are skipped. Pure; unit-tested.
+ * Rank Gemini models for this job: newest Flash first (stable before preview within a version), then
+ * Flash-Lite (larger free quota). Newest first because Google closes older models to new accounts.
+ * Special-purpose variants (image, audio, TTS, live, experimental) are skipped. Pure; unit-tested.
  */
 export function rankModels(models) {
   const version = (id) => Number((/gemini-(\d+(?:\.\d+)?)/.exec(id) || [])[1] || 0);
@@ -44,8 +48,8 @@ export function rankModels(models) {
     .sort(
       (a, b) =>
         Number(a.includes("-lite")) - Number(b.includes("-lite")) ||
-        Number(a.includes("preview")) - Number(b.includes("preview")) ||
         version(b) - version(a) ||
+        Number(a.includes("preview")) - Number(b.includes("preview")) ||
         a.length - b.length,
     );
 }
@@ -102,30 +106,46 @@ export function keyStatus(key) {
 }
 
 const modelCache = new Map(); // key -> ranked model list
+const goneModels = new Map(); // key -> models that answered 404 (retired / closed to this account)
+const lastGood = new Map(); // key -> the model that last answered, tried first next time
+let lastRanked = []; // most recent model list, for the Model menu in Settings
 
+const usable = (key, models) => [...new Set(models)].filter((m) => !goneModels.get(key)?.has(m));
+
+/** Models this key can use, best first: Google's own list when it loads, then the built-in fallbacks. */
 async function candidateModels(settings, key) {
   if (settings.geminiModel && settings.geminiModel !== GEMINI_AUTO) {
-    return [settings.geminiModel, ...FALLBACK_MODELS.filter((m) => m !== settings.geminiModel)];
+    return usable(key, [settings.geminiModel, ...(modelCache.get(key) || []), ...FALLBACK_MODELS]);
   }
-  if (modelCache.has(key)) return modelCache.get(key);
-  try {
-    const res = await fetch(`${BASE}/models?pageSize=200`, { headers: authHeaders(key) });
-    if (res.ok) {
-      const ranked = rankModels((await res.json()).models || []);
-      // Best Flash plus best Flash-Lite is enough: Lite is the quota fallback.
-      const best = [ranked.find((m) => !m.includes("-lite")), ranked.find((m) => m.includes("-lite"))].filter(Boolean);
-      if (best.length) {
-        modelCache.set(key, best);
-        return best;
+  if (!modelCache.has(key)) {
+    try {
+      const res = await fetch(`${BASE}/models?pageSize=200`, { headers: authHeaders(key) });
+      if (res.ok) {
+        const ranked = rankModels((await res.json()).models || []);
+        if (ranked.length) {
+          modelCache.set(key, ranked);
+          lastRanked = ranked;
+        }
+      } else if (res.status === 400 || res.status === 401 || res.status === 403) {
+        throw await toError(res);
       }
-    } else if (res.status === 400 || res.status === 401 || res.status === 403) {
-      throw await toError(res);
+    } catch (e) {
+      if (e instanceof GeminiError) throw e;
+      /* network hiccup: use the built-in list */
     }
-  } catch (e) {
-    if (e instanceof GeminiError) throw e;
-    /* network hiccup: use the built-in list */
   }
-  return FALLBACK_MODELS;
+  return usable(key, [lastGood.get(key), ...(modelCache.get(key) || []), ...FALLBACK_MODELS].filter(Boolean));
+}
+
+/** Models for the Settings menu: ones that worked first, then Google's list and the built-in one, minus retired ones. */
+export function knownModels() {
+  const gone = new Set([...goneModels.values()].flatMap((set) => [...set]));
+  return [...new Set([...lastGood.values(), ...lastRanked, ...FALLBACK_MODELS])].filter((m) => !gone.has(m));
+}
+
+/** Google's 404 often names the replacement ("…use models/gemini-3.5-flash-lite…"). Pure; unit-tested. */
+export function suggestedModels(message, current = "") {
+  return [...String(message || "").matchAll(/models\/(gemini-[\w.-]*[\w])/g)].map((m) => m[1]).filter((m) => m !== current);
 }
 
 async function toError(res) {
@@ -147,6 +167,11 @@ async function toError(res) {
   }
   if (res.status === 403) return new GeminiError("Gemini refused this key (API not enabled or region not supported).", { status: 403 });
   if (res.status >= 500) return new GeminiError("Gemini is busy right now.", { status: res.status });
+  if (res.status === 404) {
+    const err = new GeminiError("This Gemini model isn't available to your account any more.", { status: 404 });
+    err.detail = msg;
+    return err;
+  }
   return new GeminiError(`Gemini error ${res.status}: ${msg.slice(0, 160)}`, { status: res.status });
 }
 
@@ -173,7 +198,12 @@ export function readResponse(json) {
 
 async function runWithKey(settings, key, body, onProgress, label) {
   let lastErr;
-  for (const model of await candidateModels(settings, key)) {
+  const queue = await candidateModels(settings, key);
+  const tried = new Set();
+  for (let i = 0; i < queue.length && tried.size < MAX_MODEL_TRIES; i++) {
+    const model = queue[i];
+    if (tried.has(model)) continue;
+    tried.add(model);
     onProgress?.(`Gemini${label} (${model}) is working…`);
     let res;
     try {
@@ -185,12 +215,26 @@ async function runWithKey(settings, key, body, onProgress, label) {
     } catch {
       throw new GeminiError("Couldn't reach Gemini. Check your internet connection.");
     }
-    if (res.ok) return { words: readResponse(await res.json()), model };
+    if (res.ok) {
+      const words = readResponse(await res.json());
+      if (!settings.geminiModel || settings.geminiModel === GEMINI_AUTO) lastGood.set(key, model);
+      return { words, model };
+    }
     lastErr = await toError(res);
-    // Quota, overload or retired model: try the next model; a bad key won't work on any model.
-    if (!(lastErr.quota || lastErr.status >= 500 || lastErr.status === 404)) break;
+    if (lastErr.status === 404) {
+      // Retired or closed to new accounts: never try it again with this key, and try Google's suggestion next.
+      if (!goneModels.has(key)) goneModels.set(key, new Set());
+      goneModels.get(key).add(model);
+      for (const m of suggestedModels(lastErr.detail, model).reverse()) if (!tried.has(m)) queue.splice(i + 1, 0, m);
+      continue;
+    }
+    // Quota or overload: try the next model; a bad key won't work on any model.
+    if (!(lastErr.quota || lastErr.status >= 500)) break;
   }
-  throw lastErr;
+  if (lastErr?.status === 404) {
+    throw new GeminiError("None of the Gemini models tried are open to this key. Set Settings → Gemini → Model to Auto, or try another key.", { status: 404 });
+  }
+  throw lastErr ?? new GeminiError("No Gemini model available.");
 }
 
 /**
@@ -223,7 +267,7 @@ async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
         keyRest.set(key, Date.now() + KEY_REST_MS);
       } else if (e.status === 400 || e.status === 401 || e.status === 403) {
         badKeys.add(key);
-      } else if (!e.status || e.status < 500) {
+      } else if (e.status !== 404 && (!e.status || e.status < 500)) {
         throw e; // network or content problem: another key won't help
       }
       if (keys.length > 1) onProgress?.(`Gemini key ${i + 1}: ${e.message} Trying the next key…`);

@@ -49,6 +49,9 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 - **Gemini keys go in the `x-goog-api-key` header.** Google's newer `AQ.` keys fail as a `?key=`
   URL parameter. Several keys can be saved; they are tried in order, a key that hits its limit
   rests 10 minutes, and a key can be picked by hand on the Add screen.
+- **Gemini models get retired for new accounts** (2.5 Flash returned 404 in Oct 2026). The app ranks the
+  newest model first, follows the replacement named in Google's 404 message, remembers 404'd models per
+  key, and tries the last model that worked first.
 - **pdf.js must be the *legacy* build.** The modern build needs `Math.sumPrecise`, which phones
   don't have; without it text PDFs silently fell back to slow OCR.
 - **Word matching is by normalised spelling** (`wordKey`), so restoring a backup twice never
