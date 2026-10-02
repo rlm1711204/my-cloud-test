@@ -42,3 +42,30 @@ describe("aiEnrichAll", () => {
     expect(res.notes.join(" ")).toMatch(/limit/);
   });
 });
+
+describe("a word the AI leaves out", () => {
+  it("is asked for once more on its own, and the fallback is never silent", async () => {
+    // An earlier test leaves Gemini in its 10-minute cooldown; step past it.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+    calls.length = 0;
+    let n = 0;
+    impl = async (st, words) => {
+      n += 1;
+      // First reply drops the "easy" word; the retry returns it.
+      if (n === 1) return { words: words.filter((w) => w !== "idioms").map(card) };
+      return { words: words.map(card) };
+    };
+    const r = await aiEnrichAll(S, [{ word: "obdurate" }, { word: "idioms" }]);
+    expect(r.failed).toBe(0);
+    expect(r.words.map((w) => w.word).sort()).toEqual(["idioms", "obdurate"]);
+    expect(calls.at(-1)[1]).toEqual(["idioms"]);
+
+    impl = async (st, words) => ({ words: words.filter((w) => w !== "idioms").map(card) });
+    const r2 = await aiEnrichAll(S, [{ word: "idioms" }]);
+    expect(r2.failed).toBe(1);
+    expect(r2.notes.join(" ")).toMatch(/left out “idioms” → free dictionary/);
+    expect(r2.usedBy).toEqual(["Gemini"]);
+    vi.useRealTimers();
+  });
+});

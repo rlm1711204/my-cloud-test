@@ -4,7 +4,7 @@ import * as drive from "./lib/drive.js";
 import { DEFAULT_MODEL, EXAMS } from "./lib/ai.js";
 import { AllProvidersFailed, aiEnrichAll, aiList, fallbackNote, hasAI, pickedAI } from "./lib/engine.js";
 import { SERVICES, extraServicesOf, serviceName, testService } from "./lib/compat.js";
-import { GEMINI_AUTO, geminiKeysOf, keyStatus, knownModels, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "./lib/gemini.js";
+import { GEMINI_AUTO, checkKey, geminiKeysOf, keyStatus, knownModels, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "./lib/gemini.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
@@ -309,12 +309,41 @@ function viewToday() {
     ${madeBy()}`;
 }
 
-/** Short label for a key's state: ready / limit reached / invalid. */
+/** Short label for a key's state, from a real check (see checkKeysInBackground). */
 function keyStateText(k) {
   const ks = keyStatus(k);
-  if (ks.state === "invalid") return "invalid";
+  if (ks.state === "invalid") return "not working";
   if (ks.state === "resting") return `limit reached · back ${new Date(ks.until).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
-  return "ready";
+  if (ks.state === "checking") return "checking…";
+  if (ks.state === "ok") return "works ✓";
+  return "not checked yet";
+}
+
+const KEY_BADGE = { invalid: "easy", resting: "learning", ok: "mastered", checking: "new", unchecked: "new" };
+
+/**
+ * Check every key and service for real when Settings or Add is open (each at most every 10 minutes),
+ * then refresh the screen — without wiping anything being typed.
+ */
+function checkKeysInBackground() {
+  const s = settings();
+  const refresh = (ran) => {
+    if (!ran || !["settings", "add"].includes(view) || ui.busy || ui.candidates) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
+    if ($("#typed")) ui.typedDraft = $("#typed").value;
+    const y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
+  };
+  for (const k of geminiKeysOf(s)) checkKey(k).then(refresh);
+  for (const e of extraServicesOf(s)) {
+    if (ui.extraStatus[e.id]) continue;
+    ui.extraStatus[e.id] = { ok: false, checking: true, message: "Checking…" };
+    testService(e).then((r) => {
+      ui.extraStatus[e.id] = r;
+      refresh(true);
+    });
+  }
 }
 
 /** Choose which AI scans and writes cards: Auto (all of them in order) or one Gemini key / one service by hand. */
@@ -329,7 +358,10 @@ function keyPicker() {
   const opts = [
     ["", "Auto — use them in order, switch when one runs out"],
     ...keys.map((k, i) => [`g:${i}`, `Gemini key ${i + 1} only (${k.slice(0, 4)}…${k.slice(-4)}) · ${keyStateText(k)}`]),
-    ...extras.map((e) => [`x:${e.id}`, `${serviceName(s, e)} only${ui.extraStatus[e.id] ? ` · ${ui.extraStatus[e.id].ok ? "ready" : "check key"}` : ""}`]),
+    ...extras.map((e) => {
+      const st = ui.extraStatus[e.id];
+      return [`x:${e.id}`, `${serviceName(s, e)} only${st ? ` · ${st.checking ? "checking…" : st.ok ? "works ✓" : "not working"}` : ""}`];
+    }),
   ];
   const name = picked?.kind === "extra" ? serviceName(s, picked.entry) : pickedKey ? `Gemini key ${keys.indexOf(pickedKey) + 1}` : "";
   return `
@@ -395,6 +427,18 @@ function viewAdd() {
     <p class="muted small">Duplicates are checked automatically — words already in your master list (including forms like “mitigated” for “mitigate”) are never added twice.</p>`;
 }
 
+/** Which AI wrote these cards, and why any came from the free dictionary — always visible, never just a toast. */
+function aiBanner(ai) {
+  if (!ai) return "";
+  const by = ai.usedBy?.length ? ai.usedBy.join(" + ") : "";
+  const fellBack = ai.failed > 0 || !by;
+  return `<div class="ai-banner ${fellBack ? "warn" : "ok"}">
+    ${by ? `🤖 Cards written by <b>${esc(by)}</b>.` : "📖 The AI wasn't used — cards came from the free dictionary."}
+    ${ai.failed && by ? ` ${plural(ai.failed, "word")} came from the free dictionary.` : ""}
+    ${ai.notes?.length ? `<span class="small block">${esc(ai.notes.join(" · "))}</span>` : ""}
+  </div>`;
+}
+
 function viewCandidates() {
   const c = ui.candidates;
   const selected = c.items.filter((i) => i.selected).length;
@@ -405,6 +449,7 @@ function viewCandidates() {
       <button class="btn small ghost" type="button" data-action="cancel-candidates">Cancel</button>
     </div>
     <p class="muted">${plural(c.items.length, "new word")} to review. Untick any you don't need.</p>
+    ${aiBanner(c.ai)}
     ${
       skipped.length
         ? `<p class="muted small">Skipped ${plural(skipped.length, "word")} already in your master list: ${esc(skipped.slice(0, 12).join(", "))}${skipped.length > 12 ? "…" : ""}</p>`
@@ -645,7 +690,9 @@ function extraServicesCard(st) {
           ? `<ul class="key-list">${list
               .map((e) => {
                 const st2 = ui.extraStatus[e.id];
-                const badge = st2 ? `<span class="badge ${st2.ok ? "mastered" : "easy"}">${st2.ok ? "ready" : "check"}</span>` : "";
+                const badge = st2
+                  ? `<span class="badge ${st2.checking ? "new" : st2.ok ? "mastered" : "easy"}">${st2.checking ? "checking…" : st2.ok ? "works ✓" : "not working"}</span>`
+                  : "";
                 return `<li class="svc">
                   <div><b>${esc(serviceName(st, e))}</b> <code>${esc(e.key.slice(0, 4))}…${esc(e.key.slice(-4))}</code> ${badge}
                     ${st2 ? `<span class="muted small block">${esc(st2.message)}</span>` : ""}
@@ -699,16 +746,16 @@ function viewSettings() {
       <h3>✨ Google Gemini <span class="badge">free tier</span></h3>
       <p class="muted">Free AI word cards with exam tips. Get a free key (no card needed) at
       <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <i>Create API key</i> (new keys start with <code>AQ.</code>).
-      The free tier has daily limits; when they run out the app switches to Claude (if set) or free dictionaries.
+      The free tier has daily limits; when they run out the app switches to your other keys and services, then the free dictionary.
       Google may use free-tier inputs to improve its products — fine for textbook pages, avoid personal documents.</p>
       <div class="field">Gemini API keys (tried in order; when one hits its limit the next is used)
         ${geminiKeysOf(st).length
           ? `<ul class="key-list">${geminiKeysOf(st)
               .map((k, i) => {
-                const state = keyStatus(k).state;
-                const cls = { invalid: "easy", resting: "learning", ok: "mastered" }[state];
-                const label = `<span class="badge ${cls}">${esc(keyStateText(k))}</span>${k === pickedGeminiKey(st) ? ` <span class="badge new">in use</span>` : ""}`;
-                return `<li><code>Key ${i + 1}: ${esc(k.slice(0, 4))}…${esc(k.slice(-4))}</code> ${label}
+                const ks = keyStatus(k);
+                const label = `<span class="badge ${KEY_BADGE[ks.state]}">${esc(keyStateText(k))}</span>${k === pickedGeminiKey(st) ? ` <span class="badge new">in use</span>` : ""}`;
+                return `<li class="svc"><div><code>Key ${i + 1}: ${esc(k.slice(0, 4))}…${esc(k.slice(-4))}</code> ${label}
+                  ${ks.state === "invalid" && ks.message ? `<span class="small error block">${esc(ks.message)}</span>` : ""}</div>
                   <button class="icon-btn small" type="button" data-action="remove-gemini-key" data-i="${i}" aria-label="Remove key ${i + 1}">✕</button></li>`;
               })
               .join("")}</ul>`
@@ -1123,7 +1170,7 @@ function showCandidates(records, opts = {}) {
     toast(skipped.length ? `All ${plural(skipped.length, "word")} are already in your master list ✓` : "No words found. Try a clearer photo, or type the words.", 6000);
     return;
   }
-  ui.candidates = { items, skipped, typed: Boolean(opts.typed) };
+  ui.candidates = { items, skipped, typed: Boolean(opts.typed), ai: opts.ai || null };
 }
 
 async function handleFiles(files) {
@@ -1131,6 +1178,7 @@ async function handleFiles(files) {
   const s = settings();
   const source = files.map((f) => f.name).join(", ").slice(0, 120);
   setBusy("Preparing your files…");
+  let aiInfo = null;
   try {
     let records = null;
     if (hasAI(s)) {
@@ -1138,7 +1186,8 @@ async function handleFiles(files) {
         // Step 1: list every word (short reply, so even a 200-word list comes back complete).
         const sources = await filesToSources(files);
         const listed = await aiList(s, sources, setBusy);
-        noteFallback(listed);
+        const listNote = fallbackNote(listed.skipped, listed.provider);
+        aiInfo = { usedBy: [listed.provider], notes: listNote ? [listNote] : [], failed: 0 };
         if (!listed.words.length) throw new AllProvidersFailed([{ name: listed.provider, reason: "found no words" }]);
         const index = buildIndex(store.liveWords());
         // Drop pronunciations/labels the AI sometimes lists as words ("UT-er", "Utter (verb)"), then repeats.
@@ -1153,13 +1202,17 @@ async function handleFiles(files) {
         const fresh = items.filter((w) => !findExisting(w.word, index)?.exact);
         const dups = items.filter((w) => findExisting(w.word, index)?.exact);
         // Step 2: word cards for the new ones, 25 at a time. Words already saved are only listed.
-        const cards = fresh.length ? await aiEnrichAll(s, fresh, setBusy) : { words: [], notes: [], failed: 0 };
-        if (cards.notes.length) toast(cards.notes.join(" · "), 7000);
+        const cards = fresh.length ? await aiEnrichAll(s, fresh, setBusy) : { words: [], notes: [], failed: 0, usedBy: [] };
+        aiInfo = {
+          usedBy: [...new Set([...aiInfo.usedBy, ...cards.usedBy])],
+          notes: [...aiInfo.notes, ...cards.notes],
+          failed: cards.failed,
+        };
         records = [...cards.words, ...dups].map((r) => ({ ...r, source }));
         if (cards.failed) records = await freeLookup(records, await loadLevels());
       } catch (e) {
         if (!(e instanceof AllProvidersFailed)) throw e;
-        toast(`${e.message} → using the free dictionary instead`, 7000);
+        aiInfo = { usedBy: [], notes: [e.message], failed: 0 };
       }
     }
     if (!records) {
@@ -1181,7 +1234,7 @@ async function handleFiles(files) {
       records = await freeLookup(records, levels);
     }
     ui.busy = null;
-    showCandidates(records);
+    showCandidates(records, { ai: aiInfo });
   } catch (e) {
     ui.busy = null;
     toast(e.message || String(e), 6000);
@@ -1202,9 +1255,10 @@ async function handleTyped() {
   try {
     const levels = await loadLevels();
     let records = null;
+    let aiInfo = null;
     if (hasAI(s) && fresh.length) {
       const cards = await aiEnrichAll(s, fresh.map((word) => ({ word })), setBusy);
-      if (cards.notes.length) toast(cards.notes.join(" · "), 7000);
+      aiInfo = cards;
       records = cards.words.map((r) => ({ ...r, source: "Typed" }));
       if (cards.failed) records = await freeLookup(records, levels);
     }
@@ -1213,7 +1267,7 @@ async function handleTyped() {
       records = await freeLookup(records, levels);
     }
     ui.busy = null;
-    showCandidates([...records, ...dupRecords], { typed: true, levels });
+    showCandidates([...records, ...dupRecords], { typed: true, levels, ai: aiInfo });
   } catch (e) {
     ui.busy = null;
     toast(e.message || String(e), 6000);
@@ -1379,6 +1433,7 @@ function render() {
   const main = $("#view");
   const searchFocused = document.activeElement?.id === "search";
   main.innerHTML = VIEWS[view]();
+  if ((view === "settings" || view === "add") && !ui.busy && !ui.candidates) checkKeysInBackground();
   for (const b of document.querySelectorAll(".tabbar [data-nav]")) b.classList.toggle("active", b.dataset.nav === view);
   if (searchFocused) {
     const input = $("#search");

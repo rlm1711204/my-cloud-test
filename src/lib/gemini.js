@@ -105,7 +105,7 @@ export async function testKey(key) {
     if (err.badKey) badKeys.add(key);
     return { ok: err.quota, message: err.message };
   } catch {
-    return { ok: true, message: "Saved — couldn't test it now (no internet?)." };
+    return { ok: true, offline: true, message: "Saved — couldn't test it now (no internet?)." };
   }
 }
 
@@ -113,11 +113,35 @@ const KEY_REST_MS = 10 * 60 * 1000;
 const keyRest = new Map(); // key -> time it may be used again (after hitting its free limit)
 const badKeys = new Set(); // keys Google rejected as invalid, until the app is reopened
 
-/** "ok" | "resting" (limit reached, with `until`) | "invalid" — shown next to each key in Settings. */
+const checks = new Map(); // key -> {state: "checking"|"ok"|"bad", message, at}
+const CHECK_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Check a key for real (in the background) unless it was checked in the last 10 minutes.
+ * Resolves true when a fresh check ran, so the screen can update.
+ */
+export async function checkKey(key) {
+  const c = checks.get(key);
+  if (c && (c.state === "checking" || Date.now() - c.at < CHECK_TTL_MS)) return false;
+  checks.set(key, { state: "checking", at: Date.now() });
+  const r = await testKey(key);
+  if (r.offline) checks.delete(key); // couldn't check: stay "not checked yet"
+  else checks.set(key, { state: r.ok ? "ok" : "bad", message: r.message, at: Date.now() });
+  return true;
+}
+
+/**
+ * Shown next to each key: "works" (checked just now), "checking", "unchecked", "invalid" (with the reason)
+ * or "resting" (limit reached, with `until`).
+ */
 export function keyStatus(key) {
-  if (badKeys.has(key)) return { state: "invalid" };
   const until = keyRest.get(key) ?? 0;
-  return until > Date.now() ? { state: "resting", until } : { state: "ok" };
+  if (until > Date.now()) return { state: "resting", until };
+  const c = checks.get(key);
+  if (badKeys.has(key) || c?.state === "bad") return { state: "invalid", message: c?.message };
+  if (c?.state === "checking") return { state: "checking" };
+  if (c?.state === "ok") return { state: "ok" };
+  return { state: "unchecked" };
 }
 
 const modelCache = new Map(); // key -> ranked model list
@@ -167,7 +191,9 @@ export function suggestedModels(message, current = "") {
 async function toError(res) {
   let msg = "";
   try {
-    msg = (await res.json()).error?.message || "";
+    const e = (await res.json()).error || {};
+    // Google puts the machine-readable reason (e.g. API_KEY_INVALID) in details, not in the message.
+    msg = [e.message, ...(e.details || []).map((d) => d.reason)].filter(Boolean).join(" ");
   } catch {
     /* not JSON */
   }
@@ -176,10 +202,9 @@ async function toError(res) {
     return new GeminiError("Gemini API key is not valid. Check it in Settings.", { status: 400, badKey: true });
   }
   if (res.status === 401) {
+    // Google answers this way for ANY wrong AQ. key (mistyped, deleted, or copied incompletely), so say that.
     return new GeminiError(
-      /ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(msg)
-        ? "Google rejected this key type for your account (a known Google issue with some new AQ. keys). Try a key from another Google account."
-        : "Gemini key not accepted (401). Check the key or create a new one.",
+      "Google didn't accept this key — it may be mistyped, cut short, or deleted. Copy it again from aistudio.google.com/apikey, or create a new one.",
       { status: 401, badKey: true },
     );
   }
@@ -289,7 +314,9 @@ async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
       continue;
     }
     try {
-      return await runWithKey(settings, key, body, onProgress, keys.length > 1 ? ` key ${i + 1}` : "");
+      const res = await runWithKey(settings, key, body, onProgress, keys.length > 1 ? ` key ${i + 1}` : "");
+      checks.set(key, { state: "ok", at: Date.now() });
+      return res;
     } catch (e) {
       if (!(e instanceof GeminiError)) throw e;
       lastErr = e;
@@ -298,6 +325,7 @@ async function run(settings, parts, onProgress, schema = RESULT_SCHEMA) {
         keyRest.set(key, Date.now() + KEY_REST_MS);
       } else if (e.badKey) {
         badKeys.add(key);
+        checks.set(key, { state: "bad", message: e.message, at: Date.now() });
       } else if (!e.modelGone && (!e.status || e.status < 500)) {
         throw e; // network or content problem: another key won't help
       }
@@ -331,11 +359,15 @@ async function runPicked(settings, key, n, parts, onProgress, schema) {
     const res = await runWithKey(settings, key, requestBody(settings, parts, schema), onProgress, ` key ${n}`);
     keyRest.delete(key);
     badKeys.delete(key);
+    checks.set(key, { state: "ok", at: Date.now() });
     return res;
   } catch (e) {
     if (!(e instanceof GeminiError)) throw e;
     if (e.quota) keyRest.set(key, Date.now() + KEY_REST_MS);
-    else if (e.badKey) badKeys.add(key);
+    else if (e.badKey) {
+      badKeys.add(key);
+      checks.set(key, { state: "bad", message: e.message, at: Date.now() });
+    }
     const hint = e.quota ? "reached its free limit" : e.message.replace(/\.$/, "");
     throw new GeminiError(`Key ${n} ${e.quota ? hint : `failed: ${hint}`}. Choose another key (or Auto) on the Add screen.`, {
       status: e.status,

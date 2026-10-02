@@ -80,8 +80,10 @@ export function systemPrompt({ exam, tamil }) {
     "The learner is a graduate with good everyday English; they want to build an exam-grade vocabulary.",
     "A word is DIFFICULT if an educated Indian graduate might not confidently know or use it: advanced",
     "vocabulary, formal/literary words, idioms and phrasal verbs with non-obvious meaning, and words exams",
-    "commonly test (synonyms/antonyms, one-word substitutions, confusable pairs). Easy everyday words",
-    "(e.g. important, government, beautiful, increase) must never be included.",
+    "commonly test (synonyms/antonyms, one-word substitutions, confusable pairs). When you PICK words out of",
+    "material, easy everyday words (e.g. important, government, beautiful, increase) must never be included.",
+    "But when the learner gives you a list of words, write a full card for EVERY one of them, easy or not —",
+    "the learner chose them, so never drop or skip a word.",
     "Write meanings in plain, simple English. Hindi meanings in Devanagari, the way a Hindi newspaper would say it.",
     tamil
       ? "Also give the Tamil meaning in Tamil script (the learner is learning Tamil)."
@@ -136,8 +138,8 @@ export const listInstruction = () =>
   "verb and adjective), list it once.";
 
 export const enrichInstruction = (words, notes = []) =>
-  "Create a complete word card for EACH of these words/phrases, in the same order. Keep every one of them even if it " +
-  "seems easy, and correct obvious spelling mistakes in `word`. Where a source line is given, the card must match that " +
+  `Create a complete word card for EACH of these ${words.length} words/phrases, in the same order — exactly ${words.length} ` +
+  "card(s). Keep every one of them even if it seems easy, and correct obvious spelling mistakes in `word`. Where a source line is given, the card must match that " +
   "sense (reuse a Hindi meaning given there) and `context` must be that line; otherwise leave `context` empty.\n\n" +
   words.map((w, i) => `${i + 1}. ${w}${notes[i] ? `   [source: ${String(notes[i]).slice(0, 300)}]` : ""}`).join("\n");
 

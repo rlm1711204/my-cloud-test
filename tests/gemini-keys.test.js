@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { geminiEnrich, geminiKeysOf, keyStatus, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "../src/lib/gemini.js";
+import { checkKey, geminiEnrich, geminiKeysOf, keyStatus, looksLikeGeminiKey, pickedGeminiKey, pickedKeyNumber, testKey } from "../src/lib/gemini.js";
 
 const ok = (words) => ({ ok: true, status: 200, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify({ words }) }] } }] }) });
 const fail = (status, message = "x") => ({ ok: false, status, json: async () => ({ error: { message } }) });
@@ -54,16 +54,27 @@ describe("AQ. auth keys", () => {
     expect(looksLikeGeminiKey("short")).toBe(false);
     expect(looksLikeGeminiKey("has space in the middle of it....")).toBe(false);
   });
-  it("tests a key on add and explains Google's 401 for unsupported AQ. keys", async () => {
+  it("tests a key on add and explains Google's 401 for a wrong AQ. key", async () => {
+    // The exact shape Google returns for any wrong AQ. key (checked against the live API).
+    const google401 = {
+      ok: false,
+      status: 401,
+      json: async () => ({
+        error: {
+          code: 401,
+          message: "Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential.",
+          status: "UNAUTHENTICATED",
+          details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "ACCESS_TOKEN_TYPE_UNSUPPORTED" }],
+        },
+      }),
+    };
     vi.stubGlobal("fetch", async (url, opts) =>
-      keyOf(url, opts).startsWith("AQ.good")
-        ? { ok: true, status: 200, json: async () => ({ models: [] }) }
-        : fail(401, "Request had invalid authentication credentials. ACCESS_TOKEN_TYPE_UNSUPPORTED"),
+      keyOf(url, opts).startsWith("AQ.good") ? { ok: true, status: 200, json: async () => ({ models: [] }) } : google401,
     );
     expect(await testKey("AQ.good-xxxxxxxxxxxxxxxxxxxx")).toMatchObject({ ok: true });
     const bad = await testKey("AQ.blocked-xxxxxxxxxxxxxxxx");
     expect(bad.ok).toBe(false);
-    expect(bad.message).toMatch(/known Google issue/);
+    expect(bad.message).toMatch(/mistyped, cut short, or deleted/);
     expect(keyStatus("AQ.blocked-xxxxxxxxxxxxxxxx").state).toBe("invalid");
   });
 });
@@ -154,5 +165,24 @@ describe("model problems never mark a key invalid", () => {
     const res = await geminiEnrich({ geminiModel: "auto", exam: "general", geminiKeys: [KEY] }, ["abate"], []);
     expect(res.words).toEqual([{ word: "abate" }]);
     expect(keyStatus(KEY).state).toBe("ok");
+  });
+});
+
+describe("key status comes from a real check", () => {
+  it("is 'unchecked' until checked, then 'ok' or 'invalid' with the reason; offline stays unchecked", async () => {
+    const GOOD = "STATUS_GOOD_llllllllllllll", BAD = "STATUS_BAD_mmmmmmmmmmmmmmm", OFF = "STATUS_OFF_nnnnnnnnnnnnnnn";
+    expect(keyStatus(GOOD).state).toBe("unchecked");
+    vi.stubGlobal("fetch", async (url, opts) => {
+      const k = keyOf(url, opts);
+      if (k === OFF) throw new TypeError("Failed to fetch");
+      return k === GOOD ? { ok: true, status: 200, json: async () => ({ models: [] }) } : fail(400, "API key not valid. Please pass a valid API key.");
+    });
+    expect(await checkKey(GOOD)).toBe(true);
+    expect(keyStatus(GOOD).state).toBe("ok");
+    await checkKey(BAD);
+    expect(keyStatus(BAD)).toMatchObject({ state: "invalid", message: expect.stringMatching(/not valid/) });
+    await checkKey(OFF);
+    expect(keyStatus(OFF).state).toBe("unchecked");
+    expect(await checkKey(GOOD)).toBe(false); // checked moments ago: not again
   });
 });

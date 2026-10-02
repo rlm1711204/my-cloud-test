@@ -92,27 +92,51 @@ export const aiEnrich = (s, words, onProgress, notes = []) => tryInOrder(s, "enr
 
 /**
  * Step 2 — build cards for any number of words, BATCH at a time, so long lists (200+) never get cut off.
- * A batch that no AI can handle is returned without details (the free dictionary fills those in later).
+ * A word the AI leaves out is asked for once more on its own; if it is still missing it is returned without
+ * details (the free dictionary fills those in) and a note says so — the fallback is never silent.
  * @param {{word: string, context?: string}[]} items
- * @returns {Promise<{words: object[], notes: string[], failed: number}>}
+ * @returns {Promise<{words: object[], notes: string[], failed: number, usedBy: string[]}>}
  */
 export async function aiEnrichAll(s, items, onProgress) {
   const words = [];
   const notes = new Set();
+  const usedBy = new Set();
   let failed = 0;
+
+  /** Cards for `batch`; resolves the items the AI left out. */
+  const attempt = async (batch) => {
+    const res = await aiEnrich(s, batch.map((b) => b.word), onProgress, batch.map((b) => b.context || ""));
+    usedBy.add(res.provider);
+    const note = fallbackNote(res.skipped, res.provider);
+    if (note) notes.add(note);
+    const byKey = new Map(res.words.map((r) => [wordKey(r.word), r]));
+    const missing = [];
+    batch.forEach((b, j) => {
+      const r = byKey.get(wordKey(b.word)) ?? (res.words.length === batch.length ? res.words[j] : null);
+      if (r) words.push({ ...r, context: b.context || r.context || "" });
+      else missing.push(b);
+    });
+    return { missing, provider: res.provider };
+  };
+
   for (let i = 0; i < items.length; i += BATCH) {
     const batch = items.slice(i, i + BATCH);
     onProgress?.(`Writing word cards ${i + 1}–${i + batch.length} of ${items.length}…`);
     try {
-      const res = await aiEnrich(s, batch.map((b) => b.word), null, batch.map((b) => b.context || ""));
-      const note = fallbackNote(res.skipped, res.provider);
-      if (note) notes.add(note);
-      const byKey = new Map(res.words.map((r) => [wordKey(r.word), r]));
-      batch.forEach((b, j) => {
-        const r = byKey.get(wordKey(b.word)) ?? (res.words.length === batch.length ? res.words[j] : null);
-        if (r) words.push({ ...r, context: b.context || r.context || "" });
-        else (words.push({ word: b.word, context: b.context || "" }), (failed += 1));
-      });
+      let { missing, provider } = await attempt(batch);
+      if (missing.length) {
+        // Ask once more for just the skipped words; if that fails, they simply stay missing.
+        try {
+          ({ missing } = await attempt(missing));
+        } catch (e) {
+          if (!(e instanceof AllProvidersFailed)) throw e;
+        }
+      }
+      if (missing.length) {
+        notes.add(`${provider} left out ${missing.map((b) => `“${b.word}”`).join(", ")} → free dictionary`);
+        for (const b of missing) words.push({ word: b.word, context: b.context || "" });
+        failed += missing.length;
+      }
     } catch (e) {
       if (!(e instanceof AllProvidersFailed)) throw e;
       notes.add(`${e.message} → free dictionary`);
@@ -120,7 +144,7 @@ export async function aiEnrichAll(s, items, onProgress) {
       failed += batch.length;
     }
   }
-  return { words, notes: [...notes], failed };
+  return { words, notes: [...notes], failed, usedBy: [...usedBy] };
 }
 
 /** One-line note like "Gemini: limit reached → used Claude" for a toast; "" when nothing was skipped. */
