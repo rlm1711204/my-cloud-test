@@ -3,6 +3,7 @@
 // Models are read from each service's own list, so new models are picked up without an app update.
 import { LIST_SCHEMA, RESULT_SCHEMA, enrichInstruction, listInstruction, systemPrompt } from "./ai.js";
 import { pdfForChat } from "./extract.js";
+import { countRequest, noteHeaders, noteLimitHit, serviceId } from "./usage.js";
 
 /** Services offered in Settings. `base` is the API address; `keys` is where to get a free key. */
 export const SERVICES = {
@@ -202,6 +203,10 @@ async function chat(entry, model, messages, jsonMode) {
   } catch {
     throw unreachable(entry);
   }
+  const uid = serviceId(entry.provider, entry.key);
+  noteHeaders(uid, res.headers);
+  if (res.status === 429) noteLimitHit(uid, { model });
+  else countRequest(uid, { model });
   return res;
 }
 

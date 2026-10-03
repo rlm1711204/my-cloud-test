@@ -3,6 +3,7 @@
 // Hindi/Tamil meanings from the MyMemory translation service.
 import { difficultyFromLevel, levelOf } from "./difficulty.js";
 import { wordKey } from "./words.js";
+import { countChars, noteLimitHit } from "./usage.js";
 
 const DICT = "https://api.dictionaryapi.dev/api/v2/entries/en/";
 const WIKT = "https://en.wiktionary.org/api/rest_v1/page/definition/";
@@ -215,10 +216,14 @@ let quotaHit = false;
 async function translate(text, lang) {
   if (quotaHit || !text) return "";
   const url = `${MYMEMORY}?q=${encodeURIComponent(text)}&langpair=en|${lang}`;
+  countChars("mymemory", text.length);
   try {
     return parseMyMemory(await getJSON(url, { allow404: false }));
   } catch (e) {
-    if (e.quota) quotaHit = true;
+    if (e.quota) {
+      quotaHit = true;
+      noteLimitHit("mymemory");
+    }
     return "";
   }
 }

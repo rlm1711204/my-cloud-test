@@ -82,6 +82,11 @@ Maths and Reasoning are two parts of their own — each with its own Today, Add,
 - **Hindi/Tamil** meanings come from the free [MyMemory](https://mymemory.translated.net) translation service
   (a few hundred words a day). Machine translation of single words is sometimes imperfect, so fix any with ✎ Edit.
 - Photos are read on your phone (OCR). PDFs are read from their text layer.
+- **⚙️ Settings → 📊 AI limits & usage** shows, for every Gemini key and every other service: today's requests (by
+  model), what's left when the service reports it (Groq, Cerebras, OpenRouter, Claude send their remaining requests /
+  tokens), the limit Gemini names when one is reached (e.g. "250 requests a day → about 210 left"), when a key may be
+  tried again, and Hindi/Tamil translation characters left today. Google doesn't report Gemini's remaining quota, so
+  before a limit is hit the app shows its own count; Gemini's day restarts at midnight Pacific (12:30 pm IST).
 
 1. **Add**: scan or upload a page, or type words. On the review screen, untick anything you already know, then tap **Add**.
    **✂️ Crop before reading** (every part — Vocabulary, Grammar, GK, Maths, Reasoning, including "Ask the Gemini app"):

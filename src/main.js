@@ -30,6 +30,7 @@ import { qItemsToCSV } from "./lib/quant.js";
 import { createQuantUI } from "./quant-ui.js";
 import { createCropper } from "./cropper.js";
 import { createPrepare } from "./prepare-ui.js";
+import { createUsageUI } from "./usage-ui.js";
 import {
   buildIndex,
   cleanHeadword,
@@ -874,6 +875,8 @@ function viewSettings() {
       </label>
     </article>
 
+    ${usageui.card(st)}
+
     <article class="card">
       <h3>📅 Daily practice</h3>
       <label class="field">Words to memorise per day
@@ -1596,6 +1599,9 @@ const prepare = createPrepare({
   setSkip: (skip) => store.update((s) => (s.settings.cropStep = !skip), { touchesData: false }),
 });
 
+// Settings → 📊 AI limits & usage
+const usageui = createUsageUI({ esc, plural, render: () => render(), toast, settings });
+
 // ---------- the GK part ----------
 const gkui = createGkUI({
   $,
@@ -2171,7 +2177,7 @@ const actions = {
   },
 };
 
-Object.assign(actions, cropper.actions, prepare.actions, grammar.actions, gkui.actions, areaui.actions, ...QPARTS.map((q) => q.ui.actions));
+Object.assign(actions, cropper.actions, prepare.actions, usageui.actions, grammar.actions, gkui.actions, areaui.actions, ...QPARTS.map((q) => q.ui.actions));
 
 document.addEventListener("click", (e) => {
   const nav = e.target.closest("[data-nav]");

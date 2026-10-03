@@ -596,3 +596,9 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .crop-box .h[data-h="br"] { right: 0; bottom: 0; cursor: nwse-resize; }
 .crop-actions { display: flex; gap: 8px; padding-top: 10px; }
 .crop-actions .btn { flex: 1; }
+
+/* Settings → AI limits & usage */
+.usage-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.usage-list > li { padding: 10px 0; border-top: 1px solid var(--line); display: grid; gap: 3px; }
+.usage-title { font-weight: 700; }
+.usage-list .row { margin: 4px 0 0; }

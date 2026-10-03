@@ -81,6 +81,10 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   other formats around it. Complete pasted questions need no AI call.
 - Photo/PDF → chat app: `buildMaterialPrompt` (gk-prompt.js) + the 💬 tile and panel in gk-ui.js (`navigator.share` with the
   files and prompt where `canShare({files})`, else copy the prompt). The answer goes through the same `readPasted`.
+- AI limits & usage (Settings card, src/usage-ui.js + src/lib/usage.js): gemini.js / compat.js / ai.js / freedict.js
+  call `countRequest` (not for a 429), `noteHeaders` (any `x-ratelimit-*` / `anthropic-ratelimit-*` the browser may read)
+  and `noteLimitHit` (Gemini's 429 `QuotaFailure` → limit and size; `RetryInfo` → retry time). Stored in localStorage
+  `vv.usage.v1` per key fingerprint (FNV hash, never the key), not in backups. Gemini days are counted in Pacific time.
 - Crop step (every Add screen): a capture-phase `change` listener in main.js catches the file inputs listed in
   `FILE_INPUTS` (`files`, `g-files`, `k-files`, `k-chat-files`, `m|r-files`, `m|r-chat-files`), stops the event, and
   runs `prepare.prepareFiles` (src/prepare-ui.js) before handing the result to that screen's `addFiles` / `chatFiles`.

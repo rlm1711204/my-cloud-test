@@ -1,6 +1,7 @@
 // Claude-powered extraction and enrichment of exam vocabulary.
 // The API key is the user's own, kept only in this browser's localStorage.
 import Anthropic from "@anthropic-ai/sdk";
+import { countRequest, noteHeaders, serviceId } from "./usage.js";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 
@@ -109,6 +110,13 @@ async function run(settings, content, onProgress, schema = RESULT_SCHEMA, system
     system,
     messages: [{ role: "user", content }],
   });
+  const uid = serviceId("claude", settings.apiKey);
+  countRequest(uid, { model: settings.model || DEFAULT_MODEL });
+  // Claude's reply headers carry its rate limits (requests / tokens left); kept for Settings.
+  stream
+    .withResponse?.()
+    .then(({ response }) => noteHeaders(uid, response?.headers))
+    .catch(() => {});
   let chars = 0;
   stream.on("text", (t) => {
     chars += t.length;

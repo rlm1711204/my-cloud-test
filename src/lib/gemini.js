@@ -1,6 +1,7 @@
 // Google Gemini (free tier) as a word-card provider, via the Generative Language REST API.
 // Same prompts and card schema as the Claude provider, so cards look identical.
 import { LIST_SCHEMA, RESULT_SCHEMA, enrichInstruction, listInstruction, systemPrompt } from "./ai.js";
+import { PACIFIC, countRequest, noteHeaders, noteLimitHit, parseGeminiQuota, serviceId } from "./usage.js";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 export const GEMINI_AUTO = "auto";
@@ -190,14 +191,20 @@ export function suggestedModels(message, current = "") {
 
 async function toError(res) {
   let msg = "";
+  let quotaInfo = null;
   try {
     const e = (await res.json()).error || {};
     // Google puts the machine-readable reason (e.g. API_KEY_INVALID) in details, not in the message.
     msg = [e.message, ...(e.details || []).map((d) => d.reason)].filter(Boolean).join(" ");
+    if (res.status === 429) quotaInfo = parseGeminiQuota(e);
   } catch {
     /* not JSON */
   }
-  if (res.status === 429) return new GeminiError("Gemini free limit reached for now.", { status: 429, quota: true });
+  if (res.status === 429) {
+    const err = new GeminiError("Gemini free limit reached for now.", { status: 429, quota: true });
+    err.quotaInfo = quotaInfo; // which limit (per day / per minute) and its size, for Settings
+    return err;
+  }
   if (res.status === 400 && /API key/i.test(msg)) {
     return new GeminiError("Gemini API key is not valid. Check it in Settings.", { status: 400, badKey: true });
   }
@@ -261,6 +268,7 @@ async function runWithKey(settings, key, body, onProgress, label) {
     if (tried.has(model)) continue;
     tried.add(model);
     onProgress?.(`Gemini${label} (${model}) is working…`);
+    const uid = serviceId("gemini", key);
     let res;
     try {
       res = await fetch(`${BASE}/models/${model}:generateContent`, {
@@ -271,12 +279,15 @@ async function runWithKey(settings, key, body, onProgress, label) {
     } catch {
       throw new GeminiError("Couldn't reach Gemini. Check your internet connection.");
     }
+    noteHeaders(uid, res.headers);
+    if (res.status !== 429) countRequest(uid, { model, tz: PACIFIC }); // a refused request doesn't use the allowance
     if (res.ok) {
       const words = readResponse(await res.json());
       if (!settings.geminiModel || settings.geminiModel === GEMINI_AUTO) lastGood.set(key, model);
       return { words, model };
     }
     lastErr = await toError(res);
+    if (lastErr.quota) noteLimitHit(uid, { model, ...(lastErr.quotaInfo || {}), tz: PACIFIC });
     if (lastErr.modelGone) {
       // Retired or closed to new accounts: never try it again with this key, and try Google's suggestion next.
       if (!goneModels.has(key)) goneModels.set(key, new Set());
