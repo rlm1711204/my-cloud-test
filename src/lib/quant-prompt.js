@@ -40,6 +40,23 @@ F: Together time = (a × b)/(a + b)
 T: Product ÷ sum.
 E: 10 and 15 days → (10 × 15)/25 = 6 days.`;
 
+// A geometry question with its figure, for the reply format (O = centre, T = point of contact, P = outside point).
+export const FIGURE_EXAMPLE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 130"><circle cx="70" cy="70" r="40" fill="none" stroke="currentColor" stroke-width="2"/><line x1="70" y1="70" x2="82.3" y2="31.9" stroke="currentColor" stroke-width="2"/><line x1="82.3" y1="31.9" x2="200" y2="70" stroke="currentColor" stroke-width="2"/><line x1="70" y1="70" x2="200" y2="70" stroke="currentColor" stroke-dasharray="4 3"/><path d="M79.8,39.5 L87.4,42 L89.9,34.4" fill="none" stroke="currentColor"/><circle cx="70" cy="70" r="2.5" fill="currentColor"/><text x="58" y="86" font-size="13">O</text><text x="76" y="24" font-size="13">T</text><text x="205" y="75" font-size="13">P</text><text x="62" y="52" font-size="12">5</text><text x="130" y="85" font-size="12">13</text></svg>`;
+
+const GEOMETRY_EXAMPLE = `## Quant › Geometry
+TYPE: Tangent from an external point
+Q: P is 13 cm from the centre O of a circle of radius 5 cm. Find the length of the tangent PT.
+A: 12 cm
+O: 8 cm; 18 cm; 13 cm
+S: The radius OT is perpendicular to the tangent at T, so triangle OTP is right-angled at T.
+S: PT = √(13² − 5²) = √144 = 12 cm.
+F: Tangent length = √(d² − r²) (Tangent–radius theorem)
+T: Right angle at the point of contact → Pythagoras (5, 12, 13).
+FIG: ${FIGURE_EXAMPLE}`;
+
+const FIGURE_RULES = `- For geometry, mensuration, trigonometry (heights and distances) and any question or formula where a diagram helps, add ONE line "FIG:" followed by a small SVG drawing on the same line: viewBox about 240 × 160, stroke="currentColor", fill="none", stroke-width="2", every point labelled with <text> (A, B, C, O, P, T…), given lengths and angles written on the figure, right angles marked with a small square, dashed lines for constructions. Draw it to match the question exactly. No figure when none is needed.
+- Name formula cards with the standard name of the theorem or formula (e.g. "Tangent–radius theorem", "Alternate segment theorem", "Heron's formula", "Basic proportionality theorem").`;
+
 /** Rules and the reply format shared by every copied prompt (read back by readQuant). */
 function rulesAndFormat({ variants = true, patterns } = {}) {
   return `Rules:
@@ -48,12 +65,15 @@ function rulesAndFormat({ variants = true, patterns } = {}) {
 - Every question has ONE correct answer, exactly 3 believable wrong options (answers from common mistakes), a short step-by-step solution (one or more S: lines), the formula or rule used (F:) and a short trick or shortcut (T:).
 - Give every question a TYPE: a short name for the kind of question (e.g. "Two workers together", "Successive discounts", "Circular seating facing centre", "Either-or conclusions"). Questions of the same kind must use exactly the same TYPE name.${typeLines(patterns)}
 - Write a FORMULA card for every formula, rule, shortcut or trick (F: the formula or rule, T: how to remember or use it fast, E: one small worked example).
+${FIGURE_RULES}
 ${variants ? "- After each question, add 2 practice questions of the same TYPE with changed numbers or a small twist (PQ:), each with its own A:, O: and S: lines.\n" : ""}- Put everything under a heading "## Subject › Topic" from this list:
 ${topicLines()}
 
 Reply ONLY in this plain-text format — no tables, no bold, no LaTeX, no extra text. Leave a blank line between questions:
 
-${variants ? EXAMPLE : EXAMPLE.replace(/\nPQ:[\s\S]*?(?=\n\nFORMULA)/, "")}`;
+${variants ? EXAMPLE : EXAMPLE.replace(/\nPQ:[\s\S]*?(?=\n\nFORMULA)/, "")}
+
+${GEOMETRY_EXAMPLE}`;
 }
 
 /** Prompt for photos / scanned or handwritten PDFs attached in the chat app. */
@@ -107,6 +127,23 @@ O: …; …; …
 S: …
 
 Write maths in plain text, never LaTeX: ×, ÷, √, ², π, fractions as a/b. Double-check every answer.`;
+}
+
+/** Prompt for a figure for a saved question or formula card. The answer repeats it, so the figure joins the saved card. */
+export function buildFigurePrompt(item) {
+  const head = item.kind === "formula" ? `FORMULA: ${item.q}\nF: ${(item.formula || "").replace(/\n/g, " ")}` : `Q: ${item.q.replace(/\n/g, " ")}\nA: ${item.a}`;
+  return `You are an expert maths teacher. Draw the figure for this ${item.kind === "formula" ? "formula" : "question"}.
+
+Reply ONLY with these lines — first repeat mine exactly, then one FIG: line with the SVG drawing on the same line:
+
+## ${item.subject} › ${item.topic}
+${head}
+FIG: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160">…</svg>
+
+Drawing rules: viewBox about 240 × 160, stroke="currentColor", fill="none", stroke-width="2", every point labelled with <text> (A, B, C, O, P, T…), given lengths and angles written on the figure, right angles marked with a small square, dashed lines for constructions. Match the ${item.kind === "formula" ? "formula" : "question"} exactly.
+
+Example of a good figure line:
+FIG: ${FIGURE_EXAMPLE}`;
 }
 
 // ---------- reading the answer back ----------
@@ -182,6 +219,8 @@ export function readQuant(textIn) {
   let field = null;
   let original = null; // the last Q, for the PQs after it
   let n = 0;
+  let fig = null; // lines of a figure being read (until </svg>)
+  let pendingFig = ""; // a figure given before its question
   const finish = () => {
     if (cur?.q) {
       const letter = /^\(?([a-dA-D])\)?(?:[.)\s]|$)/.exec(cur.a);
@@ -196,15 +235,36 @@ export function readQuant(textIn) {
   const start = (kind, q, extra = {}) => {
     finish();
     rest.push("");
-    cur = { id: uid(n++), kind, q: q.trim(), a: "", options: [], letters: {}, solution: "", formula: "", trick: "", difficulty: 0, pattern, ...place, ...extra };
+    cur = { id: uid(n++), kind, q: q.trim(), a: "", options: [], letters: {}, solution: "", formula: "", trick: "", figure: pendingFig, difficulty: 0, pattern, ...place, ...extra };
+    pendingFig = "";
     field = "q";
   };
   const add = (key, value) => {
     cur[key] = cur[key] ? `${cur[key]}\n${value.trim()}` : value.trim();
     field = key;
   };
+  const endFig = () => {
+    const svg = fig.join("\n");
+    fig = null;
+    if (cur) cur.figure = svg;
+    else pendingFig = svg;
+  };
   for (const raw of String(textIn || "").replace(/\r/g, "").split("\n")) {
     if (/^\s*```/.test(raw)) continue;
+    // Figures: "FIG: <svg …> … </svg>" (one or more lines), or a bare <svg> block. Read raw — no maths clean-up.
+    if (fig) {
+      fig.push(raw);
+      if (/<\/svg>/i.test(raw)) endFig();
+      continue;
+    }
+    const figStart = /^\s*(?:[-*•]\s*)?(?:\*\*)?(?:fig(?:ure)?|diagram|svg)(?:\*\*)?\s*[:\-–]\s*(?:\*\*)?\s*(.*)$/i.exec(raw) || (/^\s*<svg[\s>]/i.test(raw) ? [raw, raw.trim()] : null);
+    if (figStart) {
+      if (/<svg[\s>]/i.test(figStart[1])) {
+        fig = [figStart[1]];
+        if (/<\/svg>/i.test(figStart[1])) endFig();
+      }
+      continue;
+    }
     const head = HEADING.exec(raw.trim());
     if (head) {
       const h = readQHeading((head[1] || head[2]).replace(/\*\*/g, ""));

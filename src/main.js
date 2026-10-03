@@ -24,6 +24,7 @@ import * as gk from "./lib/gk-store.js";
 import { itemsToCSV } from "./lib/gk.js";
 import { createGkUI } from "./gk-ui.js";
 import { maths as mathsStore, reasoning as reasonStore } from "./lib/quant-stores.js";
+import { onSaveError } from "./lib/quant-store.js";
 import { qItemsToCSV } from "./lib/quant.js";
 import { createQuantUI } from "./quant-ui.js";
 import {
@@ -1612,6 +1613,9 @@ const quantCtx = {
     scheduleAutoSync();
   },
 };
+onSaveError((e, name) =>
+  toast(`⚠️ ${name} couldn't be saved — the phone's storage for this app is full. Remove some figure photos, or download a backup.`, 10000),
+);
 const QPARTS = [
   {
     section: "maths",

@@ -4,7 +4,7 @@ const calls = [];
 let reply = async () => ({ words: [], provider: "Gemini", skipped: [] });
 vi.mock("../src/lib/engine.js", async (orig) => ({ ...(await orig()), aiTask: (s, task) => (calls.push(task), reply(task)) }));
 
-const { quantFromFiles, quantFromText, quantFromTopic, practiceFor, readPastedQ } = await import("../src/lib/quant-ai.js");
+const { quantFromFiles, quantFromText, quantFromTopic, practiceFor, readPastedQ, figureFor } = await import("../src/lib/quant-ai.js");
 const { buildQuantTopicPrompt } = await import("../src/lib/quant-prompt.js");
 const { makeQItem } = await import("../src/lib/quant.js");
 const S = { exam: "ssc" };
@@ -39,7 +39,7 @@ describe("Maths & Reasoning AI", () => {
 
   it("reads a pasted answer with no AI call, and only completes what is missing", async () => {
     const p = buildQuantTopicPrompt({ topic: "Time and Work" });
-    const r = await quantFromText(S, p.slice(p.indexOf("## Quant")), OPTS);
+    const r = await quantFromText(S, p.slice(p.indexOf("## Quant")).split("\n\n## Quant › Geometry")[0], OPTS);
     expect(calls).toHaveLength(0);
     expect(r.items).toHaveLength(4);
     expect(r.items[1].variantOf).toBe(r.items[0].id);
@@ -85,5 +85,25 @@ describe("mixed pastes", () => {
   it("keeps formula lines and other questions next to Q:/A: items", () => {
     const r = readPastedQ("Speed = Distance / Time\nAverage speed = 2xy/(x + y)\nQ: 20% of 250?\nA: 50\n\nHope this helps!");
     expect(r.map((i) => [i.kind, i.q])).toEqual([["question", "20% of 250?"], ["formula", "Speed"], ["formula", "Average speed"]]);
+  });
+});
+
+describe("figures by AI", () => {
+  it("draws a figure for a saved question, cleaned before use", async () => {
+    const it = makeQItem({ q: "Tangent PT from P, 13 cm from centre O, radius 5 cm. PT?", a: "12 cm", subject: "Quant", topic: "Geometry" });
+    reply = async (task) => {
+      expect(task.system).toMatch(/SVG/);
+      return { words: [{ figure: '<svg width="240" height="160" onload="x()"><circle cx="70" cy="70" r="40" stroke="black" fill="white"/><text x="60" y="80">O</text></svg>' }], provider: "Gemini", skipped: [] };
+    };
+    const r = await figureFor(S, it);
+    expect(r.figure).toBe('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160"><circle cx="70" cy="70" r="40" stroke="currentColor" fill="none"/><text x="60" y="80">O</text></svg>');
+    expect(calls[0].text).toMatch(/Tangent PT/);
+  });
+  it("cards and practice questions from AI keep their figures", async () => {
+    const fig = '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" stroke="currentColor" fill="none"/><text x="4" y="6">O</text></svg>';
+    reply = async () => ({ words: [{ ...card("Q: radius 5, distance 13, tangent?", "12", { topic: "Geometry", figure: fig }), similar: [{ q: "radius 6 distance 10 tangent?", a: "8", options: ["6", "10", "4"], solution: "s", figure: fig }] }], provider: "Gemini", skipped: [] });
+    const r = await quantFromText(S, "Q: radius 5, distance 13, tangent?\nA: 12", OPTS);
+    expect(r.items[0].figure).toContain("<circle");
+    expect(r.items[1].figure).toContain("<circle");
   });
 });

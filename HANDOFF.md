@@ -109,6 +109,13 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 
 ## Decisions worth knowing before changing things
 
+- **Figures are SVG, always passed through `sanitizeSvg` (src/lib/svgsafe.js)** — an allowlist rebuild (no scripts, event
+  handlers, links, styles, foreign content); black/white become `currentColor`/`none` so figures follow the theme. It runs
+  in `makeQItem` and again when rendering. Attached photos (`image`) are small JPEG data URLs (≤160 kB, `cleanImage`);
+  `onSaveError` in quant-store.js warns when the phone's storage is full. A pasted answer that repeats a saved card
+  fills in what it lacks (figure, solution, trick…) via `addItems` → `filled`. Formula Book figures are generated with
+  exact geometry by a script and stored as `FIG:` lines in src/data/qformulas.js.
+
 - **Practice coverage is counted per item, not per list.** `practice.asked[id]` = how many times it was practised
   (all three parts). `pickSession` always takes the least-asked items first (never-asked first, random within a tier,
   weak items spread through the session), so practising one topic, a level filter or another source ("Mixed" vs

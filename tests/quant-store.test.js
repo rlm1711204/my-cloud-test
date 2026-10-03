@@ -5,7 +5,7 @@ import * as gk from "../src/lib/gk-store.js";
 import * as grammar from "../src/lib/grammar-store.js";
 import * as vocab from "../src/lib/store.js";
 import { loadQBook } from "../src/lib/qbook.js";
-import { buildQuantTopicPrompt, readQuant } from "../src/lib/quant-prompt.js";
+import { buildFigurePrompt, buildQuantTopicPrompt, readQuant } from "../src/lib/quant-prompt.js";
 import { makeQuantQuestion } from "../src/lib/quant-quiz.js";
 import { qPatternKey, qTopicKey } from "../src/lib/quant-taxonomy.js";
 import { coverage, pickSession, recordAnswer } from "../src/lib/practice.js";
@@ -15,7 +15,7 @@ beforeEach(() => (q.resetAll(), reasoning.resetAll()));
 
 const pasted = () => {
   const p = buildQuantTopicPrompt({ topic: "Time and Work" });
-  return readQuant(p.slice(p.indexOf("## Quant › Time & Work"))).items;
+  return readQuant(p.slice(p.indexOf("## Quant › Time & Work")).split("\n\n## Quant › Geometry")[0]).items;
 };
 
 describe("Maths & Reasoning store", () => {
@@ -163,5 +163,18 @@ S: Same pattern.`).items;
     const r = q.importData(combined);
     expect(r).toMatchObject({ added: 4, movedToOther: 2 });
     expect(reasoning.liveItems()).toHaveLength(2);
+  });
+});
+
+describe("figures on saved questions", () => {
+  it("a pasted figure for a saved question is added to it (via the figure prompt)", () => {
+    const [orig] = q.addItems(pasted()).added;
+    expect(orig.figure).toBe("");
+    const prompt = buildFigurePrompt(orig);
+    const answer = prompt.slice(prompt.indexOf("## Quant")).split("\n\nDrawing rules")[0].replace(/FIG: <svg[^\n]*/, 'FIG: <svg viewBox="0 0 100 60"><line x1="0" y1="0" x2="100" y2="60" stroke="black"/><text x="5" y="10">A</text></svg>');
+    const r = q.addItems(readQuant(answer).items);
+    expect(r.added).toHaveLength(0);
+    expect(r.filled).toHaveLength(1);
+    expect(q.byId(orig.id).figure).toMatch(/<line x1="0" y1="0" x2="100" y2="60" stroke="currentColor"\/>/);
   });
 });

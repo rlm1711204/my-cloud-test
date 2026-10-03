@@ -41,6 +41,10 @@ export function backupKind(data) {
   return null;
 }
 
+let saveErrorHandler = null;
+/** Called when the phone refuses to store more (usually too many figure photos). */
+export const onSaveError = (fn) => (saveErrorHandler = fn);
+
 /**
  * One part's store. cfg: {subject: "Quant" | "Reasoning", key: localStorage key, name: "Maths", other: () => the other store}.
  */
@@ -89,6 +93,7 @@ export function createQuantStore(cfg) {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
       console.warn(`Could not save ${cfg.name} data`, e);
+      saveErrorHandler?.(e, cfg.name);
     }
   }
 
@@ -127,6 +132,7 @@ export function createQuantStore(cfg) {
     return state.items.find((i) => i.id === id && !i.deleted) ?? null;
   }
 
+  const FILLABLE = ["figure", "image", "solution", "formula", "trick", "pattern"];
   const PROGRESS_FIELDS = ["box", "due", "reviews", "lapses", "lastReviewed", "starred"];
 
   function updateItem(id, fn) {
@@ -179,6 +185,7 @@ export function createQuantStore(cfg) {
     }
     const added = [];
     const skipped = [];
+    const filled = []; // details added to items already saved
     const existing = liveItems();
     const idMap = new Map(); // id in the list → id it ends up with
     const types = patternsByTopic(existing);
@@ -196,13 +203,22 @@ export function createQuantStore(cfg) {
       if (dup) {
         idMap.set(input.id ?? it.id, dup.id);
         skipped.push({ q: it.q, existing: dup.q });
+        // The saved copy gets anything it was missing (a figure, solution, trick…).
+        const fill = Object.fromEntries(FILLABLE.filter((k) => !dup[k] && it[k]).map((k) => [k, it[k]]));
+        if (dup.kind === "question" && dup.options.length < 3 && it.options.length >= 3) fill.options = it.options;
+        if (Object.keys(fill).length) filled.push({ id: dup.id, fill });
       } else {
         idMap.set(input.id ?? it.id, it.id);
         added.push(it);
       }
     }
     if (added.length) update((s) => (s.items = mergeItems(s.items, added)));
-    return { added, skipped, moved };
+    const now = new Date().toISOString();
+    for (const { id, fill } of filled) {
+      if (isBookId(id)) continue;
+      update((s) => (s.items = s.items.map((i) => (i.id === id ? makeQItem({ ...i, ...fill, updatedAt: now }) : i))));
+    }
+    return { added, skipped, moved, filled: filled.filter((f) => !isBookId(f.id)) };
   }
 
   function saveItem(input) {

@@ -6,6 +6,7 @@ import { AllProvidersFailed, aiTask, fallbackNote } from "./engine.js";
 import { answerKey, questionSimilarity, textToItems } from "./gk.js";
 import { QSUBJECTS, topicsOf } from "./quant-taxonomy.js";
 import { makeQItem } from "./quant.js";
+import { sanitizeSvg } from "./svgsafe.js";
 import { formulaLines, isQComplete, looksQuantStructured, readQuant } from "./quant-prompt.js";
 
 export const QBATCH = 5;
@@ -26,19 +27,30 @@ export function quantSystem({ exam }, patterns = {}) {
     "'Circular seating facing centre'). Questions of the same kind must get exactly the same pattern name.",
     ...(types.length ? ["Existing pattern names to reuse where they fit:", ...types] : []),
     "`trick` is a short shortcut or memory aid; `formula` is the formula or rule used.",
+    ...FIGURE_SYSTEM,
   ].join("\n");
 }
 
 const str = (description) => ({ type: "string", description });
+
+const FIGURE_SYSTEM = [
+  "`figure`: for geometry, mensuration, trigonometry (heights and distances) and any item where a diagram helps, a small",
+  'SVG drawing — viewBox about 240 × 160, stroke="currentColor", fill="none", stroke-width="2", every point labelled with',
+  "<text> (A, B, C, O, P, T…), given lengths and angles written on it, right angles marked with a small square, dashed",
+  'construction lines. It must match the question exactly. Use "" when no diagram is needed.',
+  "Name formula cards with the standard name of the theorem or formula (e.g. 'Tangent–radius theorem', 'Heron's formula').",
+];
+const FIGURE_FIELD = str('An SVG diagram (see the rules) when a figure helps, else "".');
 const PRACTICE = {
   type: "object",
   additionalProperties: false,
-  required: ["q", "a", "options", "solution"],
+  required: ["q", "a", "options", "solution", "figure"],
   properties: {
     q: str("A practice question of the same type with changed numbers or a small twist."),
     a: str("Its correct answer."),
     options: { type: "array", items: { type: "string" }, description: "Exactly 3 believable WRONG options." },
     solution: str("Step-by-step solution, one step per line."),
+    figure: FIGURE_FIELD,
   },
 };
 
@@ -76,7 +88,7 @@ export const Q_CARD_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "q", "a", "options", "solution", "formula", "trick", "subject", "topic", "pattern", "difficulty", "aiAnswered", "similar"],
+        required: ["kind", "q", "a", "options", "solution", "formula", "trick", "figure", "subject", "topic", "pattern", "difficulty", "aiAnswered", "similar"],
         properties: {
           kind: str('"question" or "formula".'),
           q: str("The question (clear, exam-style) or the formula's name."),
@@ -85,6 +97,7 @@ export const Q_CARD_SCHEMA = {
           solution: str("Questions: step-by-step solution, one step per line. Formulas: one small worked example."),
           formula: str("The formula or rule used (or the formula itself for a formula card)."),
           trick: str("A short shortcut or memory trick."),
+          figure: FIGURE_FIELD,
           subject: str("Subject from the list."),
           topic: str("Topic from the list."),
           pattern: str("Short name of the question type (also for formulas: the type they solve)."),
@@ -353,4 +366,30 @@ export async function practiceFor(s, item, patterns) {
     .map((p) => makeQItem({ ...p, kind: "question", variantOf: item.id, pattern: item.pattern || card.pattern, subject: item.subject, topic: item.topic, formula: item.formula || card.formula, trick: item.trick || card.trick, aiMade: true, source: `AI · practice` }));
   info.usedBy.add(res.provider);
   return practice.length ? { items: practice, provider: res.provider, card } : null;
+}
+
+/** Figure schema: one SVG drawing. */
+export const FIGURE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["items"],
+  properties: { items: { type: "array", items: { type: "object", additionalProperties: false, required: ["figure"], properties: { figure: FIGURE_FIELD } } } },
+};
+
+/** Draw a figure for a saved question or formula card. Resolves {figure, provider} or null. */
+export async function figureFor(s, item) {
+  const res = await aiTask(
+    s,
+    {
+      system: quantSystem(s),
+      schema: FIGURE_SCHEMA,
+      text:
+        `Draw the figure for this ${item.kind === "formula" ? "formula card" : "question"} — exactly 1 item with \`figure\` = one SVG drawing ` +
+        `that matches it (labelled points, given lengths and angles, right angles marked).\n\n${item.kind === "formula" ? "Formula" : "Question"}: ${item.q}` +
+        `${item.formula ? `\nFormula: ${item.formula}` : ""}${item.a ? `\nAnswer: ${item.a}` : ""}${item.solution ? `\nSolution: ${item.solution}` : ""}`,
+    },
+    null,
+  );
+  const figure = sanitizeSvg(res.words.find((x) => x && x.figure)?.figure);
+  return figure ? { figure, provider: res.provider } : null;
 }

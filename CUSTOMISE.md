@@ -206,4 +206,6 @@ E: 20% of 50% of 400 = 40.
 | `T:` | the trick — how to remember or use it fast |
 | `E:` | one small worked example |
 
+| `FIG:` | optional: a figure as SVG on one line, e.g. `FIG: <svg viewBox="0 0 240 160">…</svg>` — use `stroke="currentColor"` and `fill="none"` so it works in dark mode, and `class="hl"` on the part to highlight |
+
 Use plain-text maths (×, ÷, √, ², π, a/b). The tests check every card when the app is built.

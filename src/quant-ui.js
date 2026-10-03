@@ -2,11 +2,13 @@
 // formula sheet + question types). main.js owns the shell and passes `ctx`; this mirrors gk-ui.js.
 import { SOURCES } from "./lib/quant-store.js";
 import { QUANT_KINDS, kindAccepts, makeQuantQuestion } from "./lib/quant-quiz.js";
-import { isQTopicLike, practiceFor, quantFromFiles, quantFromText, quantFromTopic, readNotes, readPastedQ } from "./lib/quant-ai.js";
+import { figureFor, isQTopicLike, practiceFor, quantFromFiles, quantFromText, quantFromTopic, readNotes, readPastedQ } from "./lib/quant-ai.js";
 import { buildQuantMaterialPrompt, buildQuantTopicPrompt, buildSimilarPrompt, looksQuantStructured } from "./lib/quant-prompt.js";
 import { isBookId, loadQBook } from "./lib/qbook.js";
 import { ALL_QTOPICS, QTAXONOMY, SEP, qPatternKey, qTopicKey } from "./lib/quant-taxonomy.js";
 import { makeQItem, qItemsToCSV } from "./lib/quant.js";
+import { cleanImage, sanitizeSvg } from "./lib/svgsafe.js";
+import { buildFigurePrompt } from "./lib/quant-prompt.js";
 import { labelOf, nodeState, toggle } from "./lib/gk-topics.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
@@ -71,12 +73,23 @@ export function createQuantUI(ctx, part) {
     </div>`;
   }
 
+  /** The figure: a labelled drawing (always re-cleaned before it is shown) and/or the attached photo. */
+  const figureBlock = (it, { small = false } = {}) => {
+    const svg = sanitizeSvg(it.figure);
+    const img = cleanImage(it.image);
+    if (!svg && !img) return "";
+    return `<figure class="fig ${small ? "small" : ""}">${svg}${img ? `<img src="${esc(img)}" alt="Figure" />` : ""}</figure>`;
+  };
+
   function itemBody(it, { reveal = true } = {}) {
+    // The figure is part of the question (and the cue for a formula), so it shows before the answer is revealed.
     if (it.kind === "formula") {
       return `<h3 class="q-title">${esc(it.q)}</h3>
+        ${figureBlock(it)}
         ${reveal ? formulaBlock(it) : ""}`;
     }
     return `<p class="q-text">${lines(it.q)}</p>
+      ${figureBlock(it)}
       ${
         reveal
           ? `<p class="gk-a">✓ ${esc(it.a || "—")}${it.aiAnswered ? ` <span class="badge learning" title="Answer worked out by AI — worth a quick check">AI answer · check</span>` : ""}${
@@ -378,6 +391,7 @@ export function createQuantUI(ctx, part) {
                     subjectOf(it) !== part.subject ? ` <span class="badge bank" title="This belongs to the other part and will be saved there">→ ${esc(part.otherTitle)}</span>` : ""
                   }</span>
                   <b>${lines(it.q.length > 300 ? `${it.q.slice(0, 298)}…` : it.q)}</b>
+                  ${figureBlock(it, { small: true })}
                   ${
                     it.kind === "formula"
                       ? `<span class="small">${lines(it.formula || "(no formula)")}</span>`
@@ -413,6 +427,20 @@ export function createQuantUI(ctx, part) {
         continue;
       }
       rows.push({ item: it, selected: true });
+    }
+    if (!rows.length && hidden.length) {
+      // Everything is saved already — but the paste may bring what a saved card lacks (e.g. a figure from "Prompt for a figure").
+      const { filled } = qs.addItems(hidden);
+      if (filled.length) {
+        gui.candidates = null;
+        gui.copied = false;
+        gui.typedDraft = "";
+        const what = filled.some((f) => f.fill.figure) ? "figure" : "details";
+        toast(`Added the ${what} to ${plural(filled.length, "saved card")} ✓`, 6000);
+        ctx.afterChange();
+        if (filled.length === 1) setTimeout(() => showItem(filled[0].id), 50);
+        return;
+      }
     }
     if (!rows.length) {
       if (!skipped.length && fromFiles && gui.lastFiles?.length) {
@@ -674,6 +702,7 @@ export function createQuantUI(ctx, part) {
         <p class="eyebrow">${esc(cur.label)}${cur.retry ? ` <span class="badge learning">again</span>` : ""}</p>
         ${it ? `<p class="small muted">${SUBJECT_ICON(it.subject)} ${esc(it.topic)}${it.pattern ? ` · ${esc(it.pattern)}` : ""}</p>` : ""}
         <div class="quiz-prompt q-prompt">${lines(cur.prompt)}</div>
+        ${it ? figureBlock(it) : ""}
         ${
           hidden
             ? `<p class="muted center">${cur.kind === "recall" ? "Say or write the formula, then check." : "Solve it on paper, then check."}</p>
@@ -741,7 +770,7 @@ export function createQuantUI(ctx, part) {
       <ul class="formula-sheet">${f
         .map(
           (it) => `<li data-action="${P}-open" data-id="${esc(it.id)}">
-            <b>${esc(it.q)}</b>${it.formula ? `<div class="formula-box">${lines(it.formula)}</div>` : ""}${it.trick ? `<span class="small muted">💡 ${lines(it.trick)}</span>` : ""}
+            <b>${esc(it.q)}</b>${figureBlock(it, { small: true })}${it.formula ? `<div class="formula-box">${lines(it.formula)}</div>` : ""}${it.trick ? `<span class="small muted">💡 ${lines(it.trick)}</span>` : ""}
           </li>`,
         )
         .join("")}</ul>
@@ -877,7 +906,49 @@ export function createQuantUI(ctx, part) {
                ${it.pattern && it.kind === "question" ? `<button class="btn small" type="button" data-action="${P}-practise-type" data-key="${esc(qPatternKey(it))}">🧩 All of this type</button>` : ""}
                <button class="btn small danger" type="button" data-action="${P}-delete" data-id="${esc(it.id)}">Delete</button>`
         }
-      </div>`);
+      </div>
+      ${it.book ? "" : figureActions(it, ai)}`);
+  }
+
+  function figureActions(it, ai) {
+    const has = Boolean(it.figure || it.image);
+    return `<div class="fig-actions">
+      <p class="small muted">${has ? "Figure" : "No figure yet — add one for geometry, mensuration or trigonometry."}</p>
+      <div class="row wrap">
+        ${ai ? `<button class="btn small" type="button" data-action="${P}-draw-figure" data-id="${esc(it.id)}">🤖 ${it.figure ? "Redraw" : "Draw"} figure</button>` : ""}
+        <button class="btn small" type="button" data-action="${P}-copy-figure" data-id="${esc(it.id)}">📋 Prompt for a figure</button>
+        <label class="btn small">📷 ${it.image ? "Change" : "Attach"} photo of the figure<input type="file" accept="image/*" data-input="${P}-fig-photo" data-id="${esc(it.id)}" hidden /></label>
+        ${has ? `<button class="btn small ghost" type="button" data-action="${P}-remove-figure" data-id="${esc(it.id)}">Remove figure</button>` : ""}
+      </div>
+    </div>`;
+  }
+
+  /** A photo of a figure, made small enough to keep on the phone (max 640 px, JPEG). */
+  async function figurePhoto(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, bad) => {
+        const i = new Image();
+        i.onload = () => ok(i);
+        i.onerror = () => bad(new Error("That photo couldn't be opened."));
+        i.src = url;
+      });
+      for (const [max, q] of [[640, 0.62], [520, 0.55], [420, 0.5], [340, 0.45]]) {
+        const k = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * k);
+        c.height = Math.round(img.height * k);
+        const g = c.getContext("2d");
+        g.fillStyle = "#fff";
+        g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, 0, 0, c.width, c.height);
+        const data = c.toDataURL("image/jpeg", q);
+        if (cleanImage(data)) return data;
+      }
+      throw new Error("That photo is too detailed to keep — crop it to just the figure and try again.");
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   function showInfo(id) {
@@ -1062,6 +1133,33 @@ export function createQuantUI(ctx, part) {
         toast(e.message, 7000);
       }
     },
+    [`${P}-draw-figure`]: async (el) => {
+      const it = qs.byId(el.dataset.id);
+      if (!it) return;
+      toast("AI is drawing the figure…", 60000);
+      try {
+        const res = await figureFor(settings(), it);
+        if (!res) return toast("The AI couldn't draw it right now. Try “Prompt for a figure” instead.", 7000);
+        qs.updateItem(it.id, (i) => ({ ...i, figure: res.figure }));
+        toast(`Figure drawn by ${res.provider} ✓ — check the labels match the question.`, 6000);
+        showItem(it.id);
+        after();
+      } catch (e) {
+        toast(e.message, 7000);
+      }
+    },
+    [`${P}-copy-figure`]: async (el) => {
+      const it = qs.byId(el.dataset.id);
+      if (!it) return;
+      closeOverlay();
+      await copyAndGuide(buildFigurePrompt(it), "figure", "Prompt copied ✓ — paste it in Gemini, then paste its answer here");
+    },
+    [`${P}-remove-figure`]: (el) => {
+      if (!confirm("Remove the figure from this card?")) return;
+      qs.updateItem(el.dataset.id, (i) => ({ ...i, figure: "", image: "" }));
+      showItem(el.dataset.id);
+      after();
+    },
     [`${P}-copy-similar`]: async (el) => {
       const it = qs.byId(el.dataset.id);
       if (!it) return;
@@ -1086,7 +1184,7 @@ export function createQuantUI(ctx, part) {
     },
     [`${P}-add-selected`]: () => {
       const chosen = gui.candidates.items.filter((r) => r.selected).map((r) => r.item);
-      const { added, skipped: dup, moved } = qs.addItems([...gui.candidates.hidden, ...chosen]);
+      const { added, skipped: dup, moved, filled } = qs.addItems([...gui.candidates.hidden, ...chosen]);
       const ownHidden = gui.candidates.hidden.filter((h) => subjectOf(h) === part.subject).length;
       const skipped = dup.slice(ownHidden);
       gui.candidates = null;
@@ -1095,7 +1193,7 @@ export function createQuantUI(ctx, part) {
       toast(
         `Added ${plural(added.length - v, "card")}${v ? ` + ${plural(v, "practice question")}` : ""} ✓${skipped.length ? ` (${skipped.length} already saved)` : ""}${
           moved.length ? ` · ${plural(moved.length, "card")} went to ${part.otherTitle}` : ""
-        }`,
+        }${filled.length ? ` · added details${filled.some((f) => f.fill.figure) ? " (figure)" : ""} to ${plural(filled.length, "saved card")}` : ""}`,
         6000,
       );
       after();
@@ -1236,6 +1334,22 @@ export function createQuantUI(ctx, part) {
       const files = [...t.files];
       t.value = "";
       handleFiles(files);
+      return true;
+    }
+    if (t.dataset.input === `${P}-fig-photo`) {
+      const f = t.files[0];
+      const id = t.dataset.id;
+      t.value = "";
+      if (!f) return true;
+      try {
+        const image = await figurePhoto(f);
+        qs.updateItem(id, (i) => ({ ...i, image }));
+        toast("Figure photo saved ✓");
+        showItem(id);
+        after();
+      } catch (e) {
+        toast(e.message, 7000);
+      }
       return true;
     }
     if (t.dataset.input === `${P}-chat-files`) {

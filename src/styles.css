@@ -529,3 +529,16 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
   .section-switch button { padding: 5px 2px; font-size: .74rem; display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.1; }
   .section-switch .lbl { display: block; font-size: .66rem; }
 }
+
+/* ---------- figures (geometry, mensuration, trigonometry) ---------- */
+.fig { margin: 10px auto; padding: 6px; max-width: 360px; color: var(--ink); background: var(--surface-2); border-radius: 12px; text-align: center; }
+.fig svg { display: block; width: 100%; height: auto; max-height: 260px; margin: 0 auto; overflow: visible; }
+.fig svg text { fill: currentColor; font-family: var(--sans); }
+.fig .hl { stroke: var(--primary); }
+.fig text.hl { fill: var(--primary); stroke: none; }
+.fig img { display: block; max-width: 100%; max-height: 300px; margin: 6px auto 0; border-radius: 8px; background: #fff; }
+.fig.small { max-width: 220px; padding: 4px; margin: 6px 0; }
+.fig.small svg { max-height: 150px; }
+.cand-main .fig.small { margin: 4px 0; }
+.fig-actions { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.fig-actions p { margin: 0 0 6px; }

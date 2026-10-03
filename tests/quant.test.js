@@ -70,7 +70,7 @@ describe("items", () => {
 describe("reading an AI's answer", () => {
   it("reads the prompt's own example: question, 2 practice questions linked to it, and a formula card", () => {
     const p = buildQuantTopicPrompt({ topic: "Time and Work" });
-    const { items } = readQuant(p.slice(p.indexOf("## Quant › Time & Work")));
+    const { items } = readQuant(p.slice(p.indexOf("## Quant › Time & Work")).split("\n\n## Quant › Geometry")[0]);
     expect(items.map((i) => i.kind)).toEqual(["question", "question", "question", "formula"]);
     expect(items[1].variantOf).toBe(items[0].id);
     expect(items[2].variantOf).toBe(items[0].id);
@@ -135,5 +135,33 @@ describe("Formula Book", () => {
     expect(items.length).toBeGreaterThanOrEqual(70);
     expect(new Set(items.map((i) => i.subject))).toEqual(new Set(["Quant", "Reasoning"]));
     expect(items.every((i) => i.formula && i.trick && i.solution)).toBe(true);
+    // Geometry, mensuration and trigonometry cards carry figures that pass the safety filter unchanged.
+    const withFig = items.filter((i) => i.figure);
+    expect(withFig.length).toBeGreaterThanOrEqual(25);
+    expect(withFig.every((i) => makeQItem(i).figure === i.figure)).toBe(true);
+    expect(withFig.map((i) => i.q)).toEqual(expect.arrayContaining(["Tangent–radius theorem", "Alternate segment theorem", "Centroid (medians meet in the ratio 2 : 1)", "Heron's formula"]));
+  });
+});
+
+describe("figures", () => {
+  it("reads a FIG: line (one line or a fenced block) into a safe figure", async () => {
+    const { sanitizeSvg } = await import("../src/lib/svgsafe.js");
+    const p = buildQuantTopicPrompt({ topic: "Circles" });
+    const geo = readQuant(p.slice(p.indexOf("## Quant › Geometry"))).items[0];
+    expect(makeQItem(geo)).toMatchObject({ topic: "Geometry", pattern: "Tangent from an external point" });
+    expect(makeQItem(geo).figure).toMatch(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 220 130">/);
+    const fenced = readQuant('## Quant › Geometry\nQ: Find angle BOC.\nA: 100°\n**Figure:**\n```svg\n<svg width="200" height="160">\n<polygon points="1,1 9,9 1,9" stroke="black"/>\n</svg>\n```\nS: Double the angle.').items[0];
+    expect(makeQItem(fenced).figure).toBe('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160"><polygon points="1,1 9,9 1,9" stroke="currentColor"/></svg>');
+    expect(fenced.solution).toBe("Double the angle.");
+    // Nothing unsafe survives.
+    const bad = sanitizeSvg('<svg viewBox="0 0 9 9" onload="x()"><script>x()</script><a href="javascript:x()"><circle r="1"/></a><circle r="2" onclick="x()" fill="url(http://e)"/><foreignObject><b>x</b></foreignObject><text>&lt;img onerror=1&gt;</text></svg>');
+    expect(bad).toBe('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9"><circle r="2"/><text>&lt;img onerror=1&gt;</text></svg>');
+    expect(sanitizeSvg("<div>no</div>")).toBe("");
+  });
+  it("keeps attached photos only as small image data URLs", async () => {
+    const { cleanImage } = await import("../src/lib/svgsafe.js");
+    expect(cleanImage("data:image/jpeg;base64,AAAA")).toBe("data:image/jpeg;base64,AAAA");
+    expect(cleanImage("data:text/html;base64,AAAA")).toBe("");
+    expect(cleanImage("javascript:alert(1)")).toBe("");
   });
 });
