@@ -171,10 +171,10 @@ describe("figures on saved questions", () => {
     const [orig] = q.addItems(pasted()).added;
     expect(orig.figure).toBe("");
     const prompt = buildFigurePrompt(orig);
-    const answer = prompt.slice(prompt.indexOf("## Quant")).split("\n\nDrawing rules")[0].replace(/FIG: <svg[^\n]*/, 'FIG: <svg viewBox="0 0 100 60"><line x1="0" y1="0" x2="100" y2="60" stroke="black"/><text x="5" y="10">A</text></svg>');
+    const answer = prompt.slice(prompt.indexOf("## Quant")).split("\n\nDescribe the figure")[0].replace(/DRAW: …/, "DRAW: triangle A B C right at B\nDRAW: right A B C");
     const r = q.addItems(readQuant(answer).items);
     expect(r.added).toHaveLength(0);
     expect(r.filled).toHaveLength(1);
-    expect(q.byId(orig.id).figure).toMatch(/<line x1="0" y1="0" x2="100" y2="60" stroke="currentColor"\/>/);
+    expect(q.byId(orig.id).draw).toBe("triangle A B C right at B\nright A B C");
   });
 });

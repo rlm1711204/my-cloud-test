@@ -10,7 +10,7 @@ const { makeQItem } = await import("../src/lib/quant.js");
 const S = { exam: "ssc" };
 const OPTS = { variants: true, patterns: {} };
 const schemaOf = (task) => Object.keys(task.schema.properties.items.items.properties);
-const isList = (t) => schemaOf(t).length === 4 && schemaOf(t).includes("options");
+const isList = (t) => schemaOf(t).includes("figure_box");
 const isPlan = (t) => schemaOf(t).includes("name");
 const card = (q, a, extra = {}) => ({
   kind: "question", q, a, options: ["W1", "W2", "W3"], solution: "Step 1\nStep 2", formula: "F", trick: "T", subject: "Quant", topic: "Time & Work",
@@ -89,21 +89,37 @@ describe("mixed pastes", () => {
 });
 
 describe("figures by AI", () => {
-  it("draws a figure for a saved question, cleaned before use", async () => {
+  it("describes a figure for a saved question; the app draws it exactly, and a wrong description is retried once", async () => {
     const it = makeQItem({ q: "Tangent PT from P, 13 cm from centre O, radius 5 cm. PT?", a: "12 cm", subject: "Quant", topic: "Geometry" });
+    const good = "DRAW: circle O r=5\nDRAW: point P outside O dist=13\nDRAW: tangents T from P to O\nDRAW: right O T P";
     reply = async (task) => {
-      expect(task.system).toMatch(/SVG/);
-      return { words: [{ figure: '<svg width="240" height="160" onload="x()"><circle cx="70" cy="70" r="40" stroke="black" fill="white"/><text x="60" y="80">O</text></svg>' }], provider: "Gemini", skipped: [] };
+      expect(task.system).toMatch(/DRAW/);
+      return { words: [{ draw: calls.length === 1 ? "circle O r=5\ntangents T from Q to O" : good }], provider: "Gemini", skipped: [] };
     };
     const r = await figureFor(S, it);
-    expect(r.figure).toBe('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160"><circle cx="70" cy="70" r="40" stroke="currentColor" fill="none"/><text x="60" y="80">O</text></svg>');
+    expect(calls).toHaveLength(2);
+    expect(calls[1].text).toMatch(/Q/); // the error was fed back
+    expect(r).toEqual({ draw: "circle O r=5\npoint P outside O dist=13\ntangents T from P to O\nright O T P", provider: "Gemini" });
     expect(calls[0].text).toMatch(/Tangent PT/);
+
+    calls.length = 0;
+    reply = async () => ({ words: [{ draw: "nonsense here" }], provider: "Gemini", skipped: [] });
+    expect(await figureFor(S, it)).toBeNull();
   });
-  it("cards and practice questions from AI keep their figures", async () => {
-    const fig = '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" stroke="currentColor" fill="none"/><text x="4" y="6">O</text></svg>';
-    reply = async () => ({ words: [{ ...card("Q: radius 5, distance 13, tangent?", "12", { topic: "Geometry", figure: fig }), similar: [{ q: "radius 6 distance 10 tangent?", a: "8", options: ["6", "10", "4"], solution: "s", figure: fig }] }], provider: "Gemini", skipped: [] });
+  it("cards and practice questions from AI keep their DRAW figures; a figure box from a page is passed on for cutting", async () => {
+    const draw = "circle O r=5\npoint P outside O dist=13\ntangents T from P to O";
+    reply = async () => ({ words: [{ ...card("Q: radius 5, distance 13, tangent?", "12", { topic: "Geometry", draw }), similar: [{ q: "radius 6 distance 10 tangent?", a: "8", options: ["6", "10", "4"], solution: "s", draw: "bad" }] }], provider: "Gemini", skipped: [] });
     const r = await quantFromText(S, "Q: radius 5, distance 13, tangent?\nA: 12", OPTS);
-    expect(r.items[0].figure).toContain("<circle");
-    expect(r.items[1].figure).toContain("<circle");
+    expect(r.items[0].draw).toBe(draw);
+    expect(r.items[1].draw).toBe(""); // a description that can't be drawn is dropped, never shown wrong
+
+    calls.length = 0;
+    reply = async (task) =>
+      isList(task)
+        ? { words: [{ kind: "question", q: "In the figure, find angle x.", a: "", options: [], figure_box: [100, 200, 400, 700], source: 1, page: 2 }], provider: "Gemini", skipped: [] }
+        : { words: [card("In the figure, find angle x.", "40°", { topic: "Geometry", draw: "" })], provider: "Gemini", skipped: [] };
+    const f = await quantFromFiles(S, [{ kind: "pdf", name: "notes.pdf", mediaType: "application/pdf", data: "x" }], "notes.pdf", OPTS);
+    expect(f.items[0].crop).toEqual({ source: 1, page: 2, box: [100, 200, 400, 700] });
+    expect(f.items[1].crop).toBeUndefined();
   });
 });

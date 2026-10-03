@@ -9,6 +9,9 @@ import { ALL_QTOPICS, QTAXONOMY, SEP, qPatternKey, qTopicKey } from "./lib/quant
 import { makeQItem, qItemsToCSV } from "./lib/quant.js";
 import { cleanImage, sanitizeSvg } from "./lib/svgsafe.js";
 import { buildFigurePrompt } from "./lib/quant-prompt.js";
+import { figureSvg } from "./lib/geodraw.js";
+import { cropFigure, normBox, padBox } from "./lib/figcrop.js";
+import { pagePicture } from "./lib/extract.js";
 import { labelOf, nodeState, toggle } from "./lib/gk-topics.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
@@ -42,6 +45,9 @@ export function createQuantUI(ctx, part) {
     chatFiles: null,
     chatThumbs: null,
     lastFiles: null,
+    cropFiles: null, // the files the figures are cut from (adjustable on the review screen)
+    pages: new Map(),
+    crop: null,
     quiz: null,
     session: null,
     search: "",
@@ -73,23 +79,30 @@ export function createQuantUI(ctx, part) {
     </div>`;
   }
 
-  /** The figure: a labelled drawing (always re-cleaned before it is shown) and/or the attached photo. */
-  const figureBlock = (it, { small = false } = {}) => {
-    const svg = sanitizeSvg(it.figure);
+  /**
+   * The figure: the book's own figure (cut from the page or attached), else the exact drawing made from the DRAW
+   * lines, else a ready drawing (Formula Book). With `both`, the exact drawing is shown under the book's figure too.
+   */
+  const figureBlock = (it, { small = false, both = false } = {}) => {
     const img = cleanImage(it.image);
+    const drawn = it.draw ? sanitizeSvg(figureSvg(it.draw)) : "";
+    const ready = sanitizeSvg(it.figure);
+    const svg = drawn || ready;
     if (!svg && !img) return "";
-    return `<figure class="fig ${small ? "small" : ""}">${svg}${img ? `<img src="${esc(img)}" alt="Figure" />` : ""}</figure>`;
+    if (img) return `<figure class="fig ${small ? "small" : ""}"><img src="${esc(img)}" alt="Figure" />${both && svg ? `<figcaption class="small muted">Drawn exactly:</figcaption>${svg}` : ""}</figure>`;
+    const old = !drawn && ready && !it.book; // an older AI drawing, made before figures were drawn exactly
+    return `<figure class="fig ${small ? "small" : ""}">${svg}${old && both ? `<figcaption class="small warn">Old AI drawing — it may be inaccurate. Use “Draw exactly” or remove it.</figcaption>` : ""}</figure>`;
   };
 
-  function itemBody(it, { reveal = true } = {}) {
+  function itemBody(it, { reveal = true, both = false } = {}) {
     // The figure is part of the question (and the cue for a formula), so it shows before the answer is revealed.
     if (it.kind === "formula") {
       return `<h3 class="q-title">${esc(it.q)}</h3>
-        ${figureBlock(it)}
+        ${figureBlock(it, { both })}
         ${reveal ? formulaBlock(it) : ""}`;
     }
     return `<p class="q-text">${lines(it.q)}</p>
-      ${figureBlock(it)}
+      ${figureBlock(it, { both })}
       ${
         reveal
           ? `<p class="gk-a">✓ ${esc(it.a || "—")}${it.aiAnswered ? ` <span class="badge learning" title="Answer worked out by AI — worth a quick check">AI answer · check</span>` : ""}${
@@ -393,6 +406,13 @@ export function createQuantUI(ctx, part) {
                   <b>${lines(it.q.length > 300 ? `${it.q.slice(0, 298)}…` : it.q)}</b>
                   ${figureBlock(it, { small: true })}
                   ${
+                    gui.cropFiles?.length && (it.crop || it.image || mayHaveFigure(it))
+                      ? `<span class="row wrap"><button class="btn small" type="button" data-action="${P}-crop-adjust" data-i="${i}">✂️ ${it.image ? "Adjust figure" : "Cut figure from page"}</button>${
+                          it.image ? `<button class="btn small ghost" type="button" data-action="${P}-crop-drop" data-i="${i}">No figure</button>` : ""
+                        }</span>`
+                      : ""
+                  }
+                  ${
                     it.kind === "formula"
                       ? `<span class="small">${lines(it.formula || "(no formula)")}</span>`
                       : `<span>✓ ${esc(it.a || "—")}${it.aiAnswered ? ` <span class="badge learning">AI answer · check</span>` : ""}</span>`
@@ -479,8 +499,12 @@ export function createQuantUI(ctx, part) {
         const text = await filesToText(files, setBusy);
         items = readNotes(text, source).map((x) => ({ ...x }));
       }
+      if (items.some((x) => x.crop)) {
+        setBusy("Cutting out the figures from your pages…");
+        await applyCrops(items, files);
+      } else useCropFiles(files);
       gui.busy = null;
-      showCandidates(items.map((x) => (x.id ? x : { ...x })), ai, true);
+      showCandidates(items, ai, true);
     } catch (e) {
       gui.busy = null;
       toast(`${e.message || e} — you can ask the Gemini app about this file instead.`, 7000);
@@ -516,6 +540,11 @@ export function createQuantUI(ctx, part) {
         return;
       }
       items ??= looksQuantStructured(text) ? readPastedQ(text) : readNotes(text, "Typed");
+      // An answer from the chat app about my files: cut its figures out of those files (its BOX: lines).
+      if (gui.chatFiles?.length && items.some((x) => x.crop)) {
+        setBusy("Cutting out the figures from your pages…");
+        await applyCrops(items, gui.chatFiles);
+      } else useCropFiles(gui.chatFiles);
       gui.busy = null;
       if (gui.copied && items.length) {
         gui.copied = false;
@@ -888,7 +917,7 @@ export function createQuantUI(ctx, part) {
     openOverlay(`
       <div class="sheet-bar"><span class="badge ${stage(it)}">${STAGE_LABEL[stage(it)]}</span><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
       ${itemHead(it)}
-      ${itemBody(it)}
+      ${itemBody(it, { both: true })}
       ${linkedLine(it)}
       ${progressLine(it)}
       <div class="row wrap">
@@ -911,44 +940,119 @@ export function createQuantUI(ctx, part) {
   }
 
   function figureActions(it, ai) {
-    const has = Boolean(it.figure || it.image);
+    const has = Boolean(it.figure || it.image || it.draw);
     return `<div class="fig-actions">
       <p class="small muted">${has ? "Figure" : "No figure yet — add one for geometry, mensuration or trigonometry."}</p>
       <div class="row wrap">
-        ${ai ? `<button class="btn small" type="button" data-action="${P}-draw-figure" data-id="${esc(it.id)}">🤖 ${it.figure ? "Redraw" : "Draw"} figure</button>` : ""}
+        <label class="btn small">📷 ${it.image ? "Change" : "Add"} the book's figure (photo)<input type="file" accept="image/*,application/pdf,.pdf" data-input="${P}-fig-photo" data-id="${esc(it.id)}" hidden /></label>
+        ${ai ? `<button class="btn small" type="button" data-action="${P}-draw-figure" data-id="${esc(it.id)}">🤖 ${it.draw ? "Draw again" : "Draw exactly"}</button>` : ""}
         <button class="btn small" type="button" data-action="${P}-copy-figure" data-id="${esc(it.id)}">📋 Prompt for a figure</button>
-        <label class="btn small">📷 ${it.image ? "Change" : "Attach"} photo of the figure<input type="file" accept="image/*" data-input="${P}-fig-photo" data-id="${esc(it.id)}" hidden /></label>
         ${has ? `<button class="btn small ghost" type="button" data-action="${P}-remove-figure" data-id="${esc(it.id)}">Remove figure</button>` : ""}
       </div>
     </div>`;
   }
 
-  /** A photo of a figure, made small enough to keep on the phone (max 640 px, JPEG). */
-  async function figurePhoto(file) {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await new Promise((ok, bad) => {
-        const i = new Image();
-        i.onload = () => ok(i);
-        i.onerror = () => bad(new Error("That photo couldn't be opened."));
-        i.src = url;
-      });
-      for (const [max, q] of [[640, 0.62], [520, 0.55], [420, 0.5], [340, 0.45]]) {
-        const k = Math.min(1, max / Math.max(img.width, img.height));
-        const c = document.createElement("canvas");
-        c.width = Math.round(img.width * k);
-        c.height = Math.round(img.height * k);
-        const g = c.getContext("2d");
-        g.fillStyle = "#fff";
-        g.fillRect(0, 0, c.width, c.height);
-        g.drawImage(img, 0, 0, c.width, c.height);
-        const data = c.toDataURL("image/jpeg", q);
-        if (cleanImage(data)) return data;
+  // ---------- cutting the figure out of a page ----------
+  /** Questions that usually come with a figure: geometry, mensuration, trigonometry, or "in the figure…". */
+  const mayHaveFigure = (it) => it.kind === "question" && !it.variantOf && (/Geometry|Mensuration|Trigonometry/.test(it.topic) || /\b(figure|diagram|shown|graph)\b/i.test(it.q));
+  /** Page pictures of the files being added, cached: key "file:page". */
+  const useCropFiles = (files) => {
+    gui.cropFiles = files?.length ? files : null;
+    gui.pages = new Map();
+  };
+  const pagePic = (files, source, page) => {
+    const key = `${source}:${page}`;
+    if (!gui.pages.has(key)) gui.pages.set(key, pagePicture(files[source - 1], page));
+    return gui.pages.get(key);
+  };
+
+  /** Cut each item's figure out of its page (items whose `crop` the AI or a BOX: line gave). */
+  async function applyCrops(items, files) {
+    useCropFiles(files);
+    let n = 0;
+    for (const it of items) {
+      const c = it.crop;
+      if (!c || !files?.[c.source - 1] || !normBox(c.box)) continue;
+      try {
+        it.image = await cropFigure(await pagePic(files, c.source, c.page), padBox(normBox(c.box)));
+        n += 1;
+      } catch {
+        /* the figure stays out; the box can still be adjusted on the review screen */
       }
-      throw new Error("That photo is too detailed to keep — crop it to just the figure and try again.");
-    } finally {
-      URL.revokeObjectURL(url);
     }
+    return n;
+  }
+
+  /** The crop tool: drag the box over the figure. Resolves the box [ymin, xmin, ymax, xmax] (0–1000) or null. */
+  function openCropper(blob, box, title = "Cut out the figure") {
+    const url = URL.createObjectURL(blob);
+    const b = normBox(box) || [60, 60, 940, 940];
+    return new Promise((resolve) => {
+      gui.crop = { box: [...b], url, resolve };
+      openOverlay(
+        `<div class="sheet-bar"><h3>✂️ ${esc(title)}</h3><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
+        <p class="muted small">Drag the box over the figure (with its letters and numbers). Drag a corner to resize.</p>
+        <div class="cropper" id="${P}Cropper"><img src="${url}" alt="Page" draggable="false" />
+          <div class="crop-box"><span class="h" data-h="tl"></span><span class="h" data-h="tr"></span><span class="h" data-h="bl"></span><span class="h" data-h="br"></span></div></div>
+        <div class="row wrap">
+          <button class="btn primary" type="button" data-action="${P}-crop-save">✓ Use this</button>
+          <button class="btn" type="button" data-action="${P}-crop-all">Whole picture</button>
+        </div>`,
+        { tall: true },
+      );
+      wireCropper();
+    });
+  }
+
+  function wireCropper() {
+    const root = $(`#${P}Cropper`);
+    if (!root) return;
+    const boxEl = root.querySelector(".crop-box");
+    const show = () => {
+      const [y0, x0, y1, x1] = gui.crop.box;
+      Object.assign(boxEl.style, { left: `${x0 / 10}%`, top: `${y0 / 10}%`, width: `${(x1 - x0) / 10}%`, height: `${(y1 - y0) / 10}%` });
+    };
+    show();
+    let drag = null;
+    root.addEventListener("pointerdown", (e) => {
+      if (!e.target.closest(".crop-box")) return;
+      e.preventDefault();
+      const r = root.getBoundingClientRect();
+      drag = { mode: e.target.dataset.h || "move", x: e.clientX, y: e.clientY, start: [...gui.crop.box], w: r.width, h: r.height };
+      root.setPointerCapture?.(e.pointerId);
+    });
+    root.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = ((e.clientX - drag.x) / drag.w) * 1000;
+      const dy = ((e.clientY - drag.y) / drag.h) * 1000;
+      let [y0, x0, y1, x1] = drag.start;
+      const clamp = (v) => Math.min(1000, Math.max(0, v));
+      if (drag.mode === "move") {
+        const w = x1 - x0;
+        const h = y1 - y0;
+        x0 = Math.min(1000 - w, Math.max(0, x0 + dx));
+        y0 = Math.min(1000 - h, Math.max(0, y0 + dy));
+        [x1, y1] = [x0 + w, y0 + h];
+      } else {
+        if (drag.mode.includes("l")) x0 = clamp(Math.min(x0 + dx, x1 - 40));
+        if (drag.mode.includes("r")) x1 = clamp(Math.max(x1 + dx, x0 + 40));
+        if (drag.mode.includes("t")) y0 = clamp(Math.min(y0 + dy, y1 - 40));
+        if (drag.mode.includes("b")) y1 = clamp(Math.max(y1 + dy, y0 + 40));
+      }
+      gui.crop.box = [y0, x0, y1, x1];
+      show();
+    });
+    const end = () => (drag = null);
+    root.addEventListener("pointerup", end);
+    root.addEventListener("pointercancel", end);
+  }
+
+  function finishCrop(box) {
+    const c = gui.crop;
+    if (!c) return;
+    gui.crop = null;
+    URL.revokeObjectURL(c.url);
+    c.resolve(box);
   }
 
   function showInfo(id) {
@@ -1139,9 +1243,9 @@ export function createQuantUI(ctx, part) {
       toast("AI is drawing the figure…", 60000);
       try {
         const res = await figureFor(settings(), it);
-        if (!res) return toast("The AI couldn't draw it right now. Try “Prompt for a figure” instead.", 7000);
-        qs.updateItem(it.id, (i) => ({ ...i, figure: res.figure }));
-        toast(`Figure drawn by ${res.provider} ✓ — check the labels match the question.`, 6000);
+        if (!res) return toast("The AI couldn't describe this figure. Try “Prompt for a figure”, or add the book's figure as a photo.", 8000);
+        qs.updateItem(it.id, (i) => ({ ...i, draw: res.draw, figure: "" }));
+        toast(`Figure drawn exactly from ${res.provider}'s description ✓`, 6000);
         showItem(it.id);
         after();
       } catch (e) {
@@ -1156,9 +1260,36 @@ export function createQuantUI(ctx, part) {
     },
     [`${P}-remove-figure`]: (el) => {
       if (!confirm("Remove the figure from this card?")) return;
-      qs.updateItem(el.dataset.id, (i) => ({ ...i, figure: "", image: "" }));
+      qs.updateItem(el.dataset.id, (i) => ({ ...i, figure: "", image: "", draw: "" }));
       showItem(el.dataset.id);
       after();
+    },
+    [`${P}-crop-save`]: () => {
+      const box = gui.crop?.box;
+      finishCrop(box);
+    },
+    [`${P}-crop-all`]: () => finishCrop([0, 0, 1000, 1000]),
+    [`${P}-crop-adjust`]: async (el) => {
+      const row = gui.candidates?.items[Number(el.dataset.i)];
+      const files = gui.cropFiles;
+      if (!row || !files?.length) return;
+      const c = row.item.crop?.source <= files.length ? row.item.crop : { source: 1, page: 1, box: [80, 80, 920, 920] };
+      try {
+        const blob = await pagePic(files, c.source, c.page);
+        const box = await openCropper(blob, c.box, "Adjust the figure");
+        closeOverlay();
+        if (!box) return render();
+        row.item = { ...row.item, crop: { ...c, box }, image: await cropFigure(blob, box) };
+      } catch (e) {
+        toast(e.message, 6000);
+      }
+      render();
+    },
+    [`${P}-crop-drop`]: (el) => {
+      const row = gui.candidates?.items[Number(el.dataset.i)];
+      if (!row) return;
+      row.item = { ...row.item, image: "" };
+      render();
     },
     [`${P}-copy-similar`]: async (el) => {
       const it = qs.byId(el.dataset.id);
@@ -1342,11 +1473,16 @@ export function createQuantUI(ctx, part) {
       t.value = "";
       if (!f) return true;
       try {
-        const image = await figurePhoto(f);
-        qs.updateItem(id, (i) => ({ ...i, image }));
-        toast("Figure photo saved ✓");
+        const blob = await pagePicture(f, 1);
+        const box = await openCropper(blob, [60, 60, 940, 940], "Cut out the book's figure");
+        closeOverlay();
+        if (box) {
+          const image = await cropFigure(blob, box);
+          qs.updateItem(id, (i) => ({ ...i, image }));
+          toast("Figure saved ✓");
+          after();
+        }
         showItem(id);
-        after();
       } catch (e) {
         toast(e.message, 7000);
       }
@@ -1461,8 +1597,11 @@ export function createQuantUI(ctx, part) {
     onSubmit,
     prefsCard,
     dataCard,
-    busy: () => Boolean(gui.busy || gui.quiz || gui.session || gui.candidates || gui.chatFiles || gui.copied),
-    onCloseOverlay: () => (gui.session = null),
+    busy: () => Boolean(gui.busy || gui.crop || gui.quiz || gui.session || gui.candidates || gui.chatFiles || gui.copied),
+    onCloseOverlay: () => {
+      gui.session = null;
+      finishCrop(null);
+    },
     cardOfTheDay: () => {
       const pool = qs.itemsFor(prefs().dailySource, { forToday: true });
       return pool.length ? qs.byId(qs.todaysPlan().wotd) : null;

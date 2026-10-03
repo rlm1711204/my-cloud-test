@@ -6,7 +6,8 @@ import { AllProvidersFailed, aiTask, fallbackNote } from "./engine.js";
 import { answerKey, questionSimilarity, textToItems } from "./gk.js";
 import { QSUBJECTS, topicsOf } from "./quant-taxonomy.js";
 import { makeQItem } from "./quant.js";
-import { sanitizeSvg } from "./svgsafe.js";
+import { DRAW_GUIDE, drawFigure } from "./geodraw.js";
+import { cleanDraw } from "./quant.js";
 import { formulaLines, isQComplete, looksQuantStructured, readQuant } from "./quant-prompt.js";
 
 export const QBATCH = 5;
@@ -34,23 +35,24 @@ export function quantSystem({ exam }, patterns = {}) {
 const str = (description) => ({ type: "string", description });
 
 const FIGURE_SYSTEM = [
-  "`figure`: for geometry, mensuration, trigonometry (heights and distances) and any item where a diagram helps, a small",
-  'SVG drawing — viewBox about 240 × 160, stroke="currentColor", fill="none", stroke-width="2", every point labelled with',
-  "<text> (A, B, C, O, P, T…), given lengths and angles written on it, right angles marked with a small square, dashed",
-  'construction lines. It must match the question exactly. Use "" when no diagram is needed.',
+  "`draw`: for geometry, mensuration, trigonometry (heights and distances) and any item where a diagram helps, describe",
+  "the figure in DRAW lines — never coordinates or SVG; the app computes every point exactly. Use the same letters as",
+  "the question, mark given lengths and angles with label / angle lines and right angles with right. Use \"\" when no",
+  "figure is needed. The DRAW language:",
+  DRAW_GUIDE,
   "Name formula cards with the standard name of the theorem or formula (e.g. 'Tangent–radius theorem', 'Heron's formula').",
 ];
-const FIGURE_FIELD = str('An SVG diagram (see the rules) when a figure helps, else "".');
+const DRAW_FIELD = str('DRAW lines describing the figure (one command per line, see the rules), or "" when none is needed.');
 const PRACTICE = {
   type: "object",
   additionalProperties: false,
-  required: ["q", "a", "options", "solution", "figure"],
+  required: ["q", "a", "options", "solution", "draw"],
   properties: {
     q: str("A practice question of the same type with changed numbers or a small twist."),
     a: str("Its correct answer."),
     options: { type: "array", items: { type: "string" }, description: "Exactly 3 believable WRONG options." },
     solution: str("Step-by-step solution, one step per line."),
-    figure: FIGURE_FIELD,
+    draw: DRAW_FIELD,
   },
 };
 
@@ -65,12 +67,19 @@ export const Q_LIST_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "q", "a", "options"],
+        required: ["kind", "q", "a", "options", "figure_box", "source", "page"],
         properties: {
           kind: str('"question" or "formula" (a formula, rule, shortcut or trick).'),
           q: str("The question as written, or the formula's name."),
           a: str("The answer given in the material (empty if none), or the formula itself."),
           options: { type: "array", items: { type: "string" }, description: "Options given in the material, if any." },
+          figure_box: {
+            type: "array",
+            items: { type: "integer" },
+            description: "If this item has a figure / diagram on the page: its box [ymin, xmin, ymax, xmax] on a 0–1000 scale of that page, around the figure and its labels only. Otherwise [].",
+          },
+          source: { type: "integer", description: "Which attached file the item is in (1 = the first)." },
+          page: { type: "integer", description: "Page number within that file (1 for a photo)." },
         },
       },
     },
@@ -88,7 +97,7 @@ export const Q_CARD_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "q", "a", "options", "solution", "formula", "trick", "figure", "subject", "topic", "pattern", "difficulty", "aiAnswered", "similar"],
+        required: ["kind", "q", "a", "options", "solution", "formula", "trick", "draw", "subject", "topic", "pattern", "difficulty", "aiAnswered", "similar"],
         properties: {
           kind: str('"question" or "formula".'),
           q: str("The question (clear, exam-style) or the formula's name."),
@@ -97,7 +106,7 @@ export const Q_CARD_SCHEMA = {
           solution: str("Questions: step-by-step solution, one step per line. Formulas: one small worked example."),
           formula: str("The formula or rule used (or the formula itself for a formula card)."),
           trick: str("A short shortcut or memory trick."),
-          figure: FIGURE_FIELD,
+          draw: DRAW_FIELD,
           subject: str("Subject from the list."),
           topic: str("Topic from the list."),
           pattern: str("Short name of the question type (also for formulas: the type they solve)."),
@@ -113,7 +122,9 @@ export const Q_CARD_SCHEMA = {
 export const qListInstruction = () =>
   "Read ALL the material above (it may be handwritten notes, a scanned PDF, a class slide or a book page), including margins " +
   "and anything circled or underlined. List EVERY question in it (with its answer and options if given) and EVERY formula, " +
-  "rule, shortcut or trick (kind = formula, q = its name, a = the formula itself), in order. Do not skip or merge any.";
+  "rule, shortcut or trick (kind = formula, q = its name, a = the formula itself), in order. Do not skip or merge any. " +
+  "When an item has a figure or diagram (triangles, circles, graphs…), give figure_box around just that figure and its " +
+  "labels, as [ymin, xmin, ymax, xmax] on a 0–1000 scale of the page, with the file number (source) and page.";
 
 export const qCardInstruction = (items, variants) =>
   `Complete a card for EACH of these ${items.length} items, in the same order — exactly ${items.length} card(s). For a question: ` +
@@ -140,7 +151,7 @@ function cardToItems(card, { source, keepAnswer = "", id = uid() }) {
       ? (card.similar || [])
           .filter((p) => p && p.q && p.a)
           .slice(0, 2)
-          .map((p) => ({ ...p, kind: "question", variantOf: id, pattern: card.pattern, subject: card.subject, topic: card.topic, formula: card.formula, trick: card.trick, aiMade: true, source }))
+          .map((p) => ({ ...p, kind: "question", variantOf: id, pattern: card.pattern, subject: card.subject, topic: card.topic, formula: card.formula, trick: card.trick, aiMade: true, source, crop: undefined }))
       : [];
   return [main, ...practice];
 }
@@ -183,7 +194,8 @@ async function completeCards(s, items, { variants, patterns }, onProgress, info)
         }
       }
       // The item keeps its id, so practice questions pasted with it stay linked.
-      for (const [it, card] of pairs) out.push(...cardToItems({ ...card, kind: it.kind === "formula" ? "formula" : card.kind }, { source: it.source || "", keepAnswer: it.a, id: it.id || uid() }));
+      // The item keeps its id (so pasted practice questions stay linked) and where its figure is on the page.
+      for (const [it, card] of pairs) out.push(...cardToItems({ ...card, kind: it.kind === "formula" ? "formula" : card.kind, crop: it.crop }, { source: it.source || "", keepAnswer: it.a, id: it.id || uid() }));
       for (const it of missing) (info.failed += 1), out.push(it);
       if (missing.length) info.notes.add(`The AI left out ${missing.length} item(s); they were saved as written.`);
     } catch (e) {
@@ -192,8 +204,12 @@ async function completeCards(s, items, { variants, patterns }, onProgress, info)
       for (const it of batch) (info.failed += 1), out.push(it);
     }
   }
-  return out.map((x) => makeQItem(x));
+  return out.map(withCrop);
 }
+
+/** makeQItem, keeping `crop` (where the item's figure is in the uploaded files) for the screen to cut out. */
+const withCrop = (x) => (x.crop ? { ...makeQItem(x), crop: x.crop } : makeQItem(x));
+const cropOf = (x) => (Array.isArray(x.figure_box) && x.figure_box.length === 4 ? { source: Math.max(1, Number(x.source) || 1), page: Math.max(1, Number(x.page) || 1), box: x.figure_box.map(Number) } : undefined);
 
 const result = (items, info) => ({ items, notes: [...info.notes], usedBy: [...info.usedBy], failed: info.failed });
 const newInfo = () => ({ usedBy: new Set(), notes: new Set(), failed: 0 });
@@ -206,7 +222,11 @@ export async function quantFromFiles(s, sources, source, opts, onProgress) {
   info.usedBy.add(listed.provider);
   const items = listed.words
     .filter((x) => x && x.q)
-    .map((x) => (x.kind === "formula" ? { kind: "formula", q: String(x.q), formula: String(x.a || ""), source } : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [], source }));
+    .map((x) => ({
+      ...(x.kind === "formula" ? { kind: "formula", q: String(x.q), formula: String(x.a || "") } : { kind: "question", q: String(x.q), a: String(x.a || ""), options: x.options || [] }),
+      source,
+      crop: cropOf(x),
+    }));
   if (!items.length) throw new AllProvidersFailed([{ name: listed.provider, reason: "found nothing to save" }]);
   return result(await completeCards(s, items, opts, onProgress, info), info);
 }
@@ -254,7 +274,7 @@ export async function quantFromText(s, text, opts, onProgress) {
       ...(rest.length ? await completeCards(s, rest, { ...opts, variants: false }, onProgress, info) : []),
     ];
     if (!todo.length) info.notes.add(`${read.length} item(s) read from the pasted answer — no AI needed.`);
-    return result([...ready.map((x) => makeQItem(x)), ...done], info);
+    return result([...ready.map(withCrop), ...done], info);
   }
   if (isQTopicLike(text)) return quantFromTopic(s, text.trim(), "auto", opts, onProgress);
   let items = readNotes(text, "Typed");
@@ -368,28 +388,32 @@ export async function practiceFor(s, item, patterns) {
   return practice.length ? { items: practice, provider: res.provider, card } : null;
 }
 
-/** Figure schema: one SVG drawing. */
+/** Figure schema: DRAW lines for one figure. */
 export const FIGURE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["items"],
-  properties: { items: { type: "array", items: { type: "object", additionalProperties: false, required: ["figure"], properties: { figure: FIGURE_FIELD } } } },
+  properties: { items: { type: "array", items: { type: "object", additionalProperties: false, required: ["draw"], properties: { draw: DRAW_FIELD } } } },
 };
 
-/** Draw a figure for a saved question or formula card. Resolves {figure, provider} or null. */
+/**
+ * A figure for a saved question or formula card: the AI describes it in DRAW lines and the app draws it exactly. If the
+ * description has mistakes, the AI gets the errors back once to fix them. Resolves {draw, provider} or null.
+ */
 export async function figureFor(s, item) {
-  const res = await aiTask(
-    s,
-    {
-      system: quantSystem(s),
-      schema: FIGURE_SCHEMA,
-      text:
-        `Draw the figure for this ${item.kind === "formula" ? "formula card" : "question"} — exactly 1 item with \`figure\` = one SVG drawing ` +
-        `that matches it (labelled points, given lengths and angles, right angles marked).\n\n${item.kind === "formula" ? "Formula" : "Question"}: ${item.q}` +
-        `${item.formula ? `\nFormula: ${item.formula}` : ""}${item.a ? `\nAnswer: ${item.a}` : ""}${item.solution ? `\nSolution: ${item.solution}` : ""}`,
-    },
-    null,
-  );
-  const figure = sanitizeSvg(res.words.find((x) => x && x.figure)?.figure);
-  return figure ? { figure, provider: res.provider } : null;
+  const about =
+    `${item.kind === "formula" ? "Formula" : "Question"}: ${item.q}` +
+    `${item.formula ? `\nFormula: ${item.formula}` : ""}${item.a ? `\nAnswer: ${item.a}` : ""}${item.solution ? `\nSolution: ${item.solution}` : ""}`;
+  let text = `Describe the figure for this ${item.kind === "formula" ? "formula card" : "question"} — exactly 1 item with \`draw\` = DRAW lines (no coordinates). Use the question's letters and mark its given lengths and angles.\n\n${about}`;
+  let provider = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await aiTask(s, { system: quantSystem(s), schema: FIGURE_SCHEMA, text }, null);
+    provider = res.provider;
+    const draw = String(res.words.find((x) => x && x.draw)?.draw || "");
+    if (!draw.trim()) return null;
+    const { errors } = drawFigure(draw);
+    if (!errors.length) return { draw: cleanDraw(draw), provider };
+    text = `Your DRAW lines had these problems:\n${errors.join("\n")}\n\nWrite them again, fixed.\n\n${about}\n\nYour lines were:\n${draw}`;
+  }
+  return null;
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { plainMath } from "../src/lib/mathtext.js";
 import { classifyQuant, matchTopic, qPatternKey } from "../src/lib/quant-taxonomy.js";
 import { findDuplicateQ, makeQItem, matchPattern, qItemsToCSV } from "../src/lib/quant.js";
+import { drawFigure } from "../src/lib/geodraw.js";
 import { buildQuantMaterialPrompt, buildQuantTopicPrompt, buildSimilarPrompt, formulaLines, isQComplete, looksQuantStructured, readQHeading, readQuant } from "../src/lib/quant-prompt.js";
 import { parseBook } from "../src/lib/qbook.js";
 import bookText from "../src/data/qformulas.js";
@@ -149,7 +150,9 @@ describe("figures", () => {
     const p = buildQuantTopicPrompt({ topic: "Circles" });
     const geo = readQuant(p.slice(p.indexOf("## Quant › Geometry"))).items[0];
     expect(makeQItem(geo)).toMatchObject({ topic: "Geometry", pattern: "Tangent from an external point" });
-    expect(makeQItem(geo).figure).toMatch(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" viewBox="0 0 220 130">/);
+    expect(makeQItem(geo).draw).toMatch(/^circle O/);
+    expect(drawFigure(makeQItem(geo).draw).errors).toEqual([]);
+    expect(makeQItem(geo).figure).toBe("");
     const fenced = readQuant('## Quant › Geometry\nQ: Find angle BOC.\nA: 100°\n**Figure:**\n```svg\n<svg width="200" height="160">\n<polygon points="1,1 9,9 1,9" stroke="black"/>\n</svg>\n```\nS: Double the angle.').items[0];
     expect(makeQItem(fenced).figure).toBe('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160"><polygon points="1,1 9,9 1,9" stroke="currentColor"/></svg>');
     expect(fenced.solution).toBe("Double the angle.");
@@ -163,5 +166,24 @@ describe("figures", () => {
     expect(cleanImage("data:image/jpeg;base64,AAAA")).toBe("data:image/jpeg;base64,AAAA");
     expect(cleanImage("data:text/html;base64,AAAA")).toBe("");
     expect(cleanImage("javascript:alert(1)")).toBe("");
+  });
+});
+
+describe("exact figures and figures cut from pages", () => {
+  it("reads DRAW: and BOX: lines; a DRAW that can't be drawn is dropped", async () => {
+    const { normBox, padBox } = await import("../src/lib/figcrop.js");
+    const { cleanDraw } = await import("../src/lib/quant.js");
+    const p = buildQuantMaterialPrompt({ files: [{ name: "a.pdf" }] });
+    expect(p).toMatch(/BOX: file N, page P/);
+    const [it] = readQuant("## Quant › Geometry\nQ: Find PT.\nA: 12\nBOX: file 2, page 3, [120, 540, 380, 900]\nDRAW: circle O r=5\nDRAW: point P outside O dist=13\nDRAW: tangents T from P to O").items;
+    expect(it.crop).toEqual({ source: 2, page: 3, box: [120, 540, 380, 900] });
+    expect(makeQItem(it).draw).toBe("circle O r=5\npoint P outside O dist=13\ntangents T from P to O");
+    expect(makeQItem(it).crop).toBeUndefined(); // the box is only used while adding, never saved
+    expect(cleanDraw("- DRAW: triangle A B C\n* right A B C")).toBe("triangle A B C\nright A B C");
+    expect(cleanDraw("circle O r=5\ntangents T from Z to O")).toBe("");
+    expect(normBox([380, 900, 120, 540])).toEqual([120, 540, 380, 900]);
+    expect(normBox([1, 1, 5, 5])).toBeNull();
+    expect(normBox(["a", 1, 2, 3])).toBeNull();
+    expect(padBox([10, 100, 990, 500])).toEqual([0, 75, 1000, 525]);
   });
 });

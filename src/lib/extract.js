@@ -132,6 +132,21 @@ async function renderPage(doc, i) {
   return canvasToBlob(canvas, "image/png");
 }
 
+/**
+ * One page of an upload as a picture: the (downscaled) photo itself, or page `page` (1-based) of a PDF. Used to cut
+ * figures out of the page. Resolves a JPEG Blob.
+ */
+export async function pagePicture(file, page = 1) {
+  if (!isPdf(file)) return normaliseImage(file);
+  const doc = await openPdf(file);
+  try {
+    const n = Math.min(Math.max(1, Math.round(page) || 1), doc.numPages);
+    return await normaliseImage(await renderPage(doc, n));
+  } finally {
+    await doc.loadingTask.destroy();
+  }
+}
+
 let ocrWorker = null;
 let ocrProgress = null; // progress callback of the scan in flight
 async function getOcrWorker(onProgress) {

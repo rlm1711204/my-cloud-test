@@ -115,6 +115,13 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   `onSaveError` in quant-store.js warns when the phone's storage is full. A pasted answer that repeats a saved card
   fills in what it lacks (figure, solution, trick…) via `addItems` → `filled`. Formula Book figures are generated with
   exact geometry by a script and stored as `FIG:` lines in src/data/qformulas.js.
+- **AI never writes figure coordinates any more.** It wrote unreliable SVG (tangents not touching, wrong ratios). Now:
+  (1) from a page/PDF, the list step returns `figure_box` [ymin, xmin, ymax, xmax] 0–1000 (+ `source`, `page`), or a pasted
+  answer has `BOX: file N, page P, [...]`; quant-ui `applyCrops` renders the page (`pagePicture` in extract.js) and cuts it
+  (`cropFigure` in figcrop.js) into `image`. `crop` is transient (makeQItem drops it); the review screen's ✂️ opens the
+  cropper (`openCropper`, pointer events). (2) Otherwise the AI gives `draw`: construction lines rendered by
+  src/lib/geodraw.js (`drawFigure` → {svg, errors}; `figureSvg` cached). `cleanDraw` stores "" if anything fails, and
+  `figureFor` retries once with the errors. Display order: `image`, else `draw`, else legacy `figure`.
 
 - **Practice coverage is counted per item, not per list.** `practice.asked[id]` = how many times it was practised
   (all three parts). `pickSession` always takes the least-asked items first (never-asked first, random within a tier,

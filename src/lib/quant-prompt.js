@@ -2,6 +2,7 @@
 // or "2 more like this one"), and a forgiving reader for the answer pasted back. Pure; unit-tested.
 import { QSUBJECTS, QTAXONOMY, QUANT, REASONING, matchTopic, topicsOf } from "./quant-taxonomy.js";
 import { plainMath } from "./mathtext.js";
+import { DRAW_GUIDE } from "./geodraw.js";
 
 const EXAMS_TEXT = "SSC, IBPS / SBI, RBI Grade B and other competitive exams";
 const uid = (n) => `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}-${n}`;
@@ -40,8 +41,15 @@ F: Together time = (a × b)/(a + b)
 T: Product ÷ sum.
 E: 10 and 15 days → (10 × 15)/25 = 6 days.`;
 
-// A geometry question with its figure, for the reply format (O = centre, T = point of contact, P = outside point).
-export const FIGURE_EXAMPLE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 130"><circle cx="70" cy="70" r="40" fill="none" stroke="currentColor" stroke-width="2"/><line x1="70" y1="70" x2="82.3" y2="31.9" stroke="currentColor" stroke-width="2"/><line x1="82.3" y1="31.9" x2="200" y2="70" stroke="currentColor" stroke-width="2"/><line x1="70" y1="70" x2="200" y2="70" stroke="currentColor" stroke-dasharray="4 3"/><path d="M79.8,39.5 L87.4,42 L89.9,34.4" fill="none" stroke="currentColor"/><circle cx="70" cy="70" r="2.5" fill="currentColor"/><text x="58" y="86" font-size="13">O</text><text x="76" y="24" font-size="13">T</text><text x="205" y="75" font-size="13">P</text><text x="62" y="52" font-size="12">5</text><text x="130" y="85" font-size="12">13</text></svg>`;
+// A geometry question with its figure described in DRAW lines (the app draws it exactly).
+export const DRAW_EXAMPLE = `DRAW: circle O r=5
+DRAW: point P outside O dist=13
+DRAW: tangents T from P to O
+DRAW: segment O T
+DRAW: dashed O P
+DRAW: right O T P
+DRAW: label O T "5"
+DRAW: label O P "13"`;
 
 const GEOMETRY_EXAMPLE = `## Quant › Geometry
 TYPE: Tangent from an external point
@@ -52,20 +60,26 @@ S: The radius OT is perpendicular to the tangent at T, so triangle OTP is right-
 S: PT = √(13² − 5²) = √144 = 12 cm.
 F: Tangent length = √(d² − r²) (Tangent–radius theorem)
 T: Right angle at the point of contact → Pythagoras (5, 12, 13).
-FIG: ${FIGURE_EXAMPLE}`;
+${DRAW_EXAMPLE}`;
 
-const FIGURE_RULES = `- For geometry, mensuration, trigonometry (heights and distances) and any question or formula where a diagram helps, add ONE line "FIG:" followed by a small SVG drawing on the same line: viewBox about 240 × 160, stroke="currentColor", fill="none", stroke-width="2", every point labelled with <text> (A, B, C, O, P, T…), given lengths and angles written on the figure, right angles marked with a small square, dashed lines for constructions. Draw it to match the question exactly. No figure when none is needed.
+const drawRules = (fromFiles) => `- For geometry, mensuration, trigonometry (heights and distances) and any question or formula where a figure helps, describe the figure with DRAW: lines (one command per line, right after the item). Never give coordinates or SVG — the app computes every point exactly. Use the same letters as the question and mark the given lengths, angles and right angles.${
+  fromFiles
+    ? `
+- If the question has a figure in my file, ALSO add one line "BOX: file N, page P, [ymin, xmin, ymax, xmax]" giving where that figure is (0–1000 scale of that page, around the figure and its labels only), so the app can keep the original figure.`
+    : ""
+}
+- ${DRAW_GUIDE.replace(/\n/g, "\n  ")}
 - Name formula cards with the standard name of the theorem or formula (e.g. "Tangent–radius theorem", "Alternate segment theorem", "Heron's formula", "Basic proportionality theorem").`;
 
 /** Rules and the reply format shared by every copied prompt (read back by readQuant). */
-function rulesAndFormat({ variants = true, patterns } = {}) {
+function rulesAndFormat({ variants = true, patterns, fromFiles = false } = {}) {
   return `Rules:
 - Solve every question yourself, step by step, and double-check the answer. If the material's answer is wrong, give the correct one.
 - Write maths in plain text, never LaTeX: ×, ÷, √, ², ³, π, and fractions as a/b.
 - Every question has ONE correct answer, exactly 3 believable wrong options (answers from common mistakes), a short step-by-step solution (one or more S: lines), the formula or rule used (F:) and a short trick or shortcut (T:).
 - Give every question a TYPE: a short name for the kind of question (e.g. "Two workers together", "Successive discounts", "Circular seating facing centre", "Either-or conclusions"). Questions of the same kind must use exactly the same TYPE name.${typeLines(patterns)}
 - Write a FORMULA card for every formula, rule, shortcut or trick (F: the formula or rule, T: how to remember or use it fast, E: one small worked example).
-${FIGURE_RULES}
+${drawRules(fromFiles)}
 ${variants ? "- After each question, add 2 practice questions of the same TYPE with changed numbers or a small twist (PQ:), each with its own A:, O: and S: lines.\n" : ""}- Put everything under a heading "## Subject › Topic" from this list:
 ${topicLines()}
 
@@ -73,7 +87,7 @@ Reply ONLY in this plain-text format — no tables, no bold, no LaTeX, no extra 
 
 ${variants ? EXAMPLE : EXAMPLE.replace(/\nPQ:[\s\S]*?(?=\n\nFORMULA)/, "")}
 
-${GEOMETRY_EXAMPLE}`;
+${fromFiles ? GEOMETRY_EXAMPLE.replace("\nDRAW:", "\nBOX: file 1, page 1, [120, 540, 380, 900]\nDRAW:") : GEOMETRY_EXAMPLE}`;
 }
 
 /** Prompt for photos / scanned or handwritten PDFs attached in the chat app. */
@@ -87,7 +101,7 @@ I have attached ${what} from my notes — it may be handwritten, a class slide o
 2. Every solved or unsolved question in it becomes a Q (solve it yourself if no answer is given).
 3. Every formula, rule, shortcut or trick in it becomes a FORMULA card — leave none out.
 
-${rulesAndFormat({ variants, patterns })}`;
+${rulesAndFormat({ variants, patterns, fromFiles: true })}`;
 }
 
 /** Prompt for a topic: formula cards for it, then questions covering every common question type. */
@@ -132,18 +146,18 @@ Write maths in plain text, never LaTeX: ×, ÷, √, ², π, fractions as a/b. D
 /** Prompt for a figure for a saved question or formula card. The answer repeats it, so the figure joins the saved card. */
 export function buildFigurePrompt(item) {
   const head = item.kind === "formula" ? `FORMULA: ${item.q}\nF: ${(item.formula || "").replace(/\n/g, " ")}` : `Q: ${item.q.replace(/\n/g, " ")}\nA: ${item.a}`;
-  return `You are an expert maths teacher. Draw the figure for this ${item.kind === "formula" ? "formula" : "question"}.
+  return `You are an expert maths teacher. Describe the figure for this ${item.kind === "formula" ? "formula" : "question"} so my app can draw it exactly.
 
-Reply ONLY with these lines — first repeat mine exactly, then one FIG: line with the SVG drawing on the same line:
+Reply ONLY with these lines — first repeat mine exactly, then DRAW: lines (one command per line, no coordinates):
 
 ## ${item.subject} › ${item.topic}
 ${head}
-FIG: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160">…</svg>
+DRAW: …
 
-Drawing rules: viewBox about 240 × 160, stroke="currentColor", fill="none", stroke-width="2", every point labelled with <text> (A, B, C, O, P, T…), given lengths and angles written on the figure, right angles marked with a small square, dashed lines for constructions. Match the ${item.kind === "formula" ? "formula" : "question"} exactly.
+${DRAW_GUIDE}
 
-Example of a good figure line:
-FIG: ${FIGURE_EXAMPLE}`;
+Use the same letters as the ${item.kind === "formula" ? "formula" : "question"} and mark its given lengths, angles and right angles. Example for "P is 13 cm from the centre O of a circle of radius 5 cm; tangent PT":
+${DRAW_EXAMPLE}`;
 }
 
 // ---------- reading the answer back ----------
@@ -255,6 +269,21 @@ export function readQuant(textIn) {
     if (fig) {
       fig.push(raw);
       if (/<\/svg>/i.test(raw)) endFig();
+      continue;
+    }
+    // "DRAW: circle O r=5" — figure construction lines; "BOX: file 1, page 2, [ymin, xmin, ymax, xmax]" — where the figure is.
+    const drawLine = /^\s*(?:[-*•]\s*)?(?:\*\*)?draw(?:\*\*)?\s*[:\-–]\s*(?:\*\*)?\s*(.+)$/i.exec(raw);
+    if (drawLine) {
+      if (cur) cur.draw = cur.draw ? `${cur.draw}\n${drawLine[1].trim()}` : drawLine[1].trim();
+      continue;
+    }
+    const boxLine = /^\s*(?:[-*•]\s*)?(?:\*\*)?box(?:\*\*)?\s*[:\-–]\s*(.+)$/i.exec(raw);
+    if (boxLine) {
+      const nums = (boxLine[1].match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+      const file = /file\s*(\d+)/i.exec(boxLine[1]);
+      const page = /page\s*(\d+)/i.exec(boxLine[1]);
+      const box = nums.slice(-4);
+      if (cur && box.length === 4) cur.crop = { source: file ? Number(file[1]) : 1, page: page ? Number(page[1]) : 1, box };
       continue;
     }
     const figStart = /^\s*(?:[-*•]\s*)?(?:\*\*)?(?:fig(?:ure)?|diagram|svg)(?:\*\*)?\s*[:\-–]\s*(?:\*\*)?\s*(.*)$/i.exec(raw) || (/^\s*<svg[\s>]/i.test(raw) ? [raw, raw.trim()] : null);

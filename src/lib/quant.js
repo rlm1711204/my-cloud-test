@@ -5,6 +5,7 @@ import { todayISO } from "./words.js";
 import { answerKey, questionSimilarity } from "./gk.js";
 import { plainMath } from "./mathtext.js";
 import { cleanImage, sanitizeSvg } from "./svgsafe.js";
+import { drawFigure } from "./geodraw.js";
 import { QSUBJECTS, QUANT, classifyQuant, matchTopic, topicsOf } from "./quant-taxonomy.js";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
@@ -55,7 +56,8 @@ export function makeQItem(input = {}, now = new Date()) {
     solution: text(input.solution ?? input.example, 1500), // steps (questions) or a worked example (formulas)
     formula: text(input.formula ?? (kind === "formula" ? input.a : ""), 800),
     trick: text(input.trick, 600),
-    figure: sanitizeSvg(input.figure), // a labelled diagram (safe SVG), drawn by AI or built in
+    draw: cleanDraw(input.draw), // the figure as construction lines; the app draws it exactly (see geodraw.js)
+    figure: sanitizeSvg(input.figure), // a ready drawing (safe SVG): the Formula Book's, or an older AI drawing
     image: cleanImage(input.image), // or a photo of the book's figure the learner attached
     ...placeOfQ(input),
     pattern: cleanPattern(input.pattern),
@@ -77,6 +79,18 @@ export function makeQItem(input = {}, now = new Date()) {
 }
 
 export const isFormula = (it) => it.kind === "formula";
+
+/** DRAW lines tidied (one command per line), or "" if they can't be drawn exactly — a wrong figure is never kept. */
+export function cleanDraw(spec) {
+  const lines = String(spec ?? "")
+    .split(/\n|;/)
+    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])?\s*(?:draw|fig|figure)?\s*[:\-–]?\s*/i, "").trim())
+    .filter(Boolean)
+    .slice(0, 60);
+  if (!lines.length) return "";
+  const text = lines.join("\n").slice(0, 3000);
+  return drawFigure(text).errors.length ? "" : text;
+}
 
 const numbersIn = (t) => (String(t || "").match(/\d+(?:\.\d+)?/g) || []).join(" ");
 const differentNumbers = (a, b) => {

@@ -540,5 +540,15 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .fig.small { max-width: 220px; padding: 4px; margin: 6px 0; }
 .fig.small svg { max-height: 150px; }
 .cand-main .fig.small { margin: 4px 0; }
+.fig figcaption { margin: 8px 0 2px; }
+.cropper { position: relative; margin: 8px auto; max-width: 100%; width: fit-content; touch-action: none; user-select: none; -webkit-user-select: none; }
+.cropper img { display: block; max-width: 100%; max-height: 62vh; background: #fff; pointer-events: none; }
+.crop-box { position: absolute; box-sizing: border-box; border: 2px solid var(--primary); box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.45); cursor: move; touch-action: none; }
+.cropper { overflow: hidden; }
+.crop-box .h { position: absolute; width: 26px; height: 26px; margin: -13px; border-radius: 50%; background: var(--primary); border: 2px solid #fff; touch-action: none; }
+.crop-box .h[data-h="tl"] { left: 0; top: 0; cursor: nwse-resize; }
+.crop-box .h[data-h="tr"] { right: 0; top: 0; cursor: nesw-resize; }
+.crop-box .h[data-h="bl"] { left: 0; bottom: 0; cursor: nesw-resize; }
+.crop-box .h[data-h="br"] { right: 0; bottom: 0; cursor: nwse-resize; }
 .fig-actions { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .fig-actions p { margin: 0 0 6px; }

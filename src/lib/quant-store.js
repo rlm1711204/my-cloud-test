@@ -132,7 +132,7 @@ export function createQuantStore(cfg) {
     return state.items.find((i) => i.id === id && !i.deleted) ?? null;
   }
 
-  const FILLABLE = ["figure", "image", "solution", "formula", "trick", "pattern"];
+  const FILLABLE = ["figure", "image", "draw", "solution", "formula", "trick", "pattern"];
   const PROGRESS_FIELDS = ["box", "due", "reviews", "lapses", "lastReviewed", "starred"];
 
   function updateItem(id, fn) {
