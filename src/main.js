@@ -957,10 +957,10 @@ function viewSettings() {
 }
 
 // ---------- overlays (word details, editor, flashcards) ----------
-function openOverlay(html, { tall = false } = {}) {
+function openOverlay(html, { tall = false, full = false } = {}) {
   const o = $("#overlay");
   const wasOpen = o.classList.contains("open");
-  o.innerHTML = `<div class="sheet ${tall ? "tall" : ""} ${wasOpen ? "no-anim" : ""}" role="dialog" aria-modal="true">${html}</div>`;
+  o.innerHTML = `<div class="sheet ${tall ? "tall" : ""} ${full ? "full" : ""} ${wasOpen ? "no-anim" : ""}" role="dialog" aria-modal="true">${html}</div>`;
   o.classList.add("open");
   document.body.classList.add("no-scroll");
 }
