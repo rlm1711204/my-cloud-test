@@ -967,6 +967,7 @@ export function createGrammarUI(ctx) {
     dataCard,
     busy: () => Boolean(gui.busy || gui.quiz || gui.session || gui.candidates),
     onCloseOverlay: () => (gui.session = null),
+    addFiles: handleFiles,
     exportBackup,
     ruleOfTheDay: () => {
       const pool = gs.rulesFor(prefs().dailySource);

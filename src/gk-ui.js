@@ -1230,6 +1230,8 @@ export function createGkUI(ctx) {
     },
     loadBank,
     isBankId,
+    addFiles: handleFiles,
+    chatFiles: openChatPanel,
     /** Practise just these saved questions (e.g. the notes of one level of My Area). */
     quizOn: (ids) => startQuiz("mixed", { only: new Set(ids) }),
   };

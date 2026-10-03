@@ -120,10 +120,10 @@ async function pdfDocText(doc, onProgress) {
 }
 
 /** Render one PDF page to a PNG no larger than MAX_IMAGE_EDGE (for scanned PDFs without a text layer). */
-async function renderPage(doc, i) {
+async function renderPage(doc, i, edge = MAX_IMAGE_EDGE) {
   const page = await doc.getPage(i);
   const base = page.getViewport({ scale: 1 });
-  const viewport = page.getViewport({ scale: Math.min(2, MAX_IMAGE_EDGE / Math.max(base.width, base.height)) });
+  const viewport = page.getViewport({ scale: Math.min(2, edge / Math.max(base.width, base.height)) });
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(viewport.width);
   canvas.height = Math.round(viewport.height);
@@ -145,6 +145,16 @@ export async function pagePicture(file, page = 1) {
   } finally {
     await doc.loadingTask.destroy();
   }
+}
+
+/** A PDF opened for page pictures (the crop step): {count, picture(page, edge) → JPEG Blob, close()}. */
+export async function openPdfPages(file) {
+  const doc = await openPdf(file);
+  return {
+    count: doc.numPages,
+    picture: async (n, edge = MAX_IMAGE_EDGE) => normaliseImage(await renderPage(doc, n, edge)),
+    close: () => doc.loadingTask.destroy(),
+  };
 }
 
 let ocrWorker = null;

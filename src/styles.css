@@ -576,3 +576,17 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .badge.exam.rbi { background: var(--saffron-soft); color: var(--saffron); }
 .area-move { border: 1px solid var(--primary); background: var(--primary-soft); }
 .area-move p { margin: 4px 0 10px; }
+
+/* Crop before reading (photos and PDFs on every Add screen) */
+.prep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin: 8px 0 12px; }
+.prep-tile { margin: 0; background: var(--surface-2); border-radius: 12px; padding: 6px; display: grid; gap: 6px; }
+.prep-tile.off { opacity: .45; }
+.prep-pic { position: relative; height: 150px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 8px; background: #fff; }
+.prep-pic img { max-width: 100%; max-height: 150px; object-fit: contain; }
+.prep-pic .badge { position: absolute; left: 4px; bottom: 4px; }
+.prep-tile figcaption { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; justify-content: center; }
+.prep-tile figcaption .btn.small { padding: 4px 9px; }
+.prep-check { display: flex; align-items: center; gap: 4px; font: 600 .82rem var(--sans); margin-right: auto; }
+.prep-file { margin: 10px 0 4px; }
+.toggle.small { font-size: .85rem; color: var(--ink-2); }
+.prep-actions { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 4px; margin-top: 4px; box-shadow: 0 -10px 12px -10px rgb(0 0 0 / .25); }

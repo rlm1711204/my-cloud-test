@@ -47,7 +47,6 @@ export function createQuantUI(ctx, part) {
     lastFiles: null,
     cropFiles: null, // the files the figures are cut from (adjustable on the review screen)
     pages: new Map(),
-    crop: null,
     quiz: null,
     session: null,
     search: "",
@@ -983,77 +982,9 @@ export function createQuantUI(ctx, part) {
     return n;
   }
 
-  /** The crop tool: drag the box over the figure. Resolves the box [ymin, xmin, ymax, xmax] (0–1000) or null. */
-  function openCropper(blob, box, title = "Cut out the figure") {
-    const url = URL.createObjectURL(blob);
-    const b = normBox(box) || [60, 60, 940, 940];
-    return new Promise((resolve) => {
-      gui.crop = { box: [...b], url, resolve };
-      openOverlay(
-        `<div class="sheet-bar"><h3>✂️ ${esc(title)}</h3><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
-        <p class="muted small">Drag the box over the figure (with its letters and numbers). Drag a corner to resize.</p>
-        <div class="cropper" id="${P}Cropper"><img src="${url}" alt="Page" draggable="false" />
-          <div class="crop-box"><span class="h" data-h="tl"></span><span class="h" data-h="tr"></span><span class="h" data-h="bl"></span><span class="h" data-h="br"></span></div></div>
-        <div class="row wrap">
-          <button class="btn primary" type="button" data-action="${P}-crop-save">✓ Use this</button>
-          <button class="btn" type="button" data-action="${P}-crop-all">Whole picture</button>
-        </div>`,
-        { tall: true },
-      );
-      wireCropper();
-    });
-  }
-
-  function wireCropper() {
-    const root = $(`#${P}Cropper`);
-    if (!root) return;
-    const boxEl = root.querySelector(".crop-box");
-    const show = () => {
-      const [y0, x0, y1, x1] = gui.crop.box;
-      Object.assign(boxEl.style, { left: `${x0 / 10}%`, top: `${y0 / 10}%`, width: `${(x1 - x0) / 10}%`, height: `${(y1 - y0) / 10}%` });
-    };
-    show();
-    let drag = null;
-    root.addEventListener("pointerdown", (e) => {
-      if (!e.target.closest(".crop-box")) return;
-      e.preventDefault();
-      const r = root.getBoundingClientRect();
-      drag = { mode: e.target.dataset.h || "move", x: e.clientX, y: e.clientY, start: [...gui.crop.box], w: r.width, h: r.height };
-      root.setPointerCapture?.(e.pointerId);
-    });
-    root.addEventListener("pointermove", (e) => {
-      if (!drag) return;
-      const dx = ((e.clientX - drag.x) / drag.w) * 1000;
-      const dy = ((e.clientY - drag.y) / drag.h) * 1000;
-      let [y0, x0, y1, x1] = drag.start;
-      const clamp = (v) => Math.min(1000, Math.max(0, v));
-      if (drag.mode === "move") {
-        const w = x1 - x0;
-        const h = y1 - y0;
-        x0 = Math.min(1000 - w, Math.max(0, x0 + dx));
-        y0 = Math.min(1000 - h, Math.max(0, y0 + dy));
-        [x1, y1] = [x0 + w, y0 + h];
-      } else {
-        if (drag.mode.includes("l")) x0 = clamp(Math.min(x0 + dx, x1 - 40));
-        if (drag.mode.includes("r")) x1 = clamp(Math.max(x1 + dx, x0 + 40));
-        if (drag.mode.includes("t")) y0 = clamp(Math.min(y0 + dy, y1 - 40));
-        if (drag.mode.includes("b")) y1 = clamp(Math.max(y1 + dy, y0 + 40));
-      }
-      gui.crop.box = [y0, x0, y1, x1];
-      show();
-    });
-    const end = () => (drag = null);
-    root.addEventListener("pointerup", end);
-    root.addEventListener("pointercancel", end);
-  }
-
-  function finishCrop(box) {
-    const c = gui.crop;
-    if (!c) return;
-    gui.crop = null;
-    URL.revokeObjectURL(c.url);
-    c.resolve(box);
-  }
+  /** The shared crop tool, worded for figures. Resolves the box [ymin, xmin, ymax, xmax] (0–1000) or null. */
+  const openCropper = (blob, box, title = "Cut out the figure") =>
+    ctx.cropper.open(blob, box, { title, hint: "Drag the box over the figure (with its letters and numbers). Drag a corner to resize." });
 
   function showInfo(id) {
     const it = qs.byId(id);
@@ -1264,11 +1195,6 @@ export function createQuantUI(ctx, part) {
       showItem(el.dataset.id);
       after();
     },
-    [`${P}-crop-save`]: () => {
-      const box = gui.crop?.box;
-      finishCrop(box);
-    },
-    [`${P}-crop-all`]: () => finishCrop([0, 0, 1000, 1000]),
     [`${P}-crop-adjust`]: async (el) => {
       const row = gui.candidates?.items[Number(el.dataset.i)];
       const files = gui.cropFiles;
@@ -1590,6 +1516,8 @@ export function createQuantUI(ctx, part) {
 
   return {
     gui,
+    addFiles: handleFiles,
+    chatFiles: openChatPanel,
     views: { [`${P}-today`]: viewToday, [`${P}-add`]: viewAdd, [`${P}-practice`]: viewPractice, [`${P}-topics`]: viewTopics },
     actions,
     onChange,
@@ -1597,11 +1525,8 @@ export function createQuantUI(ctx, part) {
     onSubmit,
     prefsCard,
     dataCard,
-    busy: () => Boolean(gui.busy || gui.crop || gui.quiz || gui.session || gui.candidates || gui.chatFiles || gui.copied),
-    onCloseOverlay: () => {
-      gui.session = null;
-      finishCrop(null);
-    },
+    busy: () => Boolean(gui.busy || ctx.cropper.isOpen() || gui.quiz || gui.session || gui.candidates || gui.chatFiles || gui.copied),
+    onCloseOverlay: () => (gui.session = null),
     cardOfTheDay: () => {
       const pool = qs.itemsFor(prefs().dailySource, { forToday: true });
       return pool.length ? qs.byId(qs.todaysPlan().wotd) : null;

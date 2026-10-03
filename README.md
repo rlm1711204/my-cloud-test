@@ -84,6 +84,10 @@ Maths and Reasoning are two parts of their own — each with its own Today, Add,
 - Photos are read on your phone (OCR). PDFs are read from their text layer.
 
 1. **Add**: scan or upload a page, or type words. On the review screen, untick anything you already know, then tap **Add**.
+   **✂️ Crop before reading** (every part — Vocabulary, Grammar, GK, Maths, Reasoning, including "Ask the Gemini app"):
+   after a photo or PDF is picked, a sheet shows it first. Crop a photo to just the question or paragraph you want, turn it
+   (↻) or leave it out (✕); for a PDF, crop any page or untick pages to skip. Untouched files go on as they are (a PDF
+   keeps its text). Turn the step off in ⚙️ Settings → 📷 Photos & PDFs.
 2. **Today**: read the Word of the Day, then tap **Start flashcards** for today's set.
 3. **Quiz**: take one after revising. Words you get wrong come back in tomorrow's set.
 4. **Words**: search and edit your list. **📖 Fill missing** retries lookups (e.g. after the daily translation limit resets).

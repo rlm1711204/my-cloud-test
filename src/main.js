@@ -28,6 +28,8 @@ import { maths as mathsStore, reasoning as reasonStore } from "./lib/quant-store
 import { onSaveError } from "./lib/quant-store.js";
 import { qItemsToCSV } from "./lib/quant.js";
 import { createQuantUI } from "./quant-ui.js";
+import { createCropper } from "./cropper.js";
+import { createPrepare } from "./prepare-ui.js";
 import {
   buildIndex,
   cleanHeadword,
@@ -794,6 +796,12 @@ function viewSettings() {
       <button class="btn small" type="button" data-nav="home">Open the start screen</button>
     </article>
 
+    <article class="card">
+      <h3>📷 Photos & PDFs</h3>
+      <label class="toggle"><input type="checkbox" data-setting="cropStep" ${st.cropStep !== false ? "checked" : ""} /> Offer to crop before reading</label>
+      <p class="muted small">After you take a photo or pick photos / a PDF on any Add screen (Vocabulary, Grammar, GK, Maths, Reasoning): crop, turn or leave out photos, and crop or skip PDF pages.</p>
+    </article>
+
 
     <article class="card">
       <h3>📖 Word cards</h3>
@@ -962,6 +970,8 @@ function closeOverlay() {
   o.innerHTML = "";
   document.body.classList.remove("no-scroll");
   ui.session = null;
+  cropper.onCloseOverlay();
+  prepare.onCloseOverlay();
   grammar?.onCloseOverlay();
   gkui?.onCloseOverlay();
   for (const q of QPARTS) q.ui.onCloseOverlay();
@@ -1573,6 +1583,19 @@ const grammar = createGrammarUI({
   },
 });
 
+// ---------- photos and PDFs: the crop tool and the "crop before reading" step (every part) ----------
+const cropper = createCropper({ $, esc, openOverlay });
+const prepare = createPrepare({
+  esc,
+  plural,
+  toast,
+  openOverlay,
+  closeOverlay,
+  cropper,
+  settings,
+  setSkip: (skip) => store.update((s) => (s.settings.cropStep = !skip), { touchesData: false }),
+});
+
 // ---------- the GK part ----------
 const gkui = createGkUI({
   $,
@@ -1604,6 +1627,7 @@ const areaui = createAreaUI(
 // ---------- the Maths and Reasoning parts (one module, two instances) ----------
 const quantCtx = {
   $,
+  cropper,
   esc,
   toast,
   plural,
@@ -2147,7 +2171,7 @@ const actions = {
   },
 };
 
-Object.assign(actions, grammar.actions, gkui.actions, areaui.actions, ...QPARTS.map((q) => q.ui.actions));
+Object.assign(actions, cropper.actions, prepare.actions, grammar.actions, gkui.actions, areaui.actions, ...QPARTS.map((q) => q.ui.actions));
 
 document.addEventListener("click", (e) => {
   const nav = e.target.closest("[data-nav]");
@@ -2167,7 +2191,32 @@ document.addEventListener("click", (e) => {
   if (e.target.id === "overlay") actions.close();
 });
 
+// Photos and PDFs picked on any Add screen go through the crop step first, then on to that screen.
+const FILE_INPUTS = {
+  files: (f) => handleFiles(f),
+  "g-files": (f) => grammar.addFiles(f),
+  "k-files": (f) => gkui.addFiles(f),
+  "k-chat-files": (f) => gkui.chatFiles(f),
+  ...Object.fromEntries(QPARTS.flatMap((q) => [[`${q.prefix}-files`, (f) => q.ui.addFiles(f)], [`${q.prefix}-chat-files`, (f) => q.ui.chatFiles(f)]])),
+};
+document.addEventListener(
+  "change",
+  async (e) => {
+    const t = e.target;
+    const send = t.type === "file" && FILE_INPUTS[t.dataset.input];
+    if (!send) return;
+    e.stopImmediatePropagation();
+    const files = [...t.files];
+    t.value = "";
+    if (!files.length) return;
+    const ready = await prepare.prepareFiles(files);
+    if (ready?.length) send(ready);
+  },
+  true,
+);
+
 document.addEventListener("change", async (e) => {
+  if (prepare.onChange(e)) return;
   if (await grammar.onChange(e)) return;
   if (await gkui.onChange(e)) return;
   if (areaui.onChange(e)) return;
@@ -2395,7 +2444,7 @@ let updatePending = false;
 
 /** Nothing in progress that a reload would interrupt. */
 const safeToReload = () =>
-  !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !grammar.busy() && !gkui.busy() && !areaui.busy() && !QPARTS.some((q) => q.ui.busy()) && !$("#overlay").classList.contains("open");
+  !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !grammar.busy() && !gkui.busy() && !areaui.busy() && !prepare.busy() && !QPARTS.some((q) => q.ui.busy()) && !$("#overlay").classList.contains("open");
 
 /** Reload into the newest version, keeping typed words. Returns true if the page is reloading. */
 function updateNow() {

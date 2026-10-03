@@ -53,3 +53,39 @@ export async function cropFigure(blob, box) {
     URL.revokeObjectURL(url);
   }
 }
+
+/**
+ * A photo or page made ready to read: turned by `rotate` degrees (a multiple of 90) clockwise, then cut to `box` (on the
+ * turned picture; null = all of it), at most `max` pixels on its longest side. Resolves a JPEG Blob.
+ */
+export async function cropToBlob(blob, box, { rotate = 0, max = 2400, quality = 0.9 } = {}) {
+  const b = box ? normBox(box) : [0, 0, 1000, 1000];
+  if (!b) throw new Error("The crop box is too small.");
+  const { img, url } = await loadImage(blob);
+  try {
+    const turn = (((Math.round(rotate / 90) % 4) + 4) % 4) * 90;
+    const [W, H] = turn % 180 ? [img.naturalHeight, img.naturalWidth] : [img.naturalWidth, img.naturalHeight];
+    const sx = (b[1] / 1000) * W;
+    const sy = (b[0] / 1000) * H;
+    const sw = ((b[3] - b[1]) / 1000) * W;
+    const sh = ((b[2] - b[0]) / 1000) * H;
+    const k = Math.min(1, max / Math.max(sw, sh));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(sw * k));
+    c.height = Math.max(1, Math.round(sh * k));
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, c.width, c.height);
+    // Work in the turned picture's coordinates: scale, move the box to the origin, then turn the original into place.
+    g.scale(k, k);
+    g.translate(-sx, -sy);
+    g.translate(W / 2, H / 2);
+    g.rotate((turn * Math.PI) / 180);
+    g.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+    const out = await new Promise((ok, bad) => c.toBlob((x) => (x ? ok(x) : bad(new Error("Couldn't make the picture."))), "image/jpeg", quality));
+    c.width = c.height = 0;
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
