@@ -1,12 +1,12 @@
-// The Maths & Reasoning part: Today, Add, Practice (incl. "practise one question type"), Topics (subject → topic →
+// One of the two parts, 🔢 Maths or 🧩 Reasoning (createQuantUI is called once for each): Today, Add, Practice (incl. "practise one question type"), Topics (subject → topic →
 // formula sheet + question types). main.js owns the shell and passes `ctx`; this mirrors gk-ui.js.
-import * as qs from "./lib/quant-store.js";
+import { SOURCES } from "./lib/quant-store.js";
 import { QUANT_KINDS, kindAccepts, makeQuantQuestion } from "./lib/quant-quiz.js";
 import { isQTopicLike, practiceFor, quantFromFiles, quantFromText, quantFromTopic, readNotes, readPastedQ } from "./lib/quant-ai.js";
 import { buildQuantMaterialPrompt, buildQuantTopicPrompt, buildSimilarPrompt, looksQuantStructured } from "./lib/quant-prompt.js";
 import { isBookId, loadQBook } from "./lib/qbook.js";
 import { ALL_QTOPICS, QTAXONOMY, SEP, qPatternKey, qTopicKey } from "./lib/quant-taxonomy.js";
-import { qItemsToCSV } from "./lib/quant.js";
+import { makeQItem, qItemsToCSV } from "./lib/quant.js";
 import { labelOf, nodeState, toggle } from "./lib/gk-topics.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
@@ -24,7 +24,10 @@ const COUNT_CHOICES = [
   ["30", "About 30 questions"],
 ];
 
-export function createQuantUI(ctx) {
+export function createQuantUI(ctx, part) {
+  // part: {store, prefix ("m" | "r"), subject, title ("Maths"), icon, slug, examples}
+  const qs = part.store;
+  const P = part.prefix;
   const { $, esc, toast, plural, render, go, openOverlay, closeOverlay, settings, download, keyPicker, aiBanner } = ctx;
 
   const gui = {
@@ -49,14 +52,14 @@ export function createQuantUI(ctx) {
   const view = () => ctx.view();
   const setBusy = (text) => {
     gui.busy = text;
-    if (view() === "m-add") render();
+    if (view() === `${P}-add`) render();
   };
   const lines = (t) => esc(t).replace(/\n/g, "<br />");
   const sourceSelect = (key, value) =>
-    `<select data-mpref="${key}">${Object.entries(qs.SOURCES)
+    `<select data-${P}pref="${key}">${Object.entries(SOURCES)
       .map(([k, l]) => `<option value="${k}" ${value === k ? "selected" : ""}>${l} (${qs.itemsFor(k).length})</option>`)
       .join("")}</select>`;
-  const infoBtn = (id) => `<button class="icon-btn info-btn" type="button" data-action="m-info" data-id="${esc(id)}" aria-label="Full card" title="Full card">ⓘ</button>`;
+  const infoBtn = (id) => `<button class="icon-btn info-btn" type="button" data-action="${P}-info" data-id="${esc(id)}" aria-label="Full card" title="Full card">ⓘ</button>`;
 
   // ---------- the card ----------
   function itemHead(it) {
@@ -106,12 +109,12 @@ export function createQuantUI(ctx) {
     if (!pool.length) {
       return `
         <section class="hero">
-          <h1>Maths & Reasoning, revised daily.</h1>
+          <h1>${part.title}, revised daily.</h1>
           <p>Scan your notes (handwritten PDFs too), paste questions, or ask Gemini about a topic. Every question is filed under its topic
           and question type, with the solution, formula and a short trick — plus 2 practice questions of the same type.</p>
           <div class="stack">
-            <button class="btn primary" type="button" data-action="m-set-source" data-src="mixed">📐 Start with the built-in Formula Book (${qs.bookItems().length} cards)</button>
-            <button class="btn" type="button" data-nav="m-add">➕ Add your own notes</button>
+            <button class="btn primary" type="button" data-action="${P}-set-source" data-src="mixed">📐 Start with the built-in Formula Book (${qs.bookItems().length} cards)</button>
+            <button class="btn" type="button" data-nav="${P}-add">➕ Add your own notes</button>
           </div>
         </section>`;
     }
@@ -125,7 +128,7 @@ export function createQuantUI(ctx) {
     const date = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
     return `
       <section class="today-head">
-        <div><p class="eyebrow">${esc(date)}</p><h1>Today’s Maths & Reasoning</h1></div>
+        <div><p class="eyebrow">${esc(date)}</p><h1>Today’s ${part.title}</h1></div>
         <div class="streak" title="Days in a row">🔥 ${streak(st.activity)}</div>
       </section>
       <div class="source-line"><label>Cards from ${sourceSelect("dailySource", source)}</label></div>
@@ -141,7 +144,7 @@ export function createQuantUI(ctx) {
               <p class="eyebrow">✨ ${qotd.kind === "formula" ? "Formula" : "Question"} of the Day ${infoBtn(qotd.id)}</p>
               ${itemHead(qotd)}
               ${itemBody(qotd, { reveal: gui.qotdShown })}
-              ${gui.qotdShown ? "" : `<button class="btn block" type="button" data-action="m-qotd">${qotd.kind === "formula" ? "Show the formula & trick" : "Show answer & solution"}</button>`}
+              ${gui.qotdShown ? "" : `<button class="btn block" type="button" data-action="${P}-qotd">${qotd.kind === "formula" ? "Show the formula & trick" : "Show answer & solution"}</button>`}
             </article>`
           : ""
       }
@@ -152,22 +155,22 @@ export function createQuantUI(ctx) {
         <ul class="plan-list">${list
           .map((it) => {
             const g = plan.done[it.id];
-            return `<li data-action="m-open" data-id="${esc(it.id)}">
+            return `<li data-action="${P}-open" data-id="${esc(it.id)}">
               <span class="tick ${g ? (g === "again" ? "again" : "ok") : ""}">${g ? (g === "again" ? "↻" : "✓") : ""}</span>
               <span class="pw">${it.kind === "formula" ? "📐 " : ""}${esc(it.q.length > 70 ? `${it.q.slice(0, 68)}…` : it.q)}<span class="muted small block">${SUBJECT_ICON(it.subject)} ${esc(it.topic)}</span></span>
               <span class="badge ${stage(it)}">${STAGE_LABEL[stage(it)]}</span>
             </li>`;
           })
           .join("")}</ul>
-        <button class="btn primary block" type="button" data-action="m-start-session">${done === 0 ? "▶ Start revision" : done < list.length ? "▶ Continue" : "↻ Revise again"}</button>
-        ${done && done === list.length ? `<p class="done-msg">🎉 Done for today! Try a quick <a href="#" data-nav="m-practice">practice</a>.</p>` : ""}
+        <button class="btn primary block" type="button" data-action="${P}-start-session">${done === 0 ? "▶ Start revision" : done < list.length ? "▶ Continue" : "↻ Revise again"}</button>
+        ${done && done === list.length ? `<p class="done-msg">🎉 Done for today! Try a quick <a href="#" data-nav="${P}-practice">practice</a>.</p>` : ""}
       </article>
       ${
         stale.length
           ? `<article class="card">
               <h3>🕒 Not revised for a while</h3>
               <p class="muted small">${stale.map((k) => esc(k)).join("<br />")}</p>
-              <button class="btn small" type="button" data-action="m-practise-keys" data-keys="${esc(stale.join("|"))}">Practise these topics</button>
+              <button class="btn small" type="button" data-action="${P}-practise-keys" data-keys="${esc(stale.join("|"))}">Practise these topics</button>
             </article>`
           : ""
       }`;
@@ -175,14 +178,14 @@ export function createQuantUI(ctx) {
 
   // ---------- Add ----------
   const variantsToggle = () =>
-    `<label class="toggle"><input type="checkbox" data-mpref="variants" ${prefs().variants ? "checked" : ""} /> Add 2 practice questions of the same type to every question</label>`;
+    `<label class="toggle"><input type="checkbox" data-${P}pref="variants" ${prefs().variants ? "checked" : ""} /> Add 2 practice questions of the same type to every question</label>`;
 
   function viewAdd() {
     if (gui.busy) return `<section class="card center busy"><div class="spinner" aria-hidden="true"></div><p>${esc(gui.busy)}</p></section>`;
     if (gui.candidates) return viewCandidates();
     const ai = hasAI(settings());
     return `
-      <h1>Add maths & reasoning</h1>
+      <h1>Add ${part.title.toLowerCase()} notes</h1>
       <p class="mode ${ai ? "on" : "off"}">${
         ai
           ? "🤖 <b>AI mode</b> — questions and formulas are read from your photos and handwritten PDFs, solved step by step, filed by topic and question type, and given a short trick."
@@ -192,21 +195,21 @@ export function createQuantUI(ctx) {
       ${variantsToggle()}
       <div class="add-grid">
         <label class="add-tile">
-          <input type="file" accept="image/*" capture="environment" data-input="m-files" hidden />
+          <input type="file" accept="image/*" capture="environment" data-input="${P}-files" hidden />
           <span class="big-ico">📷</span><b>Scan a page</b><span>Notes, book, class board</span>
         </label>
         <label class="add-tile">
-          <input type="file" accept="image/*,application/pdf,.pdf" multiple data-input="m-files" hidden />
+          <input type="file" accept="image/*,application/pdf,.pdf" multiple data-input="${P}-files" hidden />
           <span class="big-ico">🗒️</span><b>Upload photo / PDF</b><span>Handwritten scanned PDFs work too</span>
         </label>
         <label class="add-tile wide">
-          <input type="file" accept="image/*,application/pdf,.pdf" multiple data-input="m-chat-files" hidden />
+          <input type="file" accept="image/*,application/pdf,.pdf" multiple data-input="${P}-chat-files" hidden />
           <span class="big-ico">💬</span><b>Photo / PDF → Gemini or ChatGPT app</b><span>Get a ready prompt, ask the app, paste its answer here</span>
         </label>
       </div>
       ${chatPanel()}
       ${topicCard(ai)}
-      <article class="card" id="mPasteCard">
+      <article class="card" id="${P}PasteCard">
         <h3>✍️ Type or paste${gui.copied ? " — paste the AI's answer here" : ""}</h3>
         ${
           gui.copied
@@ -218,8 +221,8 @@ export function createQuantUI(ctx) {
         <p class="muted small">Formats: <code>Q: … A: …</code> (an AI's answer from the copied prompt, with <code>TYPE:</code>, <code>S:</code>, <code>F:</code>,
         <code>T:</code>, <code>PQ:</code> and <code>FORMULA:</code> lines) · numbered MCQs with <code>Ans:</code> · formula lines like
         <code>Speed = Distance / Time</code>${ai ? " · plain notes (AI finds the questions and formulas) · or one topic name for a full set" : ""}.</p>
-        <textarea id="mTyped" rows="7" placeholder="Q: A can do a work in 10 days and B in 15 days. Together?&#10;A: 6 days&#10;&#10;Average speed = 2xy/(x + y)">${esc(gui.typedDraft)}</textarea>
-        <button class="btn primary block" type="button" data-action="m-typed">Check & prepare</button>
+        <textarea id="${P}Typed" rows="7" placeholder="Q: A can do a work in 10 days and B in 15 days. Together?&#10;A: 6 days&#10;&#10;Average speed = 2xy/(x + y)">${esc(gui.typedDraft)}</textarea>
+        <button class="btn primary block" type="button" data-action="${P}-typed">Check & prepare</button>
       </article>
       <p class="muted small">Anything you already have is recognised and never added twice. Practice questions stay linked to their question.</p>`;
   }
@@ -229,13 +232,13 @@ export function createQuantUI(ctx) {
       <article class="card">
         <h3>💡 Formulas & questions on a topic</h3>
         <p class="muted small">Write a topic — every important formula and shortcut gets a card, and every common question type gets solved questions.</p>
-        <input id="mTopic" type="text" placeholder="e.g. Time and Work · Syllogism · Profit & Loss · Circular seating" value="${esc(gui.topicDraft)}" />
+        <input id="${P}Topic" type="text" placeholder="${esc(part.examples)}" value="${esc(gui.topicDraft)}" />
         <label class="field">How many
-          <select id="mCount">${COUNT_CHOICES.map(([v, l]) => `<option value="${v}" ${gui.topicCount === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+          <select id="${P}Count">${COUNT_CHOICES.map(([v, l]) => `<option value="${v}" ${gui.topicCount === v ? "selected" : ""}>${l}</option>`).join("")}</select>
         </label>
         <div class="stack">
-          ${ai ? `<button class="btn primary block" type="button" data-action="m-topic-make">🤖 Make them here</button>` : ""}
-          <button class="btn block" type="button" data-action="m-copy-topic">📋 Copy prompt for Gemini / ChatGPT</button>
+          ${ai ? `<button class="btn primary block" type="button" data-action="${P}-topic-make">🤖 Make them here</button>` : ""}
+          <button class="btn block" type="button" data-action="${P}-copy-topic">📋 Copy prompt for Gemini / ChatGPT</button>
         </div>
       </article>`;
   }
@@ -254,9 +257,9 @@ export function createQuantUI(ctx) {
     if (!files?.length) return "";
     const share = canShareFiles(files);
     return `
-      <article class="card chat-panel" id="mChatPanel">
+      <article class="card chat-panel" id="${P}ChatPanel">
         <div class="row between"><h3>💬 Ask Gemini about ${files.length > 1 ? `these ${files.length} files` : "this file"}</h3>
-          <button class="icon-btn" type="button" data-action="m-chat-close" aria-label="Close">✕</button></div>
+          <button class="icon-btn" type="button" data-action="${P}-chat-close" aria-label="Close">✕</button></div>
         <ul class="chat-files">${files
           .map((f, i) => `<li>${f.type.startsWith("image/") ? `<img src="${esc(gui.chatThumbs?.[i] || "")}" alt="" />` : "📄"}<span>${esc(f.name)}</span></li>`)
           .join("")}</ul>
@@ -267,8 +270,8 @@ export function createQuantUI(ctx) {
           <li>Copy the app's <b>whole</b> answer and paste it in the box below, then tap <b>Check & prepare</b>.</li>
         </ol>
         <div class="stack">
-          ${share ? `<button class="btn primary block" type="button" data-action="m-chat-share">📤 Share file + prompt to Gemini</button>` : ""}
-          <button class="btn ${share ? "" : "primary "}block" type="button" data-action="m-chat-copy">📋 Copy prompt</button>
+          ${share ? `<button class="btn primary block" type="button" data-action="${P}-chat-share">📤 Share file + prompt to Gemini</button>` : ""}
+          <button class="btn ${share ? "" : "primary "}block" type="button" data-action="${P}-chat-copy">📋 Copy prompt</button>
         </div>
         <p class="muted small">Open <a href="https://gemini.google.com/app" target="_blank" rel="noopener">Gemini</a> ·
           <a href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT</a></p>
@@ -281,9 +284,9 @@ export function createQuantUI(ctx) {
     gui.chatThumbs = files.map((f) => (f.type.startsWith("image/") ? URL.createObjectURL(f) : ""));
     gui.candidates = null;
     gui.copied = false;
-    if (view() !== "m-add") go("m-add");
+    if (view() !== `${P}-add`) go(`${P}-add`);
     else render();
-    $("#mChatPanel")?.scrollIntoView({ block: "start" });
+    $(`#${P}ChatPanel`)?.scrollIntoView({ block: "start" });
   }
 
   function closeChatPanel() {
@@ -306,17 +309,17 @@ export function createQuantUI(ctx) {
     openOverlay(`
       <div class="sheet-bar"><h3>Copy this prompt</h3><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
       <p class="muted small">Press and hold in the box → Select all → Copy. Then paste it in Gemini or ChatGPT.</p>
-      <textarea id="mPromptText" rows="14" readonly>${esc(text)}</textarea>`);
-    $("#mPromptText")?.select();
+      <textarea id="${P}PromptText" rows="14" readonly>${esc(text)}</textarea>`);
+    $(`#${P}PromptText`)?.select();
   }
 
   async function copyAndGuide(text, what, message) {
     gui.copied = what;
     if (await copyText(text)) {
       toast(message, 6000);
-      if (view() !== "m-add") go("m-add");
+      if (view() !== `${P}-add`) go(`${P}-add`);
       else render();
-      $("#mPasteCard")?.scrollIntoView({ block: "start" });
+      $(`#${P}PasteCard`)?.scrollIntoView({ block: "start" });
     } else showPromptToCopy(text);
   }
 
@@ -333,7 +336,7 @@ export function createQuantUI(ctx) {
       if (e?.name !== "AbortError") toast("Sharing didn't work here — use Copy prompt and attach the file yourself.", 6000);
     }
     render();
-    $("#mPasteCard")?.scrollIntoView({ block: "start" });
+    $(`#${P}PasteCard`)?.scrollIntoView({ block: "start" });
   }
 
   // ---------- review before saving ----------
@@ -342,7 +345,9 @@ export function createQuantUI(ctx) {
     return ALL_QTOPICS.map((t) => `<option value="${esc(`${t.subject}|${t.topic}`)}" ${`${t.subject}|${t.topic}` === cur ? "selected" : ""}>${esc(`${t.subject} › ${t.topic}`)}</option>`).join("");
   };
   const patternList = () =>
-    `<datalist id="mPatterns">${[...new Set(Object.values(qs.patternsByTopic()).flat())].map((p) => `<option value="${esc(p)}"></option>`).join("")}</datalist>`;
+    `<datalist id="${P}Patterns">${[...new Set(Object.values(qs.patternsByTopic()).flat())].map((p) => `<option value="${esc(p)}"></option>`).join("")}</datalist>`;
+
+  const subjectOf = (it) => makeQItem(it).subject;
 
   function viewCandidates() {
     const c = gui.candidates;
@@ -350,14 +355,14 @@ export function createQuantUI(ctx) {
     const counts = { formula: 0, question: 0, practice: 0 };
     for (const r of c.items) counts[r.item.kind === "formula" ? "formula" : r.item.variantOf ? "practice" : "question"] += 1;
     return `
-      <div class="row between"><h1>Review</h1><button class="btn small ghost" type="button" data-action="m-cancel">Cancel</button></div>
+      <div class="row between"><h1>Review</h1><button class="btn small ghost" type="button" data-action="${P}-cancel">Cancel</button></div>
       <p class="muted">${plural(counts.question, "question")}, ${plural(counts.practice, "practice question")} and ${plural(counts.formula, "formula card")} found.
       Untick any you don't want; change a topic or type if needed.</p>
       ${aiBanner(c.ai)}
       ${c.skipped.length ? `<p class="muted small">Already saved (skipped): ${plural(c.skipped.length, "item")}.</p>` : ""}
       ${
         c.fromFiles && gui.lastFiles?.length
-          ? `<p class="small"><button class="btn small" type="button" data-action="m-chat-last">💬 Missed something? Ask the Gemini app about this file instead</button></p>`
+          ? `<p class="small"><button class="btn small" type="button" data-action="${P}-chat-last">💬 Missed something? Ask the Gemini app about this file instead</button></p>`
           : ""
       }
       ${patternList()}
@@ -367,9 +372,11 @@ export function createQuantUI(ctx) {
             const it = row.item;
             return `<li class="cand new ${it.variantOf ? "variant" : ""}">
               <label>
-                <input type="checkbox" data-mcand="${i}" ${row.selected ? "checked" : ""} />
+                <input type="checkbox" data-${P}cand="${i}" ${row.selected ? "checked" : ""} />
                 <span class="cand-body cand-main">
-                  <span>${it.kind === "formula" ? `<span class="badge formula">📐 Formula</span>` : it.variantOf ? `<span class="badge learning">🔁 Practice</span>` : ""}</span>
+                  <span>${it.kind === "formula" ? `<span class="badge formula">📐 Formula</span>` : it.variantOf ? `<span class="badge learning">🔁 Practice</span>` : ""}${
+                    subjectOf(it) !== part.subject ? ` <span class="badge bank" title="This belongs to the other part and will be saved there">→ ${esc(part.otherTitle)}</span>` : ""
+                  }</span>
                   <b>${lines(it.q.length > 300 ? `${it.q.slice(0, 298)}…` : it.q)}</b>
                   ${
                     it.kind === "formula"
@@ -383,15 +390,15 @@ export function createQuantUI(ctx) {
                 it.variantOf
                   ? ""
                   : `<div class="cand-topic">
-                      <select data-mtopic="${i}" aria-label="Topic">${topicOptions(it)}</select>
-                      <input type="text" data-mtype="${i}" value="${esc(it.pattern)}" placeholder="Question type" list="mPatterns" aria-label="Question type" />
+                      <select data-${P}topic="${i}" aria-label="Topic">${topicOptions(it)}</select>
+                      <input type="text" data-${P}type="${i}" value="${esc(it.pattern)}" placeholder="Question type" list="${P}Patterns" aria-label="Question type" />
                     </div>`
               }
             </li>`;
           })
           .join("")}
       </ul>
-      <div class="sticky-actions"><button class="btn primary block" type="button" data-action="m-add-selected" ${n ? "" : "disabled"}>Add ${plural(n, "card")}</button></div>`;
+      <div class="sticky-actions"><button class="btn primary block" type="button" data-action="${P}-add-selected" ${n ? "" : "disabled"}>Add ${plural(n, "card")}</button></div>`;
   }
 
   function showCandidates(items, ai, fromFiles = false) {
@@ -451,11 +458,11 @@ export function createQuantUI(ctx) {
       toast(`${e.message || e} — you can ask the Gemini app about this file instead.`, 7000);
       return openChatPanel(files);
     }
-    if (view() === "m-add") render();
+    if (view() === `${P}-add`) render();
   }
 
   async function handleTyped() {
-    const text = $("#mTyped")?.value ?? "";
+    const text = $(`#${P}Typed`)?.value ?? "";
     gui.typedDraft = text;
     if (!text.trim()) return toast("Type or paste something first.");
     const s = settings();
@@ -477,7 +484,7 @@ export function createQuantUI(ctx) {
         gui.busy = null;
         gui.topicDraft = text.trim();
         toast("That looks like a topic. Tap “📋 Copy prompt” in the topic card and paste it in Gemini or ChatGPT.", 8000);
-        if (view() === "m-add") render();
+        if (view() === `${P}-add`) render();
         return;
       }
       items ??= looksQuantStructured(text) ? readPastedQ(text) : readNotes(text, "Typed");
@@ -491,11 +498,11 @@ export function createQuantUI(ctx) {
       gui.busy = null;
       toast(e.message || String(e), 6000);
     }
-    if (view() === "m-add") render();
+    if (view() === `${P}-add`) render();
   }
 
   async function handleTopic() {
-    const topic = ($("#mTopic")?.value ?? gui.topicDraft).trim();
+    const topic = ($(`#${P}Topic`)?.value ?? gui.topicDraft).trim();
     gui.topicDraft = topic;
     if (!topic) return toast("Write a topic first (e.g. Time and Work).");
     setBusy(`Planning “${topic.slice(0, 60)}”…`);
@@ -507,7 +514,7 @@ export function createQuantUI(ctx) {
       gui.busy = null;
       toast(e instanceof AllProvidersFailed ? `The AI couldn't do this right now: ${e.message}. Try “Copy prompt” instead.` : e.message || String(e), 8000);
     }
-    if (view() === "m-add") render();
+    if (view() === `${P}-add`) render();
   }
 
   // ---------- Practice ----------
@@ -520,11 +527,11 @@ export function createQuantUI(ctx) {
     const label = depth === 0 ? `${SUBJECT_ICON(key)} ${key}` : labelOf(key);
     return `<li class="pick ${state}">
       <div class="pick-row">
-        <button type="button" class="pick-box ${state}" data-action="m-toggle-topic" data-key="${esc(key)}" aria-label="${state === "off" ? "Include" : "Leave out"} ${esc(label)}">${
+        <button type="button" class="pick-box ${state}" data-action="${P}-toggle-topic" data-key="${esc(key)}" aria-label="${state === "off" ? "Include" : "Leave out"} ${esc(label)}">${
           state === "on" ? "☑" : state === "some" ? "◩" : "☐"
         }</button>
         <span class="pick-label">${esc(label)} <span class="muted small">(${n})</span></span>
-        ${kids.length ? `<button type="button" class="icon-btn small" data-action="m-expand" data-key="${esc(key)}" aria-label="Show topics">${open ? "▾" : "▸"}</button>` : ""}
+        ${kids.length ? `<button type="button" class="icon-btn small" data-action="${P}-expand" data-key="${esc(key)}" aria-label="Show topics">${open ? "▾" : "▸"}</button>` : ""}
       </div>
       ${open && kids.length ? `<ul>${kids.map((k) => pickerNode(k, tree, counts, depth + 1)).join("")}</ul>` : ""}
     </li>`;
@@ -554,7 +561,7 @@ export function createQuantUI(ctx) {
             ([t, list]) => `<p class="small"><b>${esc(t.split(SEP)[1])}</b></p>
               <div class="row wrap">${list
                 .sort((a, b) => b[1] - a[1])
-                .map(([k, n]) => `<button class="btn small" type="button" data-action="m-practise-type" data-key="${esc(k)}">${esc(labelOf(k))} (${n})</button>`)
+                .map(([k, n]) => `<button class="btn small" type="button" data-action="${P}-practise-type" data-key="${esc(k)}">${esc(labelOf(k))} (${n})</button>`)
                 .join("")}</div>`,
           )
           .join("")}
@@ -573,31 +580,31 @@ export function createQuantUI(ctx) {
     const weak = weakWords(pool, qs.get().practice);
     const pct = cov.total ? Math.round((cov.covered / cov.total) * 100) : 0;
     return `
-      <h1>Maths & Reasoning practice</h1>
+      <h1>${part.title} practice</h1>
       <p class="muted">Every selected card is asked once per round, topics take turns, and wrong answers come back until you get them right twice in a row.</p>
       <article class="card">
         <label class="field">Practise from ${sourceSelect("practiceSource", source)}</label>
         <p class="small">Round ${cov.round}: <b>${cov.covered}</b> of ${cov.total} cards covered${weak.length ? ` · ⚠️ ${plural(weak.length, "weak card")}` : ""}</p>
         <div class="progress"><span style="width:${pct}%"></span></div>
         <label class="field">Questions per session
-          <select data-mpref="practiceSize">${[10, 15, 20, 30].map((n) => `<option value="${n}" ${Number(p.practiceSize) === n ? "selected" : ""}>${n}</option>`).join("")}</select>
+          <select data-${P}pref="practiceSize">${[10, 15, 20, 30].map((n) => `<option value="${n}" ${Number(p.practiceSize) === n ? "selected" : ""}>${n}</option>`).join("")}</select>
         </label>
       </article>
       <article class="card">
         <div class="row between"><h3>Topics</h3><span class="muted small">${pool.length} of ${all.length} selected</span></div>
         <div class="row wrap">
-          <button class="btn small" type="button" data-action="m-topics-all">Select all</button>
-          <button class="btn small" type="button" data-action="m-topics-none">Clear all</button>
+          <button class="btn small" type="button" data-action="${P}-topics-all">Select all</button>
+          <button class="btn small" type="button" data-action="${P}-topics-none">Clear all</button>
         </div>
-        <ul class="picker">${(tree.get("") || []).map((k) => pickerNode(k, tree, counts, 0)).join("")}</ul>
-        <label class="toggle"><input type="checkbox" data-mpref="excludeToday" ${p.excludeToday ? "checked" : ""} /> Use the same topics for Today's revision</label>
+        <ul class="picker">${(tree.get(part.subject) || []).map((k) => pickerNode(k, tree, counts, 1)).join("")}</ul>
+        <label class="toggle"><input type="checkbox" data-${P}pref="excludeToday" ${p.excludeToday ? "checked" : ""} /> Use the same topics for Today's revision</label>
       </article>
       ${
         pool.length
           ? `<div class="quiz-grid">${QUANT_KINDS.map(
-              ([k, ico, t, d]) => `<button class="quiz-tile" type="button" data-action="m-start-quiz" data-kind="${k}"><span class="big-ico">${ico}</span><b>${t}</b><span>${d}</span></button>`,
+              ([k, ico, t, d]) => `<button class="quiz-tile" type="button" data-action="${P}-start-quiz" data-kind="${k}"><span class="big-ico">${ico}</span><b>${t}</b><span>${d}</span></button>`,
             ).join("")}</div>
-            ${weak.length ? `<button class="btn block" type="button" data-action="m-start-quiz" data-kind="mixed" data-weak="1">🎯 Fix my ${plural(weak.length, "weak card")}</button>` : ""}`
+            ${weak.length ? `<button class="btn block" type="button" data-action="${P}-start-quiz" data-kind="mixed" data-weak="1">🎯 Fix my ${plural(weak.length, "weak card")}</button>` : ""}`
           : `<p class="muted center">Select at least one topic to practise.</p>`
       }
       ${typesCard(all)}`;
@@ -625,7 +632,7 @@ export function createQuantUI(ctx) {
     const full = typeKey ? qs.itemsFor(source) : pool;
     gui.quiz = { kind, source, queue: ids, i: 0, picked: null, revealed: false, score: 0, answered: 0, wrong: [], requeued: new Set(), pool: full, title: typeKey ? labelOf(typeKey) : "" };
     gui.quiz.current = questionFor(gui.quiz, false);
-    if (view() !== "m-practice") go("m-practice");
+    if (view() !== `${P}-practice`) go(`${P}-practice`);
     else render();
     window.scrollTo(0, 0);
   }
@@ -646,10 +653,10 @@ export function createQuantUI(ctx) {
           <p class="score">${q.score}/${q.answered}</p>
           <p>${q.answered && q.score === q.answered ? "Perfect! 🏆" : q.score >= q.answered * 0.7 ? "Great work 💪" : "Keep going — the weak ones will come back 📈"}</p>
           ${q.title ? "" : `<p class="small muted">Round ${cov.round}: ${cov.covered} of ${cov.total} cards covered</p>`}
-          ${wrong.length ? `<p class="muted">Will come back: ${wrong.map((i) => `<a href="#" data-action="m-info" data-id="${esc(i.id)}">${esc(i.q.slice(0, 50))} ⓘ</a>`).join("; ")}</p>` : ""}
+          ${wrong.length ? `<p class="muted">Will come back: ${wrong.map((i) => `<a href="#" data-action="${P}-info" data-id="${esc(i.id)}">${esc(i.q.slice(0, 50))} ⓘ</a>`).join("; ")}</p>` : ""}
           <div class="row center">
-            ${q.title ? "" : `<button class="btn primary" type="button" data-action="m-start-quiz" data-kind="${q.kind}">Next session</button>`}
-            <button class="btn" type="button" data-action="m-end-quiz">Done</button>
+            ${q.title ? "" : `<button class="btn primary" type="button" data-action="${P}-start-quiz" data-kind="${q.kind}">Next session</button>`}
+            <button class="btn" type="button" data-action="${P}-end-quiz">Done</button>
           </div>
         </article>`;
     }
@@ -660,7 +667,7 @@ export function createQuantUI(ctx) {
     return `
       <div class="row between">
         <span class="muted">${q.title ? `${esc(q.title)} · ` : ""}${q.i + 1} of ${q.queue.length}</span>
-        <button class="btn small ghost" type="button" data-action="m-end-quiz">Finish</button>
+        <button class="btn small ghost" type="button" data-action="${P}-end-quiz">Finish</button>
       </div>
       <div class="progress"><span style="width:${(q.i / q.queue.length) * 100}%"></span></div>
       <article class="card quiz-card">
@@ -670,14 +677,14 @@ export function createQuantUI(ctx) {
         ${
           hidden
             ? `<p class="muted center">${cur.kind === "recall" ? "Say or write the formula, then check." : "Solve it on paper, then check."}</p>
-               <button class="btn primary block" type="button" data-action="m-reveal">${cur.kind === "recall" ? "Show the formula" : "Show answer & solution"}</button>`
+               <button class="btn primary block" type="button" data-action="${P}-reveal">${cur.kind === "recall" ? "Show the formula" : "Show answer & solution"}</button>`
             : `${cur.selfGraded ? `<div class="formula-box center">${lines(cur.reveal)}</div>` : ""}
                <div class="options ${cur.options.length === 2 ? "two" : ""}">
                 ${cur.options
                   .map((o, i) => {
                     let cls = "";
                     if (answered) cls = cur.selfGraded ? (i === q.picked ? (i === 0 ? "correct" : "wrong") : "dim") : i === cur.answer ? "correct" : i === q.picked ? "wrong" : "dim";
-                    return `<button class="option ${cls}" type="button" data-action="m-pick" data-i="${i}" ${answered ? "disabled" : ""}>${lines(o)}</button>`;
+                    return `<button class="option ${cls}" type="button" data-action="${P}-pick" data-i="${i}" ${answered ? "disabled" : ""}>${lines(o)}</button>`;
                   })
                   .join("")}
               </div>`
@@ -694,7 +701,7 @@ export function createQuantUI(ctx) {
                  </div>
                  ${infoBtn(it.id)}
                </div>
-               ${answered ? `<button class="btn primary block" type="button" data-action="m-next">${q.i + 1 < q.queue.length ? "Next →" : "See score"}</button>` : ""}`
+               ${answered ? `<button class="btn primary block" type="button" data-action="${P}-next">${q.i + 1 < q.queue.length ? "Next →" : "See score"}</button>` : ""}`
             : ""
         }
       </article>`;
@@ -715,7 +722,7 @@ export function createQuantUI(ctx) {
       ? `<ul class="word-list rule-list">${items
           .slice(0, LIST_SHOWN)
           .map(
-            (it) => `<li data-action="m-open" data-id="${esc(it.id)}" class="${it.variantOf ? "variant" : ""}">
+            (it) => `<li data-action="${P}-open" data-id="${esc(it.id)}" class="${it.variantOf ? "variant" : ""}">
               <div><b>${it.kind === "formula" ? "📐 " : it.variantOf ? "🔁 " : ""}${esc(it.q.length > 120 ? `${it.q.slice(0, 118)}…` : it.q)}</b><span class="muted small block">${
                 it.kind === "formula" ? esc((it.formula || "").split("\n")[0].slice(0, 90)) : `✓ ${esc(it.a)}`
               }</span></div>
@@ -730,10 +737,10 @@ export function createQuantUI(ctx) {
     if (!f.length) return "";
     return `<article class="card">
       <div class="row between"><h3>📐 Formulas & tricks (${f.length})</h3>
-        <button class="btn small" type="button" data-action="m-revise-formulas" data-key="${esc(gui.browse)}">Revise</button></div>
+        <button class="btn small" type="button" data-action="${P}-revise-formulas" data-key="${esc(gui.browse)}">Revise</button></div>
       <ul class="formula-sheet">${f
         .map(
-          (it) => `<li data-action="m-open" data-id="${esc(it.id)}">
+          (it) => `<li data-action="${P}-open" data-id="${esc(it.id)}">
             <b>${esc(it.q)}</b>${it.formula ? `<div class="formula-box">${lines(it.formula)}</div>` : ""}${it.trick ? `<span class="small muted">💡 ${lines(it.trick)}</span>` : ""}
           </li>`,
         )
@@ -751,45 +758,48 @@ export function createQuantUI(ctx) {
         ["mine", `Mine (${qs.liveItems().length})`],
         ["book", `Formulas (${qs.bookItems().length})`],
       ]
-        .map(([k, l]) => `<button type="button" class="${gui.tab === k ? "active" : ""}" data-action="m-tab" data-tab="${k}">${l}</button>`)
+        .map(([k, l]) => `<button type="button" class="${gui.tab === k ? "active" : ""}" data-action="${P}-tab" data-tab="${k}">${l}</button>`)
         .join("")}
     </div>`;
-    const search = `<input type="search" id="mSearch" placeholder="Search questions, formulas and tricks" value="${esc(gui.search)}" autocomplete="off" />`;
+    const search = `<input type="search" id="${P}Search" placeholder="Search questions, formulas and tricks" value="${esc(gui.search)}" autocomplete="off" />`;
     if (term) {
       const hits = all.filter((i) => `${i.q} ${i.a} ${i.formula} ${i.trick} ${i.topic} ${i.pattern}`.toLowerCase().includes(term));
       return `${tabs}<h1>Topics</h1>${search}<p class="muted small">${hits.length} match${hits.length === 1 ? "" : "es"}</p>${listOf(hits)}`;
     }
-    const node = gui.browse;
-    const depth = node ? node.split(SEP).length : 0; // 0 root, 1 subject, 2 topic, 3 type
+    // The part's subject is the root: its topics, then a topic's formulas and question types, then one type.
+    const node = gui.browse || part.subject;
+    const isRoot = node === part.subject;
+    const depth = node.split(SEP).length; // 1 the part's topics, 2 a topic, 3 a question type
     const tree = qs.qBuildTree(all);
     const counts = qs.qTopicTree(all);
     const here = node ? all.filter((i) => qPatternKey(i) === node || qPatternKey(i).startsWith(node + SEP)) : all;
-    const crumbs = node
-      ? `<p class="crumbs"><a href="#" data-action="m-browse" data-key="">All</a>${node
+    const crumbs = isRoot
+      ? ""
+      : `<p class="crumbs"><a href="#" data-action="${P}-browse" data-key="">All topics</a>${node
           .split(SEP)
-          .map((_, i, a) => ` › <a href="#" data-action="m-browse" data-key="${esc(a.slice(0, i + 1).join(SEP))}">${esc(a[i])}</a>`)
-          .join("")}</p>`
-      : "";
+          .slice(1)
+          .map((_, i, a) => ` › <a href="#" data-action="${P}-browse" data-key="${esc([part.subject, ...a.slice(0, i + 1)].join(SEP))}">${esc(a[i])}</a>`)
+          .join("")}</p>`;
     const head = `${tabs}
-      <div class="row between"><h1>${node ? esc(labelOf(node)) : "Topics"}</h1><button class="btn small" type="button" data-action="m-new">＋ New</button></div>
+      <div class="row between"><h1>${isRoot ? "Topics" : esc(labelOf(node))}</h1><button class="btn small" type="button" data-action="${P}-new">＋ New</button></div>
       ${search}${crumbs}`;
     if (depth < 2) {
       const kids = tree.get(node) || [];
       return `${head}
-        ${depth === 0 ? `<p class="muted small">Coverage — light: practised this round, dark: mastered.</p>` : ""}
+        <p class="muted small">Coverage — light: practised this round, dark: mastered.</p>
         ${
           kids.length
             ? `<ul class="topic-list">${kids
                 .map(
-                  (k) => `<li data-action="m-browse" data-key="${esc(k)}">
-                    <span class="t-name">${depth === 0 ? SUBJECT_ICON(k) + " " : ""}${esc(labelOf(k))}</span>${nodeStats(counts.get(k))}<span class="home-go" aria-hidden="true">›</span>
+                  (k) => `<li data-action="${P}-browse" data-key="${esc(k)}">
+                    <span class="t-name">${esc(labelOf(k))}</span>${nodeStats(counts.get(k))}<span class="home-go" aria-hidden="true">›</span>
                   </li>`,
                 )
                 .join("")}</ul>`
             : `<p class="muted center">Nothing here yet.</p>`
         }
-        ${node ? `<button class="btn small block" type="button" data-action="m-practise-keys" data-keys="${esc(node)}">🎯 Practise ${esc(labelOf(node))}</button>` : ""}
-        ${qs.liveItems().length && !node ? `<div class="row wrap center"><button class="btn small" type="button" data-action="m-export-csv">⬇ My notes as CSV (Excel)</button></div>` : ""}`;
+        ${kids.length ? `<button class="btn small block" type="button" data-action="${P}-practise-keys" data-keys="${esc(node)}">🎯 Practise all ${esc(part.title)}</button>` : ""}
+        ${qs.liveItems().length ? `<div class="row wrap center"><button class="btn small" type="button" data-action="${P}-export-csv">⬇ My notes as CSV (Excel)</button></div>` : ""}`;
     }
     if (depth === 2) {
       // A topic: its formula sheet, then its question types.
@@ -801,7 +811,7 @@ export function createQuantUI(ctx) {
             ? `<article class="card"><h3>🧩 Question types</h3>
                 <ul class="topic-list">${types
                   .map(
-                    (k) => `<li data-action="m-browse" data-key="${esc(k)}">
+                    (k) => `<li data-action="${P}-browse" data-key="${esc(k)}">
                       <span class="t-name">${esc(labelOf(k))}</span>${nodeStats(counts.get(k))}<span class="home-go" aria-hidden="true">›</span>
                     </li>`,
                   )
@@ -810,13 +820,13 @@ export function createQuantUI(ctx) {
               ? ""
               : `<p class="muted small center">No questions in this topic yet.</p>`
         }
-        <button class="btn small block" type="button" data-action="m-practise-keys" data-keys="${esc(node)}">🎯 Practise ${esc(labelOf(node))}</button>`;
+        <button class="btn small block" type="button" data-action="${P}-practise-keys" data-keys="${esc(node)}">🎯 Practise ${esc(labelOf(node))}</button>`;
     }
     // A question type: its questions (each followed by its practice questions) and formula cards.
     const list = qs.itemsOfPattern(node, src);
     const nq = list.filter((i) => i.kind === "question").length;
     return `${head}
-      ${nq ? `<button class="btn primary block" type="button" data-action="m-practise-type" data-key="${esc(node)}">🎯 Practise this type (${plural(nq, "question")})</button>` : ""}
+      ${nq ? `<button class="btn primary block" type="button" data-action="${P}-practise-type" data-key="${esc(node)}">🎯 Practise this type (${plural(nq, "question")})</button>` : ""}
       ${listOf(list.filter((i) => i.kind === "question"))}
       ${formulaSheet(list)}`;
   }
@@ -834,11 +844,11 @@ export function createQuantUI(ctx) {
     if (it.kind !== "question") return "";
     if (it.variantOf) {
       const o = qs.byId(it.variantOf);
-      return o ? `<p class="small">🔁 Practice question of: <a href="#" data-action="m-open" data-id="${esc(o.id)}">${esc(o.q.slice(0, 80))}</a></p>` : "";
+      return o ? `<p class="small">🔁 Practice question of: <a href="#" data-action="${P}-open" data-id="${esc(o.id)}">${esc(o.q.slice(0, 80))}</a></p>` : "";
     }
     const vs = qs.variantsOf(it.id);
     return vs.length
-      ? `<p class="small"><b>Practice questions:</b></p><ul class="small">${vs.map((v) => `<li><a href="#" data-action="m-open" data-id="${esc(v.id)}">${esc(v.q.slice(0, 90))}</a></li>`).join("")}</ul>`
+      ? `<p class="small"><b>Practice questions:</b></p><ul class="small">${vs.map((v) => `<li><a href="#" data-action="${P}-open" data-id="${esc(v.id)}">${esc(v.q.slice(0, 90))}</a></li>`).join("")}</ul>`
       : "";
   }
 
@@ -853,19 +863,19 @@ export function createQuantUI(ctx) {
       ${linkedLine(it)}
       ${progressLine(it)}
       <div class="row wrap">
-        <button class="btn small" type="button" data-action="m-star" data-id="${esc(it.id)}">${it.starred ? "★ Unstar" : "☆ Star"}</button>
+        <button class="btn small" type="button" data-action="${P}-star" data-id="${esc(it.id)}">${it.starred ? "★ Unstar" : "☆ Star"}</button>
         ${
           it.book
-            ? `<button class="btn small primary" type="button" data-action="m-add-book" data-id="${esc(it.id)}">＋ Add to my notes</button>`
-            : `<button class="btn small" type="button" data-action="m-edit" data-id="${esc(it.id)}">✎ Edit</button>
+            ? `<button class="btn small primary" type="button" data-action="${P}-add-book" data-id="${esc(it.id)}">＋ Add to my notes</button>`
+            : `<button class="btn small" type="button" data-action="${P}-edit" data-id="${esc(it.id)}">✎ Edit</button>
                ${
                  it.kind === "question" && !it.variantOf
-                   ? `${ai ? `<button class="btn small" type="button" data-action="m-more-practice" data-id="${esc(it.id)}">🤖 ＋2 practice questions</button>` : ""}
-                      <button class="btn small" type="button" data-action="m-copy-similar" data-id="${esc(it.id)}">📋 Prompt for 2 more</button>`
+                   ? `${ai ? `<button class="btn small" type="button" data-action="${P}-more-practice" data-id="${esc(it.id)}">🤖 ＋2 practice questions</button>` : ""}
+                      <button class="btn small" type="button" data-action="${P}-copy-similar" data-id="${esc(it.id)}">📋 Prompt for 2 more</button>`
                    : ""
                }
-               ${it.pattern && it.kind === "question" ? `<button class="btn small" type="button" data-action="m-practise-type" data-key="${esc(qPatternKey(it))}">🧩 All of this type</button>` : ""}
-               <button class="btn small danger" type="button" data-action="m-delete" data-id="${esc(it.id)}">Delete</button>`
+               ${it.pattern && it.kind === "question" ? `<button class="btn small" type="button" data-action="${P}-practise-type" data-key="${esc(qPatternKey(it))}">🧩 All of this type</button>` : ""}
+               <button class="btn small danger" type="button" data-action="${P}-delete" data-id="${esc(it.id)}">Delete</button>`
         }
       </div>`);
   }
@@ -889,7 +899,7 @@ export function createQuantUI(ctx) {
     openOverlay(`
       <div class="sheet-bar"><h3>${it ? "Edit" : "New card"}</h3><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
       ${patternList()}
-      <form id="mEditForm" data-id="${esc(it?.id ?? "")}">
+      <form id="${P}EditForm" data-id="${esc(it?.id ?? "")}">
         <label class="field">Kind
           <select name="kind">${[["question", "❓ Question"], ["formula", "📐 Formula / trick"]].map(([k, l]) => `<option value="${k}" ${(it?.kind ?? "question") === k ? "selected" : ""}>${l}</option>`).join("")}</select>
         </label>
@@ -899,8 +909,8 @@ export function createQuantUI(ctx) {
         <label class="field">Solution steps / worked example<textarea name="solution" rows="4">${v("solution")}</textarea></label>
         <label class="field">Formula<textarea name="formula" rows="2">${v("formula")}</textarea></label>
         <label class="field">Trick / shortcut<textarea name="trick" rows="2">${v("trick")}</textarea></label>
-        <label class="field">Topic<select name="topic">${topicOptions(it || { subject: "Quant", topic: "Percentage" })}</select></label>
-        <label class="field">Question type<input name="pattern" value="${v("pattern")}" list="mPatterns" placeholder="e.g. Successive discounts" /></label>
+        <label class="field">Topic<select name="topic">${topicOptions(it || { subject: part.subject, topic: part.defaultTopic })}</select></label>
+        <label class="field">Question type<input name="pattern" value="${v("pattern")}" list="${P}Patterns" placeholder="e.g. Successive discounts" /></label>
         <button class="btn primary block" type="submit">Save</button>
       </form>`);
   }
@@ -964,16 +974,16 @@ export function createQuantUI(ctx) {
           ss.revealed
             ? ""
             : `<p class="muted center recall">${it.kind === "formula" ? "Say or write the formula first." : "Solve it on paper first."}</p>
-               <button class="btn primary block" type="button" data-action="m-flip">${it.kind === "formula" ? "Show the formula" : "Show answer & solution"}</button>`
+               <button class="btn primary block" type="button" data-action="${P}-flip">${it.kind === "formula" ? "Show the formula" : "Show answer & solution"}</button>`
         }
       </div>
       ${
         ss.revealed
           ? `<div class="grades">
-              <button class="grade again" type="button" data-action="m-grade" data-g="again">Forgot<small>tomorrow</small></button>
-              <button class="grade hard" type="button" data-action="m-grade" data-g="hard">Hard</button>
-              <button class="grade good" type="button" data-action="m-grade" data-g="good">Knew it</button>
-              <button class="grade easy" type="button" data-action="m-grade" data-g="easy">Easy</button>
+              <button class="grade again" type="button" data-action="${P}-grade" data-g="again">Forgot<small>tomorrow</small></button>
+              <button class="grade hard" type="button" data-action="${P}-grade" data-g="hard">Hard</button>
+              <button class="grade good" type="button" data-action="${P}-grade" data-g="good">Knew it</button>
+              <button class="grade easy" type="button" data-action="${P}-grade" data-g="easy">Easy</button>
             </div>`
           : ""
       }`,
@@ -984,9 +994,9 @@ export function createQuantUI(ctx) {
   // ---------- backups ----------
   function exportBackup() {
     const data = qs.exportData();
-    download(`vocabvault-maths-backup-${todayISO()}.json`, JSON.stringify(data, null, 1), "application/json");
+    download(`vocabvault-${part.slug}-backup-${todayISO()}.json`, JSON.stringify(data, null, 1), "application/json");
     toast(
-      `Maths & Reasoning backup saved: ${plural(qs.liveItems().length, "of your own card")}${
+      `${part.title} backup saved: ${plural(qs.liveItems().length, "of your own card")}${
         Object.keys(data.bank).length ? ` + progress on ${plural(Object.keys(data.bank).length, "Formula Book card")}` : ""
       }. The Formula Book itself is built in.`,
       7000,
@@ -997,7 +1007,7 @@ export function createQuantUI(ctx) {
     try {
       const r = qs.importData(JSON.parse(await file.text()), { markDirty: true, applyPrefs: true });
       toast(
-        `✓ Maths & Reasoning restored. Backup had ${plural(r.inBackup, "of your own card")}${r.inBackup ? `: ${r.added} new, ${r.updated} updated, ${r.inBackup - r.added - r.updated} already here` : ""}.`,
+        `✓ ${part.title} restored. Backup had ${plural(r.inBackup, "of your own card")}${r.inBackup ? `: ${r.added} new, ${r.updated} updated, ${r.inBackup - r.added - r.updated} already here` : ""}.${r.movedToOther ? ` ${plural(r.movedToOther, "card")} went to ${part.otherTitle}.` : ""}`,
         8000,
       );
       ctx.afterChange();
@@ -1010,20 +1020,20 @@ export function createQuantUI(ctx) {
   // ---------- actions ----------
   const after = () => ctx.afterChange();
   const actions = {
-    "m-open": (el) => showItem(el.dataset.id),
-    "m-info": (el) => showInfo(el.dataset.id),
-    "m-new": () => showEditor(null),
-    "m-edit": (el) => showEditor(el.dataset.id),
-    "m-qotd": () => {
+    [`${P}-open`]: (el) => showItem(el.dataset.id),
+    [`${P}-info`]: (el) => showInfo(el.dataset.id),
+    [`${P}-new`]: () => showEditor(null),
+    [`${P}-edit`]: (el) => showEditor(el.dataset.id),
+    [`${P}-qotd`]: () => {
       gui.qotdShown = true;
       render();
     },
-    "m-star": (el) => {
+    [`${P}-star`]: (el) => {
       qs.updateItem(el.dataset.id, (i) => ({ ...i, starred: !i.starred }));
       showItem(el.dataset.id);
       after();
     },
-    "m-delete": (el) => {
+    [`${P}-delete`]: (el) => {
       const n = qs.variantsOf(el.dataset.id).length;
       if (!confirm(n ? `Delete this question and its ${plural(n, "practice question")}?` : "Delete this card?")) return;
       qs.deleteItem(el.dataset.id);
@@ -1032,12 +1042,12 @@ export function createQuantUI(ctx) {
       after();
       render();
     },
-    "m-add-book": (el) => {
+    [`${P}-add-book`]: (el) => {
       const r = qs.addBookItemToMine(el.dataset.id);
       toast(r ? "Added to your notes ✓" : "Already in your notes.");
       after();
     },
-    "m-more-practice": async (el) => {
+    [`${P}-more-practice`]: async (el) => {
       const it = qs.byId(el.dataset.id);
       if (!it) return;
       toast("AI is writing 2 practice questions…", 60000);
@@ -1052,56 +1062,62 @@ export function createQuantUI(ctx) {
         toast(e.message, 7000);
       }
     },
-    "m-copy-similar": async (el) => {
+    [`${P}-copy-similar`]: async (el) => {
       const it = qs.byId(el.dataset.id);
       if (!it) return;
       closeOverlay();
       await copyAndGuide(buildSimilarPrompt(it), "similar", "Prompt copied ✓ — paste it in Gemini, then paste its answer here");
     },
-    "m-typed": () => handleTyped(),
-    "m-topic-make": () => handleTopic(),
-    "m-copy-topic": async () => {
-      const topic = ($("#mTopic")?.value ?? gui.topicDraft).trim();
+    [`${P}-typed`]: () => handleTyped(),
+    [`${P}-topic-make`]: () => handleTopic(),
+    [`${P}-copy-topic`]: async () => {
+      const topic = ($(`#${P}Topic`)?.value ?? gui.topicDraft).trim();
       gui.topicDraft = topic;
       if (!topic) return toast("Write a topic first (e.g. Time and Work).");
       await copyAndGuide(buildQuantTopicPrompt({ topic, count: gui.topicCount, ...promptOpts() }), "topic", "Prompt copied ✓ — paste it in Gemini or ChatGPT");
     },
-    "m-chat-copy": () => copyAndGuide(buildQuantMaterialPrompt({ files: gui.chatFiles || [], ...promptOpts() }), "files", "Prompt copied ✓ — attach the file in Gemini and paste it"),
-    "m-chat-share": () => chatShare(),
-    "m-chat-close": () => closeChatPanel(),
-    "m-chat-last": () => openChatPanel(gui.lastFiles || []),
-    "m-cancel": () => {
+    [`${P}-chat-copy`]: () => copyAndGuide(buildQuantMaterialPrompt({ files: gui.chatFiles || [], ...promptOpts() }), "files", "Prompt copied ✓ — attach the file in Gemini and paste it"),
+    [`${P}-chat-share`]: () => chatShare(),
+    [`${P}-chat-close`]: () => closeChatPanel(),
+    [`${P}-chat-last`]: () => openChatPanel(gui.lastFiles || []),
+    [`${P}-cancel`]: () => {
       gui.candidates = null;
       render();
     },
-    "m-add-selected": () => {
+    [`${P}-add-selected`]: () => {
       const chosen = gui.candidates.items.filter((r) => r.selected).map((r) => r.item);
-      const { added, skipped: dup } = qs.addItems([...gui.candidates.hidden, ...chosen]);
-      const skipped = dup.slice(gui.candidates.hidden.length);
+      const { added, skipped: dup, moved } = qs.addItems([...gui.candidates.hidden, ...chosen]);
+      const ownHidden = gui.candidates.hidden.filter((h) => subjectOf(h) === part.subject).length;
+      const skipped = dup.slice(ownHidden);
       gui.candidates = null;
       gui.typedDraft = "";
       const v = added.filter((i) => i.variantOf).length;
-      toast(`Added ${plural(added.length - v, "card")}${v ? ` + ${plural(v, "practice question")}` : ""} ✓${skipped.length ? ` (${skipped.length} already saved)` : ""}`);
+      toast(
+        `Added ${plural(added.length - v, "card")}${v ? ` + ${plural(v, "practice question")}` : ""} ✓${skipped.length ? ` (${skipped.length} already saved)` : ""}${
+          moved.length ? ` · ${plural(moved.length, "card")} went to ${part.otherTitle}` : ""
+        }`,
+        6000,
+      );
       after();
       gui.tab = "mine";
       gui.browse = "";
-      go("m-topics");
+      go(`${P}-topics`);
     },
-    "m-set-source": (el) => {
+    [`${P}-set-source`]: (el) => {
       qs.update((s) => (s.prefs.dailySource = el.dataset.src), { touchesData: false });
       render();
     },
-    "m-start-session": () => {
+    [`${P}-start-session`]: () => {
       const plan = qs.todaysPlan();
       const pending = plan.ids.filter((id) => !plan.done[id]);
       gui.session = { ids: pending.length ? pending : [...plan.ids], i: 0, revealed: false, results: {} };
       renderSession();
     },
-    "m-flip": () => {
+    [`${P}-flip`]: () => {
       gui.session.revealed = true;
       renderSession();
     },
-    "m-grade": (el) => {
+    [`${P}-grade`]: (el) => {
       const ss = gui.session;
       const id = ss.ids[ss.i];
       const g = el.dataset.g;
@@ -1117,18 +1133,18 @@ export function createQuantUI(ctx) {
       renderSession();
       after();
     },
-    "m-start-quiz": (el) => startQuiz(el.dataset.kind, { weakOnly: el.dataset.weak === "1" }),
-    "m-practise-keys": (el) => startQuiz("mixed", { keys: el.dataset.keys.split("|") }),
-    "m-practise-type": (el) => {
+    [`${P}-start-quiz`]: (el) => startQuiz(el.dataset.kind, { weakOnly: el.dataset.weak === "1" }),
+    [`${P}-practise-keys`]: (el) => startQuiz("mixed", { keys: el.dataset.keys.split("|") }),
+    [`${P}-practise-type`]: (el) => {
       closeOverlay();
       startQuiz("mixed", { typeKey: el.dataset.key });
     },
-    "m-revise-formulas": (el) => startQuiz("formula", { keys: [el.dataset.key] }),
-    "m-reveal": () => {
+    [`${P}-revise-formulas`]: (el) => startQuiz("formula", { keys: [el.dataset.key] }),
+    [`${P}-reveal`]: () => {
       gui.quiz.revealed = true;
       render();
     },
-    "m-pick": (el) => {
+    [`${P}-pick`]: (el) => {
       const q = gui.quiz;
       const cur = q.current;
       q.picked = Number(el.dataset.i);
@@ -1154,7 +1170,7 @@ export function createQuantUI(ctx) {
       if (it) qs.markTopic(it);
       render();
     },
-    "m-next": () => {
+    [`${P}-next`]: () => {
       const q = gui.quiz;
       q.i += 1;
       q.picked = null;
@@ -1163,7 +1179,7 @@ export function createQuantUI(ctx) {
       render();
       window.scrollTo(0, 0);
     },
-    "m-end-quiz": () => {
+    [`${P}-end-quiz`]: () => {
       const q = gui.quiz;
       if (q && q.answered && q.i < q.queue.length) {
         q.queue = q.queue.slice(0, q.picked != null ? q.i + 1 : q.i);
@@ -1174,86 +1190,86 @@ export function createQuantUI(ctx) {
       gui.quiz = null;
       render();
     },
-    "m-toggle-topic": (el) => {
+    [`${P}-toggle-topic`]: (el) => {
       const tree = qs.qBuildTree(qs.itemsFor(prefs().practiceSource), { withTypes: false });
       qs.update((s) => (s.prefs.excluded = toggle(el.dataset.key, s.prefs.excluded, tree)), { touchesData: false });
       render();
     },
-    "m-expand": (el) => {
+    [`${P}-expand`]: (el) => {
       const k = el.dataset.key;
       if (gui.pickerOpen.has(k)) gui.pickerOpen.delete(k);
       else gui.pickerOpen.add(k);
       render();
     },
-    "m-topics-all": () => {
+    [`${P}-topics-all`]: () => {
       qs.update((s) => (s.prefs.excluded = []), { touchesData: false });
       render();
     },
-    "m-topics-none": () => {
+    [`${P}-topics-none`]: () => {
       const tree = qs.qBuildTree(qs.itemsFor(prefs().practiceSource), { withTypes: false });
-      qs.update((s) => (s.prefs.excluded = [...(tree.get("") || [])]), { touchesData: false });
+      qs.update((s) => (s.prefs.excluded = [...(tree.get(part.subject) || [])]), { touchesData: false });
       render();
     },
-    "m-tab": (el) => {
+    [`${P}-tab`]: (el) => {
       gui.tab = el.dataset.tab;
       gui.browse = "";
       render();
     },
-    "m-browse": (el) => {
+    [`${P}-browse`]: (el) => {
       gui.browse = el.dataset.key;
       render();
       window.scrollTo(0, 0);
     },
-    "m-export-csv": () => download(`maths-reasoning-notes-${todayISO()}.csv`, qItemsToCSV(qs.liveItems()), "text/csv"),
-    "m-export-json": () => exportBackup(),
-    "m-reset": () => {
-      if (!confirm("Erase all YOUR Maths & Reasoning notes and progress on this device? (Other parts are not touched; the Formula Book stays.)")) return;
+    [`${P}-export-csv`]: () => download(`${part.slug}-notes-${todayISO()}.csv`, qItemsToCSV(qs.liveItems()), "text/csv"),
+    [`${P}-export-json`]: () => exportBackup(),
+    [`${P}-reset`]: () => {
+      if (!confirm(`Erase all YOUR ${part.title} notes and progress on this device? (Other parts are not touched; the Formula Book stays.)`)) return;
       qs.resetAll();
-      toast("Maths & Reasoning data erased on this device.");
+      toast(`${part.title} data erased on this device.`);
       render();
     },
   };
 
   async function onChange(e) {
     const t = e.target;
-    if (t.dataset.input === "m-files") {
+    if (t.dataset.input === `${P}-files`) {
       const files = [...t.files];
       t.value = "";
       handleFiles(files);
       return true;
     }
-    if (t.dataset.input === "m-chat-files") {
+    if (t.dataset.input === `${P}-chat-files`) {
       const files = [...t.files];
       t.value = "";
       if (files.length) openChatPanel(files);
       return true;
     }
-    if (t.dataset.input === "m-import") {
+    if (t.dataset.input === `${P}-import`) {
       const f = t.files[0];
       t.value = "";
       if (f) await importBackup(f);
       return true;
     }
-    if (t.dataset.mpref) {
-      const k = t.dataset.mpref;
+    if (t.dataset[`${P}pref`]) {
+      const k = t.dataset[`${P}pref`];
       const v = t.type === "checkbox" ? t.checked : ["practiceSize", "dailyCount"].includes(k) ? Number(t.value) : t.value;
-      if ($("#mTyped")) gui.typedDraft = $("#mTyped").value;
-      if ($("#mTopic")) gui.topicDraft = $("#mTopic").value;
+      if ($(`#${P}Typed`)) gui.typedDraft = $(`#${P}Typed`).value;
+      if ($(`#${P}Topic`)) gui.topicDraft = $(`#${P}Topic`).value;
       qs.update((s) => (s.prefs[k] = v), { touchesData: false });
       render();
       return true;
     }
-    if (t.id === "mCount") {
+    if (t.id === `${P}Count`) {
       gui.topicCount = t.value;
       return true;
     }
-    if (t.dataset.mcand != null) {
-      gui.candidates.items[Number(t.dataset.mcand)].selected = t.checked;
+    if (t.dataset[`${P}cand`] != null) {
+      gui.candidates.items[Number(t.dataset[`${P}cand`])].selected = t.checked;
       render();
       return true;
     }
-    if (t.dataset.mtopic != null) {
-      const i = Number(t.dataset.mtopic);
+    if (t.dataset[`${P}topic`] != null) {
+      const i = Number(t.dataset[`${P}topic`]);
       const [subject, topic] = t.value.split("|");
       const row = gui.candidates.items[i];
       row.item = { ...row.item, subject, topic };
@@ -1262,8 +1278,8 @@ export function createQuantUI(ctx) {
       render();
       return true;
     }
-    if (t.dataset.mtype != null) {
-      const row = gui.candidates.items[Number(t.dataset.mtype)];
+    if (t.dataset[`${P}type`] != null) {
+      const row = gui.candidates.items[Number(t.dataset[`${P}type`])];
       row.item = { ...row.item, pattern: t.value.trim() };
       for (const r of gui.candidates.items) if (r.item.variantOf === row.item.id) r.item = { ...r.item, pattern: t.value.trim() };
       return true;
@@ -1272,15 +1288,15 @@ export function createQuantUI(ctx) {
   }
 
   function onInput(e) {
-    if (e.target.id === "mSearch") {
+    if (e.target.id === `${P}Search`) {
       gui.search = e.target.value;
       render();
-      const input = $("#mSearch");
+      const input = $(`#${P}Search`);
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
       return true;
     }
-    if (e.target.id === "mTopic") {
+    if (e.target.id === `${P}Topic`) {
       gui.topicDraft = e.target.value;
       return true;
     }
@@ -1288,7 +1304,7 @@ export function createQuantUI(ctx) {
   }
 
   function onSubmit(e) {
-    if (e.target.id === "mEditForm") {
+    if (e.target.id === `${P}EditForm`) {
       e.preventDefault();
       saveEditor(e.target);
       return true;
@@ -1300,31 +1316,31 @@ export function createQuantUI(ctx) {
     const p = prefs();
     return `
       <article class="card">
-        <h3>🧮 Maths & Reasoning</h3>
+        <h3>${part.icon} ${part.title}</h3>
         <label class="field">Cards to revise each day
-          <select data-mpref="dailyCount">${[5, 10, 15, 20, 30].map((n) => `<option value="${n}" ${Number(p.dailyCount) === n ? "selected" : ""}>${n}</option>`).join("")}</select>
+          <select data-${P}pref="dailyCount">${[5, 10, 15, 20, 30].map((n) => `<option value="${n}" ${Number(p.dailyCount) === n ? "selected" : ""}>${n}</option>`).join("")}</select>
         </label>
         ${variantsToggle()}
-        <p class="muted small">The built-in Formula Book has ${qs.bookItems().length} formula and trick cards for Quant and Reasoning.</p>
+        <p class="muted small">The built-in Formula Book has ${qs.bookItems().length} ${part.subject === "Quant" ? "formula and shortcut" : "rule and trick"} cards for ${part.title}.</p>
       </article>`;
   }
 
   function dataCard() {
     return `
       <article class="card">
-        <h3>🗂️ Maths & Reasoning data <span class="badge">separate backup</span></h3>
+        <h3>🗂️ ${part.title} data <span class="badge">separate backup</span></h3>
         <p class="muted small">Your questions, practice questions, formulas, Formula Book progress and practice history. Separate from the other parts.</p>
         <div class="row wrap">
-          <button class="btn small" type="button" data-action="m-export-json">⬇ Download backup</button>
-          <label class="btn small">⬆ Restore backup<input type="file" accept="application/json,.json" data-input="m-import" hidden /></label>
-          <button class="btn small danger" type="button" data-action="m-reset">Erase data</button>
+          <button class="btn small" type="button" data-action="${P}-export-json">⬇ Download backup</button>
+          <label class="btn small">⬆ Restore backup<input type="file" accept="application/json,.json" data-input="${P}-import" hidden /></label>
+          <button class="btn small danger" type="button" data-action="${P}-reset">Erase data</button>
         </div>
       </article>`;
   }
 
   return {
     gui,
-    views: { "m-today": viewToday, "m-add": viewAdd, "m-practice": viewPractice, "m-topics": viewTopics },
+    views: { [`${P}-today`]: viewToday, [`${P}-add`]: viewAdd, [`${P}-practice`]: viewPractice, [`${P}-topics`]: viewTopics },
     actions,
     onChange,
     onInput,

@@ -108,7 +108,7 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 2
   font: 600 .8rem var(--sans); cursor: pointer; white-space: nowrap;
 }
 .section-switch button.active { background: var(--primary-soft); color: var(--primary); }
-@media (max-width: 430px) { .section-switch .lbl { display: none; } .section-switch button { padding: 4px 9px; font-size: 1rem; } }
+@media (min-width: 601px) and (max-width: 760px) { .section-switch .lbl { display: none; } .section-switch button { padding: 4px 9px; font-size: 1rem; } }
 .topbar { gap: 10px; }
 .tabbar[hidden] { display: none; }
 .sync-chip {
@@ -493,7 +493,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .chat-files span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
 .steps { margin: 8px 0; padding-left: 20px; }
 .steps li { margin: 4px 0; }
-#kChatPanel, #kPasteCard { scroll-margin-top: 76px; }
+#kChatPanel, #kPasteCard { scroll-margin-top: 130px; }
 
 /* ---------- Maths & Reasoning ---------- */
 .home-card.quant .home-main b { color: var(--ink); }
@@ -516,5 +516,16 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .cand-topic input[type="text"] { flex: 1; min-width: 0; width: auto; font-size: .85rem; }
 .cand-topic { flex-wrap: wrap; }
 .options .option { white-space: normal; overflow-wrap: anywhere; }
-#mChatPanel, #mPasteCard { scroll-margin-top: 76px; }
+#mChatPanel, #mPasteCard { scroll-margin-top: 130px; }
 #mPromptText { width: 100%; font: .82rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.home-card.maths .home-main b, .home-card.reasoning .home-main b { color: var(--ink); }
+#rChatPanel, #rPasteCard { scroll-margin-top: 130px; }
+#rPromptText { width: 100%; font: .82rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* Five parts: on phones the part switch gets its own row under the app name, so the name stays readable. */
+@media (max-width: 600px) {
+  .topbar { flex-wrap: wrap; row-gap: 8px; }
+  .brand { flex: 1; }
+  .section-switch { order: 3; width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); }
+  .section-switch button { padding: 5px 2px; font-size: .74rem; display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.1; }
+  .section-switch .lbl { display: block; font-size: .66rem; }
+}

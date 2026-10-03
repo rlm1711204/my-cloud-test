@@ -10,7 +10,7 @@ Paste this into a new chat to carry the project over.
 
 ## What it is
 
-A phone-friendly PWA with four parts — exam **vocabulary**, **grammar rules**, **GK** and **maths & reasoning** (UPSC / RBI Grade B / SSC).
+A phone-friendly PWA with five parts — exam **vocabulary**, **grammar rules**, **GK**, **maths** and **reasoning** (UPSC / RBI Grade B / SSC).
 Scan a page, upload a screenshot or PDF, or type words. The app keeps the hard words, writes a
 full card for each (meaning, Hindi, pronunciation, 2 sentences, exam tip), and revises them daily
 with spaced repetition. Data is stored on the device and synced to Google Drive.
@@ -86,11 +86,18 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 - AI (`gk-ai.js`): list questions (facts → questions), then cards 10 at a time with category/sub/year/month/options/
   explain/trick; `aiAnswered` marks answers the AI supplied. Cards are checked to match the question asked.
 
-## The Maths & Reasoning part
+## The Maths and Reasoning parts
 
-- Views `m-today`, `m-add`, `m-practice`, `m-topics` in `src/quant-ui.js`; header switch 🧮; start-section option `quant`.
-- Data: localStorage `vv.quant.v1`, backup `app: "VocabVault-Quant"`, Drive `maths-reasoning.json` + "Maths & Reasoning" sheet.
-  All four stores' restore checks recognise each other's files (a quant backup also has `items`, so GK checks for it first).
+- Two separate parts from one implementation: `createQuantUI(ctx, part)` (src/quant-ui.js) with prefix `m` (views `m-today`…)
+  and `r` (`r-today`…), and `createQuantStore(cfg)` (src/lib/quant-store.js) instantiated in src/lib/quant-stores.js.
+  Header switch 🔢 / 🧩 (on phones the five part buttons sit on their own row); start-section options `maths`, `reasoning`
+  (old `quant` opens Maths).
+- Data: Maths `vv.quant.v1` / backup `VocabVault-Quant` / Drive `maths-notes.json` + "Maths" sheet; Reasoning
+  `vv.reasoning.v1` / `VocabVault-Reasoning` / `reasoning-notes.json` + "Reasoning" sheet.
+- `addItems` and `importData` hand items of the other subject to the other part (`cfg.other`), so practice questions stay
+  linked. `handOver()` runs after the Formula Book loads and moves anything left from when the two were one part
+  (cards, Formula Book progress, practice history, topic dates); it is a no-op afterwards. An old combined backup
+  restored under Maths sends its reasoning cards to Reasoning.
 - Items: `kind` question | formula; `subject` › `topic` (quant-taxonomy.js) › `pattern` (free "question type", matched to
   existing names by `matchPattern`); `solution` keeps line breaks; `variantOf` links a practice question to its question.
   Duplicates: answers with different numbers are never duplicates (maths questions differ by numbers).
@@ -139,7 +146,7 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 
 ## Current state
 
-Done and live: Maths & Reasoning part (Formula Book, handwritten-PDF and chat-app routes, 2 practice questions per question, same-type practice), GK part (Question Bank, current affairs by year, topic picker, balanced revision, separate backups and Drive file), Grammar Rules part (Rule Book, practice, separate backups and Drive file), other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
+Done and live: separate Maths and Reasoning parts (Formula Book, handwritten-PDF and chat-app routes, 2 practice questions per question, same-type practice), GK part (Question Bank, current affairs by year, topic picker, balanced revision, separate backups and Drive file), Grammar Rules part (Rule Book, practice, separate backups and Drive file), other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
 practice with full coverage and weak-word repeats, the 1267-word Word Bank, daily notification,
 ⓘ full-details buttons, Google Drive sync, install button, backup/restore with a clear summary,
 one-file branding, and the Gemini key picker.

@@ -291,7 +291,7 @@ export const exportData = () => ({
 /** Which part of VocabVault a backup file belongs to: "vocab", "grammar", "gk" or null. */
 export function backupKind(data) {
   if (!data || typeof data !== "object") return null;
-  if ((data.app === "VocabVault-Quant" || (Array.isArray(data.items) && data.items.some((i) => i && (i.kind === "formula" || "solution" in i))))) return "quant";
+  if ((data.app === "VocabVault-Quant" || data.app === "VocabVault-Reasoning" || (Array.isArray(data.items) && data.items.some((i) => i && (i.kind === "formula" || "solution" in i))))) return "quant";
   if (data.app === BACKUP_APP || (Array.isArray(data.items) && !data.words && !data.rules)) return "gk";
   if (data.app === "VocabVault-Grammar" || Array.isArray(data.rules)) return "grammar";
   if (data.app === "VocabVault" || Array.isArray(data.words)) return "vocab";
@@ -303,7 +303,7 @@ export function importData(data, { markDirty = false, applyPrefs = false } = {})
   const kind = backupKind(data);
   if (kind === "vocab") throw new Error("This is a vocabulary backup — restore it under 📘 Vocabulary → Settings.");
   if (kind === "grammar") throw new Error("This is a grammar backup — restore it under 📗 Grammar → Settings.");
-  if (kind === "quant") throw new Error("This is a Maths & Reasoning backup — restore it under 🧮 Maths & Reasoning → Settings.");
+  if (kind === "quant") throw new Error("This is a Maths or Reasoning backup — restore it under 🔢 Maths or 🧩 Reasoning → Settings.");
   if (kind !== "gk") throw new Error("That file doesn't look like a VocabVault GK backup.");
   const incoming = (data.items || []).map((i) => makeItem(i)).filter((i) => !i.deleted);
   const before = state.items.filter((i) => !i.deleted);

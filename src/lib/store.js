@@ -12,7 +12,7 @@ export const DEFAULT_SETTINGS = {
   geminiKeyPick: "", // "" = Auto (all keys in turn); otherwise the one key chosen on the Add screen
   extraAIs: [], // other free AI services: [{id, provider, key, base?, model}] (see compat.js) — stay on this device
   aiPick: "", // "extra:<id>" = only that service; "" = Auto (or the Gemini key in geminiKeyPick)
-  startSection: "ask", // first screen: "ask" (choice of parts) | "vocab" | "grammar" | "gk" | "quant" | "last"
+  startSection: "ask", // first screen: "ask" (choice of parts) | "vocab" | "grammar" | "gk" | "maths" | "reasoning" | "last"
   lastSection: "vocab",
   geminiModel: "auto",
   apiKey: "",
@@ -232,7 +232,7 @@ export function importData(data, { markDirty = false, applyPrefs = false } = {})
   if (data && (data.app === "VocabVault-Grammar" || (Array.isArray(data.rules) && !Array.isArray(data.words)))) {
     throw new Error("This is a grammar backup — restore it under 📗 Grammar → Settings.");
   }
-  if (data && (data.app === "VocabVault-Quant" || (Array.isArray(data.items) && data.items.some((i) => i && (i.kind === "formula" || "solution" in i))))) throw new Error("This is a Maths & Reasoning backup — restore it under 🧮 Maths & Reasoning → Settings.");
+  if (data && (data.app === "VocabVault-Quant" || data.app === "VocabVault-Reasoning" || (Array.isArray(data.items) && data.items.some((i) => i && (i.kind === "formula" || "solution" in i))))) throw new Error("This is a Maths or Reasoning backup — restore it under 🔢 Maths or 🧩 Reasoning → Settings.");
   if (data && (data.app === "VocabVault-GK" || (Array.isArray(data.items) && !Array.isArray(data.words)))) {
     throw new Error("This is a GK backup — restore it under 🌍 GK → Settings.");
   }

@@ -186,7 +186,7 @@ Your own questions are better added in the app itself (🌍 GK → Add).
 
 ---
 
-## Adding cards to the Maths & Reasoning Formula Book
+## Adding cards to the Maths and Reasoning Formula Book
 
 The Formula Book is `src/data/qformulas.js`. Add a card between the back-ticks:
 
