@@ -3,7 +3,7 @@
 import * as gk from "./lib/gk-store.js";
 import { GK_KINDS, makeGkQuestion } from "./lib/gk-quiz.js";
 import { gkFromFiles, gkFromText, gkFromTopic, completeItem } from "./lib/gk-ai.js";
-import { autoCount, buildGkPrompt, isTopicLike, looksStructured, readPasted, topicRange } from "./lib/gk-prompt.js";
+import { autoCount, buildGkPrompt, buildMaterialPrompt, isTopicLike, looksStructured, readPasted, topicRange } from "./lib/gk-prompt.js";
 import { isBankId, loadBank } from "./lib/gkbank.js";
 import { ALL_TOPICS, CA, CA_TOPICS, SEP, TAXONOMY, topicKey } from "./lib/gk-taxonomy.js";
 import { findDuplicate, isFact, itemsToCSV, makeItem, textToItems } from "./lib/gk.js";
@@ -27,7 +27,10 @@ export function createGkUI(ctx) {
     typedDraft: "",
     topicDraft: "",
     topicCount: "auto",
-    copied: false, // the prompt was copied: show what to do next
+    copied: false, // false | "topic" | "files": a prompt was copied, show what to do next
+    chatFiles: null, // photos / PDFs to ask the Gemini or ChatGPT app about (copy-prompt route)
+    chatRelated: true,
+    lastFiles: null, // the files of the last upload (to retry them through the chat app)
     quiz: null,
     session: null,
     search: "",
@@ -170,13 +173,22 @@ export function createGkUI(ctx) {
           <input type="file" accept="image/*,application/pdf,.pdf" multiple data-input="k-files" hidden />
           <span class="big-ico">🖼️</span><b>Upload screenshot / PDF</b><span>Monthly current affairs PDFs work too</span>
         </label>
+        <label class="add-tile wide">
+          <input type="file" accept="image/*,application/pdf,.pdf" multiple data-input="k-chat-files" hidden />
+          <span class="big-ico">💬</span><b>Photo / PDF → Gemini or ChatGPT app</b><span>Get a ready prompt for the photo, ask the app, paste its answer here</span>
+        </label>
       </div>
+      ${chatPanel()}
       ${topicCard(ai)}
       <article class="card" id="kPasteCard">
         <h3>✍️ Type or paste questions${gui.copied ? " — paste the AI's answer here" : ""}</h3>
         ${
           gui.copied
-            ? `<p class="tip"><strong>Next step</strong>Paste the prompt in Gemini or ChatGPT, copy its <b>whole</b> answer, paste it below and tap the button. Every question is read with its topic, options, explanation and trick.</p>`
+            ? `<p class="tip"><strong>Next step</strong>${
+                gui.copied === "files"
+                  ? "In Gemini or ChatGPT, attach the same photo / PDF (📎 or ＋), paste the prompt and send."
+                  : "Paste the prompt in Gemini or ChatGPT and send."
+              } Then copy its <b>whole</b> answer, paste it below and tap the button. Every question is read with its topic, options, explanation and trick.</p>`
             : ""
         }
         <p class="muted small">Any of these formats: <code>Q: … A: …</code> (an AI's answer from the copied prompt) · <code>Capital of Japan - Tokyo</code> ·
@@ -223,25 +235,12 @@ export function createGkUI(ctx) {
     gui.topicDraft = topic;
     if (!topic) return toast("Write a topic first (e.g. Articles 124 to 147).");
     const text = buildGkPrompt({ topic, count: gui.topicCount });
-    let ok = false;
-    try {
-      await navigator.clipboard.writeText(text);
-      ok = true;
-    } catch {
-      /* clipboard blocked: show it to copy by hand */
-    }
-    gui.copied = true;
-    if (ok) {
+    gui.copied = "topic";
+    if (await copyText(text)) {
       toast("Prompt copied ✓ — paste it in Gemini or ChatGPT", 5000);
       render();
       $("#kPasteCard")?.scrollIntoView({ block: "start" });
-    } else {
-      openOverlay(`
-        <div class="sheet-bar"><h3>Copy this prompt</h3><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
-        <p class="muted small">Press and hold in the box → Select all → Copy. Then paste it in Gemini or ChatGPT.</p>
-        <textarea id="kPromptText" rows="14" readonly>${esc(text)}</textarea>`);
-      $("#kPromptText")?.select();
-    }
+    } else showPromptToCopy(text);
   }
 
   async function handleTopic() {
@@ -258,6 +257,103 @@ export function createGkUI(ctx) {
       toast(e instanceof AllProvidersFailed ? `The AI couldn't make questions right now: ${e.message}. Try “Copy prompt” instead.` : e.message || String(e), 8000);
     }
     if (view() === "k-add") render();
+  }
+
+  const canShareFiles = (files) => {
+    try {
+      return Boolean(files?.length && navigator.canShare?.({ files }));
+    } catch {
+      return false;
+    }
+  };
+
+  function chatPanel() {
+    const files = gui.chatFiles;
+    if (!files?.length) return "";
+    const share = canShareFiles(files);
+    return `
+      <article class="card chat-panel" id="kChatPanel">
+        <div class="row between"><h3>💬 Ask Gemini about ${files.length > 1 ? `these ${files.length} files` : "this file"}</h3>
+          <button class="icon-btn" type="button" data-action="k-chat-close" aria-label="Close">✕</button></div>
+        <ul class="chat-files">${files
+          .map((f, i) => `<li>${f.type.startsWith("image/") ? `<img src="${esc(gui.chatThumbs?.[i] || "")}" alt="" />` : "📄"}<span>${esc(f.name)}</span></li>`)
+          .join("")}</ul>
+        <label class="toggle"><input type="checkbox" id="kChatRelated" ${gui.chatRelated ? "checked" : ""} /> Also add 5–10 related questions not shown on the page</label>
+        <ol class="steps small">
+          <li>${share ? "Tap <b>Share to Gemini</b> and pick the Gemini (or ChatGPT) app — the photo and the prompt go together." : "Tap <b>Copy prompt</b>, open Gemini or ChatGPT and attach the same photo / PDF (📎 or ＋)."}</li>
+          <li>${share ? "If the prompt didn't come along, paste it (it is also copied)." : "Paste the prompt and send."}</li>
+          <li>Copy the app's <b>whole</b> answer and paste it in the box below, then tap <b>Check & prepare questions</b>.</li>
+        </ol>
+        <div class="stack">
+          ${share ? `<button class="btn primary block" type="button" data-action="k-chat-share">📤 Share photo + prompt to Gemini</button>` : ""}
+          <button class="btn ${share ? "" : "primary "}block" type="button" data-action="k-chat-copy">📋 Copy prompt</button>
+        </div>
+        <p class="muted small">Open <a href="https://gemini.google.com/app" target="_blank" rel="noopener">Gemini</a> ·
+          <a href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT</a></p>
+      </article>`;
+  }
+
+  function openChatPanel(files) {
+    for (const u of gui.chatThumbs || []) URL.revokeObjectURL(u);
+    gui.chatFiles = files;
+    gui.chatThumbs = files.map((f) => (f.type.startsWith("image/") ? URL.createObjectURL(f) : ""));
+    gui.candidates = null;
+    gui.copied = false;
+    if (view() !== "k-add") go("k-add");
+    else render();
+    $("#kChatPanel")?.scrollIntoView({ block: "start" });
+  }
+
+  function closeChatPanel() {
+    for (const u of gui.chatThumbs || []) URL.revokeObjectURL(u);
+    gui.chatFiles = null;
+    gui.chatThumbs = null;
+    render();
+  }
+
+  /** Copy text; false when the browser blocks it. */
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function showPromptToCopy(text) {
+    openOverlay(`
+      <div class="sheet-bar"><h3>Copy this prompt</h3><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
+      <p class="muted small">Press and hold in the box → Select all → Copy. Then paste it in Gemini or ChatGPT.</p>
+      <textarea id="kPromptText" rows="14" readonly>${esc(text)}</textarea>`);
+    $("#kPromptText")?.select();
+  }
+
+  const materialPrompt = () => buildMaterialPrompt({ files: gui.chatFiles || [], related: gui.chatRelated });
+
+  async function chatCopy() {
+    const text = materialPrompt();
+    gui.copied = "files";
+    if (await copyText(text)) {
+      toast("Prompt copied ✓ — attach the photo in Gemini and paste it", 6000);
+      render();
+      $("#kPasteCard")?.scrollIntoView({ block: "start" });
+    } else showPromptToCopy(text);
+  }
+
+  async function chatShare() {
+    const text = materialPrompt();
+    const files = gui.chatFiles || [];
+    await copyText(text); // in case the chosen app keeps only the photo
+    gui.copied = "files";
+    try {
+      await navigator.share({ files, text, title: "GK questions" });
+      toast("Now copy Gemini's whole answer and paste it here", 6000);
+    } catch (e) {
+      if (e?.name !== "AbortError") toast("Sharing didn't work here — use Copy prompt and attach the photo yourself.", 6000);
+    }
+    render();
+    $("#kPasteCard")?.scrollIntoView({ block: "start" });
   }
 
   const topicOptions = (it) => {
@@ -277,6 +373,11 @@ export function createGkUI(ctx) {
       <p class="muted">${plural(c.items.length, "question")} found. Untick any you don't want; change a topic if needed.</p>
       ${aiBanner(c.ai)}
       ${c.skipped.length ? `<p class="muted small">Already saved (skipped): ${plural(c.skipped.length, "question")}.</p>` : ""}
+      ${
+        c.fromFiles && gui.lastFiles?.length
+          ? `<p class="small"><button class="btn small" type="button" data-action="k-chat-last">💬 Missed some facts? Ask the Gemini app about this photo instead</button></p>`
+          : ""
+      }
       <ul class="cand-list gk-cands">
         ${c.items
           .map(
@@ -302,7 +403,7 @@ export function createGkUI(ctx) {
       <div class="sticky-actions"><button class="btn primary block" type="button" data-action="k-add-selected" ${n ? "" : "disabled"}>Add ${plural(n, "question")}</button></div>`;
   }
 
-  function showCandidates(items, ai) {
+  function showCandidates(items, ai, fromFiles = false) {
     const saved = gk.liveItems();
     const rows = [];
     const skipped = [];
@@ -317,10 +418,15 @@ export function createGkUI(ctx) {
     }
     if (!rows.length) {
       gui.candidates = null;
+      if (!skipped.length && fromFiles && gui.lastFiles?.length) {
+        toast("No questions found in this file here — ask the Gemini app about it instead.", 7000);
+        openChatPanel(gui.lastFiles);
+        return;
+      }
       toast(skipped.length ? (skipped.length === 1 ? "That question is already saved ✓" : `All ${skipped.length} questions are already saved ✓`) : "No questions found. Try a clearer photo, or type them.", 6000);
       return;
     }
-    gui.candidates = { items: rows, skipped, ai };
+    gui.candidates = { items: rows, skipped, ai, fromFiles };
   }
 
   async function freeItems(text, source) {
@@ -332,6 +438,7 @@ export function createGkUI(ctx) {
     if (!files.length) return;
     const s = settings();
     const source = files.map((f) => f.name).join(", ").slice(0, 120);
+    gui.lastFiles = files;
     setBusy("Preparing your files…");
     let ai = null;
     try {
@@ -352,10 +459,11 @@ export function createGkUI(ctx) {
         items = await freeItems(text, source);
       }
       gui.busy = null;
-      showCandidates(items, ai);
+      showCandidates(items, ai, true);
     } catch (e) {
       gui.busy = null;
-      toast(e.message || String(e), 6000);
+      toast(`${e.message || e} — you can ask the Gemini app about this file instead.`, 7000);
+      return openChatPanel(files);
     }
     if (view() === "k-add") render();
   }
@@ -389,7 +497,10 @@ export function createGkUI(ctx) {
       }
       items ??= await freeItems(text, "Typed");
       gui.busy = null;
-      if (gui.copied && items.length) gui.copied = false;
+      if (gui.copied && items.length) {
+        gui.copied = false;
+        if (gui.chatFiles) closeChatPanel();
+      }
       showCandidates(items, ai);
     } catch (e) {
       gui.busy = null;
@@ -833,6 +944,10 @@ export function createGkUI(ctx) {
     },
     "k-typed": () => handleTyped(),
     "k-topic-make": () => handleTopic(),
+    "k-chat-copy": () => chatCopy(),
+    "k-chat-share": () => chatShare(),
+    "k-chat-close": () => closeChatPanel(),
+    "k-chat-last": () => openChatPanel(gui.lastFiles || []),
     "k-copy-prompt": () => copyPrompt(),
     "k-cancel": () => {
       gui.candidates = null;
@@ -992,6 +1107,16 @@ export function createGkUI(ctx) {
       render();
       return true;
     }
+    if (t.dataset.input === "k-chat-files") {
+      const files = [...t.files];
+      t.value = "";
+      if (files.length) openChatPanel(files);
+      return true;
+    }
+    if (t.id === "kChatRelated") {
+      gui.chatRelated = t.checked;
+      return true;
+    }
     if (t.id === "kCount") {
       gui.topicCount = t.value;
       return true;
@@ -1079,7 +1204,7 @@ export function createGkUI(ctx) {
     onSubmit,
     prefsCard,
     dataCard,
-    busy: () => Boolean(gui.busy || gui.quiz || gui.session || gui.candidates),
+    busy: () => Boolean(gui.busy || gui.quiz || gui.session || gui.candidates || gui.chatFiles || gui.copied),
     onCloseOverlay: () => (gui.session = null),
     questionOfTheDay: () => {
       const pool = gk.itemsFor(prefs().dailySource, { forToday: true });

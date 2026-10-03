@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoCount, buildGkPrompt, isComplete, isTopicLike, looksStructured, parseStructured, readHeading, readPasted, topicRange } from "../src/lib/gk-prompt.js";
+import { autoCount, buildGkPrompt, buildMaterialPrompt, isComplete, isTopicLike, looksStructured, parseStructured, readHeading, readPasted, topicRange } from "../src/lib/gk-prompt.js";
 import { makeItem, textToItems } from "../src/lib/gk.js";
 
 describe("topics", () => {
@@ -87,5 +87,19 @@ describe("mixed pastes", () => {
       ["Capital of Australia", "Canberra"],
       ["In 2026, India won the T20 World Cup.", ""],
     ]);
+  });
+});
+
+describe("prompt for a photo or PDF", () => {
+  it("asks for every fact (each table row, anything circled), related questions on request, and the readable format", () => {
+    const p = buildMaterialPrompt({ files: [{ name: "slide.jpg" }], related: true, now: new Date("2026-10-03") });
+    expect(p).toMatch(/attached an image \/ PDF/);
+    expect(p).toMatch(/every row gives at least one question/);
+    expect(p).toMatch(/circled, underlined or highlighted/);
+    expect(p).toMatch(/5–10 closely related questions/);
+    expect(p).toMatch(/## Polity › Judiciary\nQ: .+\nA: .+\nO: /);
+    const two = buildMaterialPrompt({ files: [{}, {}], related: false });
+    expect(two).toMatch(/attached 2 images \/ PDFs/);
+    expect(two).not.toMatch(/related questions/);
   });
 });

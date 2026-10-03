@@ -329,6 +329,28 @@ function keyStateText(k) {
 
 const KEY_BADGE = { invalid: "easy", resting: "learning", ok: "mastered", checking: "new", unchecked: "new" };
 
+/** True from a tap on a file / camera button until the picker closes (see checkKeysInBackground). */
+let filePickerOpen = false;
+let pickerTimer;
+document.addEventListener(
+  "click",
+  (e) => {
+    const input = e.target.closest?.("label")?.querySelector('input[type="file"]') ?? (e.target.matches?.('input[type="file"]') ? e.target : null);
+    if (!input) return;
+    filePickerOpen = true;
+    clearTimeout(pickerTimer);
+    pickerTimer = setTimeout(() => (filePickerOpen = false), 5 * 60 * 1000);
+  },
+  true,
+);
+const pickerClosed = () => {
+  clearTimeout(pickerTimer);
+  pickerTimer = setTimeout(() => (filePickerOpen = false), 1000);
+};
+document.addEventListener("change", (e) => e.target.type === "file" && pickerClosed(), true);
+document.addEventListener("cancel", (e) => e.target.type === "file" && pickerClosed(), true);
+window.addEventListener("focus", () => filePickerOpen && setTimeout(pickerClosed, 1500));
+
 /**
  * Check every key and service for real when Settings or Add is open (each at most every 10 minutes),
  * then refresh the screen — without wiping anything being typed.
@@ -337,6 +359,8 @@ function checkKeysInBackground() {
   const s = settings();
   const refresh = (ran) => {
     if (!ran || !["settings", "add", "g-add", "k-add"].includes(view) || ui.busy || ui.candidates) return;
+    // Redrawing while the camera / file picker is open would replace its <input>, and the chosen photo would be lost.
+    if (filePickerOpen) return setTimeout(() => refresh(ran), 2000);
     if (grammar.gui.busy || grammar.gui.candidates || gkui.gui.busy || gkui.gui.candidates) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
     if ($("#typed")) ui.typedDraft = $("#typed").value;

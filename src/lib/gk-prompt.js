@@ -42,29 +42,15 @@ const taxonomyLines = () =>
     `- ${CA} (headed with the event's year): ${Object.keys(CA_TOPICS).join("; ")}`,
   ].join("\n");
 
-/** The prompt to copy into Gemini, ChatGPT or any chat AI. Its answer is read back by parseStructured. */
-export function buildGkPrompt({ topic, count = "auto", now = new Date() }) {
-  const r = topicRange(topic);
-  const howMany =
-    count === "auto"
-      ? r
-        ? `Write as many questions as it takes to cover the WHOLE topic: at least one question for EVERY item from ${r.from} to ${r.to} (${r.size} items — leave none out), plus a few overview questions.`
-        : "Write as many questions as it takes to cover EVERY part of this topic (at least 15): all key facts, dates, persons, places, numbers, firsts and related bodies."
-      : `Write ${count} questions that together cover the whole topic${r ? ` — every item from ${r.from} to ${r.to}; group neighbouring items if needed` : ""}.`;
-  return `You are an expert question-setter for Indian competitive exams (${EXAMS_TEXT}).
-
-Topic: ${String(topic).trim()}
-
-${howMany}
-
-Rules:
+/** Rules and the reply format shared by every copied prompt (read back by parseStructured). */
+const rulesAndFormat = (now) => `Rules:
 - Be strictly factual and correct as of ${now.toISOString().slice(0, 10)}. Never invent facts; skip anything you are not sure of.
 - Exam-style questions, each testing a different fact. Mix styles (direct, "which of the following", "consider the statements").
 - Every question has ONE short correct answer and exactly 3 believable WRONG options of the same type (a year for a year, an Article for an Article).
 - Add a 1–2 line explanation and a short memory trick (mnemonic, acronym, rhyme or story) for every question.
 - Put each question under a heading "## Subject › Chapter" chosen from this list:
 ${taxonomyLines()}
-  Recent events go under "## ${CA} › YEAR › Topic", e.g. "## ${CA} › ${now.getFullYear()} › Appointments".
+  Events of the last few years go under "## ${CA} › YEAR › Topic", e.g. "## ${CA} › ${now.getFullYear()} › Appointments".
 
 Reply ONLY in this exact plain-text format — no tables, no bold, no numbering, no extra text. Leave a blank line between questions:
 
@@ -80,6 +66,39 @@ A: …
 O: …; …; …
 E: …
 T: …`;
+
+/** The prompt to copy into Gemini, ChatGPT or any chat AI for a topic. Its answer is read back by parseStructured. */
+export function buildGkPrompt({ topic, count = "auto", now = new Date() }) {
+  const r = topicRange(topic);
+  const howMany =
+    count === "auto"
+      ? r
+        ? `Write as many questions as it takes to cover the WHOLE topic: at least one question for EVERY item from ${r.from} to ${r.to} (${r.size} items — leave none out), plus a few overview questions.`
+        : "Write as many questions as it takes to cover EVERY part of this topic (at least 15): all key facts, dates, persons, places, numbers, firsts and related bodies."
+      : `Write ${count} questions that together cover the whole topic${r ? ` — every item from ${r.from} to ${r.to}; group neighbouring items if needed` : ""}.`;
+  return `You are an expert question-setter for Indian competitive exams (${EXAMS_TEXT}).
+
+Topic: ${String(topic).trim()}
+
+${howMany}
+
+${rulesAndFormat(now)}`;
+}
+
+/**
+ * The prompt for a photo, screenshot or PDF the learner attaches in the chat app themselves: every fact on it
+ * becomes a question (each table row, each circled or underlined item), optionally plus related questions.
+ */
+export function buildMaterialPrompt({ files = [], related = true, now = new Date() }) {
+  const what = files.length > 1 ? `${files.length} images / PDFs` : "an image / PDF";
+  return `You are an expert question-setter for Indian competitive exams (${EXAMS_TEXT}).
+
+I have attached ${what} from my study material (a class slide, book page, notes or current-affairs PDF).
+
+1. Read ALL of it carefully and turn EVERY fact in it into exam questions — leave nothing out. Each date, name, number, place, record, first, instrument, abbreviation and definition is its own question. In a table, every row gives at least one question. Anything circled, underlined or highlighted is important: make sure it is covered.
+2. Ignore the teacher, pen marks, buttons and screen clutter — use only the study content. If something on it is wrong or out of date, give the correct fact and say so in E:.
+${related ? "3. Then add 5–10 closely related questions that the material does not show but an examiner would ask on the same topic (e.g. earlier and later missions, related bodies, records).\n" : ""}
+${rulesAndFormat(now)}`;
 }
 
 // ---------- reading the answer back ----------

@@ -79,6 +79,10 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   A single typed line with no answer takes this route too. `buildGkPrompt` makes the copy-paste prompt for chat AIs;
   `readPasted` reads its answer (Q:/A:/O:/E:/T: under "## Subject › Chapter" headings, forgiving bold/numbering) plus any
   other formats around it. Complete pasted questions need no AI call.
+- Photo/PDF → chat app: `buildMaterialPrompt` (gk-prompt.js) + the 💬 tile and panel in gk-ui.js (`navigator.share` with the
+  files and prompt where `canShare({files})`, else copy the prompt). The answer goes through the same `readPasted`.
+- File pickers: main.js keeps `filePickerOpen` from a tap on a file/camera button until the picker closes; the background
+  key-check redraw waits for it (a redraw replaced the <input> and lost the chosen photo on all three Add screens).
 - AI (`gk-ai.js`): list questions (facts → questions), then cards 10 at a time with category/sub/year/month/options/
   explain/trick; `aiAnswered` marks answers the AI supplied. Cards are checked to match the question asked.
 
