@@ -574,3 +574,5 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .badge.exam.ssc { background: var(--ok-soft); color: var(--ok); }
 .badge.exam.upsc { background: var(--primary-soft); color: var(--primary); }
 .badge.exam.rbi { background: var(--saffron-soft); color: var(--saffron); }
+.area-move { border: 1px solid var(--primary); background: var(--primary-soft); }
+.area-move p { margin: 4px 0 10px; }

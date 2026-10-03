@@ -21,6 +21,7 @@ export function createAreaUI(ctx, gkui) {
     pasteFor: null, // level whose paste box is open
     pasteDraft: "",
     making: false,
+    checking: false,
   };
   const view = () => ctx.view();
   const redraw = () => view() === "k-area" && render();
@@ -29,6 +30,75 @@ export function createAreaUI(ctx, gkui) {
     redraw();
   };
 
+  // ---------- noticing a move ----------
+  // Once location permission was given, the app looks again (at most every 3 hours, when GK Today or My Area opens).
+  // A new district → "You're in Madurai now — make notes?"; a district you saved before → "open its notes".
+  // Only the place names of the last check are kept (on this phone), never the coordinates.
+  const CHECK_KEY = "vv.area.check";
+  const CHECK_EVERY = 3 * 60 * 60 * 1000;
+  const readCheck = () => {
+    try {
+      return JSON.parse(localStorage.getItem(CHECK_KEY) || "null") || {};
+    } catch {
+      return {};
+    }
+  };
+  const writeCheck = (c) => {
+    try {
+      localStorage.setItem(CHECK_KEY, JSON.stringify(c));
+    } catch {
+      /* private mode: just don't remember */
+    }
+  };
+  const districtKey = (p) => `${p?.district || ""}|${p?.state || ""}`.toLowerCase();
+
+  async function checkMove({ force = false } = {}) {
+    if (gui.checking || gui.busy || gui.draft || !gk.get().prefs.areaWatch || !gk.get().areas.length) return;
+    const last = readCheck();
+    if (!force && Date.now() - (last.at || 0) < CHECK_EVERY) return;
+    try {
+      const perm = await navigator.permissions?.query({ name: "geolocation" });
+      if (perm?.state !== "granted") return; // never ask by itself; "📍 Where am I now?" asks
+    } catch {
+      return;
+    }
+    gui.checking = true;
+    try {
+      const place = await placeAt(await currentPosition());
+      const c = readCheck();
+      writeCheck({ at: Date.now(), place, dismissed: districtKey(place) === c.dismissed ? c.dismissed : null });
+      if (["k-today", "k-area"].includes(view())) render();
+    } catch {
+      writeCheck({ ...readCheck(), at: Date.now() }); // no signal or offline: try again later
+    } finally {
+      gui.checking = false;
+    }
+  }
+
+  /** What the last check found, if it is somewhere other than the place shown: {place, area?} or null. */
+  function moved() {
+    const c = readCheck();
+    if (!c.place || !districtKey(c.place).replace("|", "") || c.dismissed === districtKey(c.place)) return null;
+    const cur = gk.currentArea();
+    const here = gk.areaInDistrict(c.place);
+    if (cur && here && here.id === cur.id) return null;
+    return { place: c.place, area: here };
+  }
+
+  /** The "you have moved" card for GK Today and My Area (and a quiet re-check in the background). */
+  function notice() {
+    setTimeout(() => checkMove(), 0);
+    const m = moved();
+    if (!m) return "";
+    const name = m.place.district ? `${m.place.district} district` : m.place.state;
+    return `<article class="card area-move">
+      <div class="row between"><b>📍 You're in ${esc(name)} now</b>
+        <button class="icon-btn" type="button" data-action="area-move-dismiss" aria-label="Not now">✕</button></div>
+      <p class="muted small">${esc(m.area ? `You saved notes for ${placeTitle(m.area.place)} before.` : [m.place.local, m.place.state].filter(Boolean).join(", "))}</p>
+      <button class="btn primary small" type="button" data-action="area-move-go">${m.area ? "📖 Open its notes" : "📝 Make notes for this place"}</button>
+    </article>`;
+  }
+
   // ---------- finding the place ----------
   async function locate() {
     setBusy("Finding where you are…");
@@ -36,7 +106,8 @@ export function createAreaUI(ctx, gkui) {
       const pos = await currentPosition();
       setBusy("Looking up the place name…");
       const place = await placeAt(pos);
-      gui.draft = { place };
+      writeCheck({ at: Date.now(), place, dismissed: null });
+      gui.draft = { place, geo: place };
     } catch (e) {
       toast(e.message || String(e), 8000);
     }
@@ -70,12 +141,13 @@ export function createAreaUI(ctx, gkui) {
     };
     if (!place.local && !place.district && !place.state) return toast("Fill in at least one level (town, district or state).");
     const editing = gui.draft?.id;
+    const geo = gui.draft?.geo || null;
     gui.draft = null;
     let area;
     if (editing) {
       gk.editAreaPlace(editing, place);
       area = gk.currentArea();
-    } else area = gk.saveAreaPlace(place);
+    } else area = gk.saveAreaPlace(place, geo);
     ctx.afterChange();
     gui.level = levelsOf(area.place)[0]?.key || null;
     const missing = levelsOf(area.place).filter((l) => !area.levels[l.key]?.notes?.length);
@@ -311,6 +383,7 @@ export function createAreaUI(ctx, gkui) {
             : `<button class="btn small" type="button" data-action="area-new">＋ Another place</button>`
         }
       </div>
+      ${notice()}
       ${gui.busy ? busyCard() : ""}
       ${ai && missing.length && !gui.making ? `<button class="btn primary block" type="button" data-action="area-make-all">🤖 Make notes for ${missing.length === levels.length ? `all ${levels.length} levels` : plural(missing.length, "remaining level")}</button>` : ""}
       ${ai && !gui.making ? keyPicker() : ""}
@@ -330,11 +403,31 @@ export function createAreaUI(ctx, gkui) {
           : ""
       }
       ${lvl ? viewLevel(area, lvl) : ""}
-      ${all.length ? "" : placesList()}`;
+      ${all.length ? "" : placesList()}
+      <article class="card">
+        <label class="toggle"><input type="checkbox" data-input="area-watch" ${gk.get().prefs.areaWatch ? "checked" : ""} /> Tell me when I'm in a new district</label>
+        <p class="muted small">Uses your location only after you have allowed it once (via “📍 Where am I now?”), at most every 3 hours, when GK opens. Only the place name is kept, on this phone.</p>
+      </article>`;
   }
 
   // ---------- actions ----------
   const actions = {
+    "area-move-go": () => {
+      const m = moved();
+      if (!m) return;
+      if (m.area) {
+        gk.showArea(m.area.id);
+        gui.level = null;
+        gui.draft = null;
+      } else gui.draft = { place: m.place, geo: m.place };
+      if (view() !== "k-area") go("k-area");
+      else render();
+    },
+    "area-move-dismiss": () => {
+      const c = readCheck();
+      writeCheck({ ...c, dismissed: districtKey(c.place) });
+      render();
+    },
     "area-locate": () => locate(),
     "area-find": () => findTyped(),
     "area-confirm": () => confirmPlace(),
@@ -404,6 +497,11 @@ export function createAreaUI(ctx, gkui) {
 
   function onChange(e) {
     const t = e.target;
+    if (t.dataset?.input === "area-watch") {
+      gk.update((s) => (s.prefs.areaWatch = t.checked), { touchesData: false });
+      if (t.checked) checkMove({ force: true });
+      return true;
+    }
     if (t.dataset?.input !== "area-pick") return false;
     if (t.value) {
       gk.showArea(t.value);
@@ -419,6 +517,7 @@ export function createAreaUI(ctx, gkui) {
     views: { "k-area": viewArea },
     actions,
     onChange,
+    notice,
     busy: () => Boolean(gui.busy || gui.draft || gui.pasteFor),
   };
 }

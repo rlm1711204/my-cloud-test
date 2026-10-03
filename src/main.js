@@ -1588,6 +1588,7 @@ const gkui = createGkUI({
   download,
   keyPicker,
   aiBanner,
+  areaNotice: () => areaui.notice(), // "you're in a new district" (areaui is made just below)
   afterChange: () => {
     updateSyncChip();
     scheduleAutoSync();

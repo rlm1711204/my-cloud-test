@@ -22,6 +22,7 @@ export const DEFAULT_PREFS = {
   practiceSize: 20,
   excluded: [], // topic keys (or a whole subject / "Current Affairs › 2025") left out of practice
   excludeToday: false, // also leave them out of Today's revision
+  areaWatch: true, // My Area: notice a move to a new district (only once location permission was given)
 };
 
 function blank() {
@@ -299,15 +300,36 @@ const sameAreaPlace = (a, b) => ["local", "district", "state", "region"].every((
 /** The place shown on the My Area screen (the last one opened), or null. */
 export const currentArea = () => (state.areaId === "__new__" ? null : (state.areas.find((a) => a.id === state.areaId) ?? state.areas[0] ?? null));
 
-/** Save a place (a new one, or the same place again keeps its notes) and show it. Returns the area. */
-export function saveAreaPlace(place) {
+const lc = (v) => String(v || "").trim().toLowerCase();
+
+/** The saved place in the same district and state as `place` (by the names you saved, or the ones the location gave). */
+export function areaInDistrict(place) {
+  if (!place?.district && !place?.state) return null;
+  const same = (p) => p && lc(p.district) === lc(place.district) && lc(p.state) === lc(place.state);
+  const cur = currentArea();
+  return [cur, ...state.areas].find((a) => a && (same(a.place) || same(a.geo))) ?? null;
+}
+
+/**
+ * Save a place (a new one, or the same place again keeps its notes) and show it. Returns the area. `geo` is the place
+ * as the location gave it (before any corrections), used to recognise it later. A new place starts with the notes of any
+ * level it shares with a saved place (the same state or region), so those aren't written again.
+ */
+export function saveAreaPlace(place, geo = null) {
   const now = new Date().toISOString();
   let area = state.areas.find((a) => sameAreaPlace(a.place, place));
   update((s) => {
     if (!area) {
-      area = { id: `area-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, place, levels: {}, createdAt: now, updatedAt: now };
+      const levels = {};
+      for (const k of ["local", "district", "state", "region"]) {
+        if (!place[k]) continue;
+        const from = s.areas.find((a) => lc(a.place[k]) === lc(place[k]) && a.levels?.[k]?.notes?.length);
+        if (from) levels[k] = JSON.parse(JSON.stringify(from.levels[k]));
+      }
+      area = { id: `area-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, place, levels, createdAt: now, updatedAt: now };
       s.areas.unshift(area);
     }
+    if (geo) area.geo = { local: geo.local || "", district: geo.district || "", state: geo.state || "" };
     s.areaId = area.id;
   });
   return area;

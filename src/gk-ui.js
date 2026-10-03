@@ -75,6 +75,8 @@ export function createGkUI(ctx) {
 
   /** The way into 📍 My Area (exam notes about where you are). */
   function areaEntry() {
+    const moved = ctx.areaNotice?.() || "";
+    if (moved) return moved;
     const a = gk.currentArea() || gk.get().areas[0];
     const n = a ? Object.values(a.levels || {}).reduce((t, l) => t + (l.notes?.length || 0), 0) : 0;
     return `<button class="card area-entry" type="button" data-nav="k-area"><span class="big-ico">📍</span><span><b>My Area${a ? ` · ${esc(placeTitle(a.place))}` : ""}</b>

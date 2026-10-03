@@ -95,7 +95,11 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   head `PLACES` ("Places Visited"): `place` = the place's name, `sub` = the level, tags ["My area", subject, exam];
   `topicKey` gives "Places Visited › place › level". gk-store `toPlaces` moves notes saved by the first version
   (filed under common subjects) on load; "Quiz me" saves then calls `gkui.quizOn(ids)`. The screen asks for the
-  location by itself only the first time (no saved place).
+  location by itself only the first time (no saved place). Moves: `notice()` (on GK Today via `ctx.areaNotice`, and on
+  My Area) runs `checkMove` at most every 3 h, only if `navigator.permissions` says geolocation is already granted and
+  `prefs.areaWatch`; the last check's place names (no coordinates) are kept in localStorage `vv.area.check`. A new
+  district → confirm form; a saved one (`areaInDistrict`, by saved names or `area.geo`, the names the location gave) →
+  open it. `saveAreaPlace` copies the notes of levels with the same name (state, region) from another saved place.
 
 ## The Maths and Reasoning parts
 

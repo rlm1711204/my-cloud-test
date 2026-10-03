@@ -53,4 +53,23 @@ describe("My Area with AI", () => {
     gk.deleteArea(a.id);
     expect(gk.get().areas).toHaveLength(0);
   });
+
+  it("a new place in the same state starts with the state and region notes; a saved district is recognised", () => {
+    const home = gk.saveAreaPlace(place, { ...place, local: "Vasantha Nagar" });
+    gk.setAreaNotes(home.id, "state", [note("History", "SSC", 1)], "Gemini");
+    gk.setAreaNotes(home.id, "region", [note("History", "UPSC", 2)], "Gemini");
+    gk.setAreaNotes(home.id, "district", [note("History", "RBI", 3)], "Gemini");
+    const madurai = makePlace({ town: "Madurai", district: "Madurai", state: "Tamil Nadu", country: "India", area: "Anna Nagar" });
+    const m = gk.saveAreaPlace(madurai, madurai);
+    expect(m.id).not.toBe(home.id);
+    expect(Object.keys(m.levels).sort()).toEqual(["region", "state"]); // Madurai's town and district still to write
+    expect(m.levels.state.notes[0].note).toMatch(/Chola/);
+    expect(gk.currentArea().id).toBe(m.id);
+    expect(gk.areaInDistrict({ district: "tirunelveli", state: "Tamil Nadu" }).id).toBe(home.id);
+    expect(gk.areaInDistrict({ district: "Madurai", state: "Tamil Nadu" }).id).toBe(m.id);
+    expect(gk.areaInDistrict({ district: "Theni", state: "Tamil Nadu" })).toBeNull();
+    // Changing the copy for one place doesn't change the other's.
+    gk.setAreaNotes(m.id, "state", [], "x");
+    expect(gk.get().areas.find((a) => a.id === home.id).levels.state.notes).toHaveLength(1);
+  });
 });
