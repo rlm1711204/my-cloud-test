@@ -1,4 +1,4 @@
-# VocabVault 📘📗🌍: exam vocabulary, grammar rules and GK
+# VocabVault 📘📗🌍🧮: exam vocabulary, grammar rules, GK, maths & reasoning
 
 A phone-friendly web app (you can install it like an app) for building an exam-grade English vocabulary.
 Snap a page, upload a screenshot or PDF, or type words. VocabVault keeps only the **difficult** words
@@ -55,6 +55,18 @@ general-knowledge questions:
 | 🎯 **Practice** | Multiple choice, True or false, Recall (and fill-the-gap for facts). **Untick any subject, chapter or Current Affairs year** (optionally for Today too). Every selected question is asked once per round before any repeats, chapters are interleaved, and wrong answers come back until right twice in a row |
 | 🗺️ **Topics (coverage map)** | Subject → chapter (Current Affairs → year → topic) with how much of each was covered this round, mastered, weak and due. Search, edit, star, "Complete with AI", practise one chapter, CSV export |
 | 💾 **Separate data** | Own backup file and own Drive file (`gk-questions.json` + a "GK Questions" sheet). Restoring twice never duplicates |
+
+## 🧮 Maths & Reasoning (the fourth part)
+
+| | |
+|---|---|
+| 📷 **Add** | Scan a page, upload photos or a **handwritten scanned PDF**, type or paste. With AI every question is solved step by step and every formula, rule or shortcut becomes a card. Without a key: **💬 Photo / PDF → Gemini app** gives a ready prompt (Android can share the file and the prompt together); paste the app's answer back |
+| 🗂️ **Filed by topic and type** | Quant (Number System, Percentage, Profit & Loss, SI/CI, Time & Work, TSD, Mensuration, Algebra, DI, P&C…) and Reasoning (Puzzles, Seating, Syllogism, Inequality, Blood Relations, Direction, Coding-Decoding, Calendar, Clocks…). Every question also gets a **question type** (e.g. "Two workers together"); new names are matched to the types you already have |
+| 🔁 **2 practice questions** | While saving, each question gets 2 practice questions of the same type with changed numbers or a small twist, linked to it. Later: "＋2 practice questions" (AI) or "Prompt for 2 more" (chat app) on any question |
+| 📐 **Formula Book** | 73 built-in formula and trick cards with worked examples. Each topic page shows its **formula sheet** to revise |
+| 🧩 **Same-type practice** | Practise one question type at a time (each question, then its practice questions), or a whole topic, or formulas only (recall / "which formula?"). Multiple choice and "solve on paper, then check the steps" |
+| ☀️ **Today** | Formula / Question of the Day and a daily revision spread across topics, with spaced repetition |
+| 💾 **Separate data** | Own backup and Drive file (`maths-reasoning.json` + a "Maths & Reasoning" sheet) |
 
 ## Using it
 
@@ -166,6 +178,13 @@ src/
   lib/gk-quiz.js     GK question types (MCQ, true/false, recall, fill-the-gap)
   lib/gk-ai.js       GK prompts: list questions, then write cards with topic, year, options and a trick
   lib/gkbank.js      Question Bank parser + checker (data in src/data/gk1-4.js)
+  quant-ui.js        Maths & Reasoning screens: Today, Add, Practice (by type), Topics (formula sheets, question types)
+  lib/quant-taxonomy.js Subjects/topics + offline classifier · lib/mathtext.js LaTeX → plain maths
+  lib/quant.js       Question / formula records (type, solution, practice links), duplicates, CSV
+  lib/quant-prompt.js Copy-paste prompts and the reader for pasted answers (TYPE/Q/PQ/S/F/T/FORMULA lines)
+  lib/quant-store.js Separate data, backup, Drive file, daily plan, same-type lists
+  lib/quant-ai.js    AI: read notes/handwritten PDFs, solve, add 2 practice questions, topic sets
+  lib/quant-quiz.js  MCQ, solve & check, formula recall · lib/qbook.js Formula Book (data in src/data/qformulas.js)
   lib/rules.js       Rule records, duplicate detection, Rule Book matching, free-mode text splitting
   lib/rulebook.js    Rule Book parser + checker (data in src/data/rules1-5.js; 4-5 are the advanced rules)
   lib/update.js      Reloads an open app into the newest version, keeping typed words

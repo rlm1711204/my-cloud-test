@@ -204,15 +204,15 @@ export function topicTree(items, practice = state.practice, source = state.prefs
  *  2. then new questions, taking turns between topics, starting with topics revised longest ago;
  *  3. then the weakest not-yet-due questions, so every topic keeps coming round.
  */
-export function buildGkPlan(pool, { count = 10, date = todayISO(), featured = [], topicSeen = {} } = {}) {
+export function buildGkPlan(pool, { count = 10, date = todayISO(), featured = [], topicSeen = {}, groupOf = topicKey, featuredOk = (i) => i.a } = {}) {
   const seed = [...date].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
   let h = seed;
   const rand = () => ((h = (h * 1103515245 + 12345) >>> 0) / 2 ** 32);
-  const group = (it) => topicKey(it);
+  const group = groupOf;
   const byStale = (a, b) => String(topicSeen[group(a)] || "").localeCompare(String(topicSeen[group(b)] || ""));
 
   const featuredSet = new Set(featured);
-  const qotdPool = pool.filter((i) => !featuredSet.has(i.id) && i.a);
+  const qotdPool = pool.filter((i) => !featuredSet.has(i.id) && featuredOk(i));
   const qotd = (qotdPool.length ? qotdPool : pool)
     .map((i) => ({ i, s: (stage(i) === "new" ? 2 : 0) + (i.starred ? 2 : 0) + i.difficulty / 2 + rand() * 3 }))
     .sort((a, b) => b.s - a.s)[0]?.i ?? null;
@@ -291,6 +291,7 @@ export const exportData = () => ({
 /** Which part of VocabVault a backup file belongs to: "vocab", "grammar", "gk" or null. */
 export function backupKind(data) {
   if (!data || typeof data !== "object") return null;
+  if ((data.app === "VocabVault-Quant" || (Array.isArray(data.items) && data.items.some((i) => i && (i.kind === "formula" || "solution" in i))))) return "quant";
   if (data.app === BACKUP_APP || (Array.isArray(data.items) && !data.words && !data.rules)) return "gk";
   if (data.app === "VocabVault-Grammar" || Array.isArray(data.rules)) return "grammar";
   if (data.app === "VocabVault" || Array.isArray(data.words)) return "vocab";
@@ -302,6 +303,7 @@ export function importData(data, { markDirty = false, applyPrefs = false } = {})
   const kind = backupKind(data);
   if (kind === "vocab") throw new Error("This is a vocabulary backup — restore it under 📘 Vocabulary → Settings.");
   if (kind === "grammar") throw new Error("This is a grammar backup — restore it under 📗 Grammar → Settings.");
+  if (kind === "quant") throw new Error("This is a Maths & Reasoning backup — restore it under 🧮 Maths & Reasoning → Settings.");
   if (kind !== "gk") throw new Error("That file doesn't look like a VocabVault GK backup.");
   const incoming = (data.items || []).map((i) => makeItem(i)).filter((i) => !i.deleted);
   const before = state.items.filter((i) => !i.deleted);

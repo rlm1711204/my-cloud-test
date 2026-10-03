@@ -89,9 +89,20 @@ export function pickSession(pool, practice, source, size, rand = Math.random, gr
     .map((w) => w.id)
     .slice(0, Math.min(n, Math.ceil(size * 0.4)));
   const taken = new Set(weak);
-  const fresh = shuffle(all.filter((id) => !taken.has(id)), rand)
-    .sort((x, y) => (state.asked[x] ?? 0) - (state.asked[y] ?? 0))
-    .slice(0, n - weak.length);
+  // Least-asked tiers first; where a tier is only partly taken, take it topic by topic so the session spreads widely.
+  const byCount = new Map();
+  for (const id of shuffle(all.filter((id) => !taken.has(id)), rand)) {
+    const k = state.asked[id] ?? 0;
+    if (!byCount.has(k)) byCount.set(k, []);
+    byCount.get(k).push(id);
+  }
+  const fresh = [];
+  for (const k of [...byCount.keys()].sort((x, y) => x - y)) {
+    const need = n - weak.length - fresh.length;
+    if (need <= 0) break;
+    const tier = byCount.get(k);
+    fresh.push(...(tier.length <= need ? tier : groupOf ? interleave(tier, groupOf, rand).slice(0, need) : tier.slice(0, need)));
+  }
   // Least-asked first (so finishing a session early never skips a never-asked item); random within a
   // tier, and with `groupOf` topics take turns within each tier.
   const tiers = new Map();

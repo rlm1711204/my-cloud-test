@@ -23,6 +23,9 @@ import { createGrammarUI } from "./grammar-ui.js";
 import * as gk from "./lib/gk-store.js";
 import { itemsToCSV } from "./lib/gk.js";
 import { createGkUI } from "./gk-ui.js";
+import * as qs from "./lib/quant-store.js";
+import { qItemsToCSV } from "./lib/quant.js";
+import { createQuantUI } from "./quant-ui.js";
 import {
   buildIndex,
   cleanHeadword,
@@ -114,7 +117,7 @@ const ui = {
   syncError: "",
   wordsTab: "mine", // Words screen: "mine" | "bank"
   notifyStatus: "",
-  section: "vocab", // which part of the app the tab bar shows: "vocab" | "grammar" | "gk"
+  section: "vocab", // which part of the app the tab bar shows: "vocab" | "grammar" | "gk" | "quant"
   extraProvider: "openrouter", // service chosen in the "add another AI" form
   extraStatus: {}, // service id -> {ok, message} from the last key test
 };
@@ -358,15 +361,17 @@ window.addEventListener("focus", () => filePickerOpen && setTimeout(pickerClosed
 function checkKeysInBackground() {
   const s = settings();
   const refresh = (ran) => {
-    if (!ran || !["settings", "add", "g-add", "k-add"].includes(view) || ui.busy || ui.candidates) return;
+    if (!ran || !["settings", "add", "g-add", "k-add", "m-add"].includes(view) || ui.busy || ui.candidates) return;
     // Redrawing while the camera / file picker is open would replace its <input>, and the chosen photo would be lost.
     if (filePickerOpen) return setTimeout(() => refresh(ran), 2000);
-    if (grammar.gui.busy || grammar.gui.candidates || gkui.gui.busy || gkui.gui.candidates) return;
+    if (grammar.gui.busy || grammar.gui.candidates || gkui.gui.busy || gkui.gui.candidates || qui.gui.busy || qui.gui.candidates) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
     if ($("#typed")) ui.typedDraft = $("#typed").value;
     if ($("#gTyped")) grammar.gui.typedDraft = $("#gTyped").value;
     if ($("#kTyped")) gkui.gui.typedDraft = $("#kTyped").value;
     if ($("#kTopic")) gkui.gui.topicDraft = $("#kTopic").value;
+    if ($("#mTyped")) qui.gui.typedDraft = $("#mTyped").value;
+    if ($("#mTopic")) qui.gui.topicDraft = $("#mTopic").value;
     const y = window.scrollY;
     render();
     window.scrollTo(0, y);
@@ -770,10 +775,11 @@ function viewSettings() {
       <label class="field">When the app opens
         <select data-setting="startSection">
           ${[
-            ["ask", "Show the Vocabulary / Grammar / GK choice"],
+            ["ask", "Show the choice of parts"],
             ["vocab", "Go straight to Vocabulary"],
             ["grammar", "Go straight to Grammar"],
             ["gk", "Go straight to GK"],
+            ["quant", "Go straight to Maths & Reasoning"],
             ["last", "Where I left off"],
           ]
             .map(([v, l]) => `<option value="${v}" ${st.startSection === v ? "selected" : ""}>${l}</option>`)
@@ -877,6 +883,7 @@ function viewSettings() {
 
     ${grammar.prefsCard()}
     ${gkui.prefsCard()}
+    ${qui.prefsCard()}
 
     <article class="card">
       <h3>🔔 Daily notification</h3>
@@ -900,7 +907,7 @@ function viewSettings() {
 
     <article class="card">
       <h3>☁️ Google Drive</h3>
-      <p class="muted">Your master list is saved in a <b>${drive.FOLDER_NAME}</b> folder in your Drive: <code>${drive.JSON_NAME}</code>, <code>${drive.GRAMMAR_JSON}</code> and <code>${drive.GK_JSON}</code> (used by the app)
+      <p class="muted">Your master list is saved in a <b>${drive.FOLDER_NAME}</b> folder in your Drive: <code>${drive.JSON_NAME}</code>, <code>${drive.GRAMMAR_JSON}</code>, <code>${drive.GK_JSON}</code> and <code>${drive.QUANT_JSON}</code> (used by the app)
       plus a <b>${drive.SHEET_NAME}</b> Google Sheet you can open, filter or print. The app can only see files it created.</p>
       <label class="field">Google OAuth Client ID<input type="text" data-setting="googleClientId" value="${esc(st.googleClientId)}" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off" /></label>
       <p class="muted small">One-time setup, ~5 minutes — see “Google Drive setup” in the README.</p>
@@ -925,6 +932,7 @@ function viewSettings() {
     </article>
     ${grammar.dataCard()}
     ${gkui.dataCard()}
+    ${qui.dataCard()}
     <article class="card about">
       <img src="./icon.svg" alt="" width="52" height="52" />
       <h3>${esc(brand.name)}</h3>
@@ -951,6 +959,7 @@ function closeOverlay() {
   ui.session = null;
   grammar?.onCloseOverlay();
   gkui?.onCloseOverlay();
+  qui?.onCloseOverlay();
 }
 
 function showWord(id) {
@@ -1425,7 +1434,7 @@ function updateSyncChip() {
     if (ui.syncState === "syncing") (text = "Syncing…"), (cls = "busy");
     else if (ui.syncState === "error") (text = "Sync error"), (cls = "err");
     else if (!drive.isConnected()) (text = "Tap to sync"), (cls = "warn");
-    else if (s.dirty || gs.get().dirty || gk.get().dirty) (text = "Unsynced"), (cls = "warn");
+    else if (s.dirty || gs.get().dirty || gk.get().dirty || qs.get().dirty) (text = "Unsynced"), (cls = "warn");
     else (text = "Synced ✓"), (cls = "ok");
   }
   chip.textContent = text;
@@ -1495,6 +1504,22 @@ async function sync({ interactive = false } = {}) {
           { touchesData: false },
         );
       }
+      // Maths & Reasoning: its own file, only created once that part has been used.
+      const m = qs.get();
+      const mIds = { folderId: newIds.folderId, fileId: m.drive.fileId, sheetId: m.drive.sheetId };
+      const mPulled = await drive.pull(mIds, drive.QUANT_JSON);
+      if (mPulled.data) qs.importData(mPulled.data);
+      if (mPulled.data || qs.get().items.length || Object.keys(qs.get().bank).length) {
+        const mPayload = qs.exportData();
+        const mNew = await drive.push(mPayload, qItemsToCSV(mPayload.items.filter((i) => !i.deleted)), mPulled.ids, { jsonName: drive.QUANT_JSON, sheetName: drive.QUANT_SHEET });
+        qs.update(
+          (st) => {
+            st.drive = { fileId: mNew.fileId, sheetId: mNew.sheetId, lastSync: new Date().toISOString() };
+            st.dirty = false;
+          },
+          { touchesData: false },
+        );
+      }
       ui.syncState = "ok";
       if (interactive) toast("Saved to Google Drive ✓");
     } catch (e) {
@@ -1504,7 +1529,7 @@ async function sync({ interactive = false } = {}) {
     } finally {
       syncing = null;
       updateSyncChip();
-      if (["settings", "today", "words", "home", "g-today", "g-rules", "k-today", "k-topics"].includes(view)) render();
+      if (["settings", "today", "words", "home", "g-today", "g-rules", "k-today", "k-topics", "m-today", "m-topics"].includes(view)) render();
     }
   })();
   return syncing;
@@ -1513,7 +1538,7 @@ async function sync({ interactive = false } = {}) {
 let autoSyncTimer;
 function scheduleAutoSync() {
   const s = store.get();
-  const anyDirty = () => store.get().dirty || gs.get().dirty || gk.get().dirty;
+  const anyDirty = () => store.get().dirty || gs.get().dirty || gk.get().dirty || qs.get().dirty;
   if (!s.settings.autoSync || !anyDirty() || !drive.isConnected()) return;
   clearTimeout(autoSyncTimer);
   autoSyncTimer = setTimeout(() => anyDirty() && sync(), 2500);
@@ -1561,7 +1586,28 @@ const gkui = createGkUI({
   },
 });
 
-// ---------- the three parts: Vocabulary, Grammar and GK ----------
+// ---------- the Maths & Reasoning part ----------
+const qui = createQuantUI({
+  $,
+  esc,
+  toast,
+  plural,
+  render: () => render(),
+  go: (v) => go(v),
+  view: () => view,
+  openOverlay,
+  closeOverlay,
+  settings,
+  download,
+  keyPicker,
+  aiBanner,
+  afterChange: () => {
+    updateSyncChip();
+    scheduleAutoSync();
+  },
+});
+
+// ---------- the four parts: Vocabulary, Grammar, GK and Maths & Reasoning ----------
 const SECTION_TABS = {
   vocab: [
     ["today", "☀️", "Today"],
@@ -1584,10 +1630,17 @@ const SECTION_TABS = {
     ["k-topics", "🗂️", "Topics"],
     ["settings", "⚙️", "Settings"],
   ],
+  quant: [
+    ["m-today", "☀️", "Today"],
+    ["m-add", "➕", "Add"],
+    ["m-practice", "🎯", "Practice"],
+    ["m-topics", "🗂️", "Topics"],
+    ["settings", "⚙️", "Settings"],
+  ],
 };
 const VOCAB_VIEWS = new Set(["today", "add", "practice", "words"]);
-const sectionOf = (v) => (v.startsWith("g-") ? "grammar" : v.startsWith("k-") ? "gk" : VOCAB_VIEWS.has(v) ? "vocab" : null);
-const START_VIEW = { vocab: "today", grammar: "g-today", gk: "k-today" };
+const sectionOf = (v) => (v.startsWith("g-") ? "grammar" : v.startsWith("k-") ? "gk" : v.startsWith("m-") ? "quant" : VOCAB_VIEWS.has(v) ? "vocab" : null);
+const START_VIEW = { vocab: "today", grammar: "g-today", gk: "k-today", quant: "m-today" };
 
 function renderChrome() {
   const sec = view === "home" ? null : ui.section;
@@ -1603,7 +1656,7 @@ function renderChrome() {
   for (const b of document.querySelectorAll(".section-switch [data-sec]")) b.classList.toggle("active", b.dataset.sec === sec);
 }
 
-/** The start screen: choose Vocabulary, Grammar or GK. */
+/** The start screen: choose Vocabulary, Grammar, GK or Maths & Reasoning. */
 function viewHome() {
   const st = settings();
   const words = store.liveWords().length;
@@ -1616,6 +1669,9 @@ function viewHome() {
   const kPool = gk.itemsFor(gk.get().prefs.dailySource);
   const kStats = stats(kPool);
   const qotd = gkui.questionOfTheDay();
+  const mPool = qs.itemsFor(qs.get().prefs.dailySource);
+  const mStats = stats(mPool);
+  const motd = qui.cardOfTheDay();
   return `
     <section class="home">
       <h1>What would you like to study?</h1>
@@ -1646,6 +1702,15 @@ function viewHome() {
         </span>
         <span class="home-go" aria-hidden="true">›</span>
       </button>
+      <button class="home-card quant" type="button" data-nav="m-today">
+        <span class="home-ico">🧮</span>
+        <span class="home-main">
+          <b>Maths & Reasoning</b>
+          <span>${plural(qs.liveItems().length, "card")} of your own · ${qs.bookItems().length} in the Formula Book</span>
+          <span class="small">${mStats.due} due today · 🔥 ${streak(qs.get().activity)}${motd ? ` · Today: <i>${esc(motd.q.length > 60 ? `${motd.q.slice(0, 58)}…` : motd.q)}</i>` : ""}</span>
+        </span>
+        <span class="home-go" aria-hidden="true">›</span>
+      </button>
       <label class="field small">When the app opens
         <select data-setting="startSection">
           ${[
@@ -1653,6 +1718,7 @@ function viewHome() {
             ["vocab", "Go straight to Vocabulary"],
             ["grammar", "Go straight to Grammar"],
             ["gk", "Go straight to GK"],
+            ["quant", "Go straight to Maths & Reasoning"],
             ["last", "Where I left off"],
           ]
             .map(([v, l]) => `<option value="${v}" ${st.startSection === v ? "selected" : ""}>${l}</option>`)
@@ -1673,13 +1739,15 @@ const VIEWS = {
   settings: viewSettings,
   ...grammar.views,
   ...gkui.views,
+  ...qui.views,
 };
 
 function render() {
   const main = $("#view");
   const searchFocused = document.activeElement?.id === "search";
   main.innerHTML = VIEWS[view]();
-  if (["settings", "add", "g-add", "k-add"].includes(view) && !ui.busy && !ui.candidates && !grammar.gui.busy && !grammar.gui.candidates && !gkui.gui.busy && !gkui.gui.candidates) {
+  const anyAdding = ui.busy || ui.candidates || grammar.gui.busy || grammar.gui.candidates || gkui.gui.busy || gkui.gui.candidates || qui.gui.busy || qui.gui.candidates;
+  if (["settings", "add", "g-add", "k-add", "m-add"].includes(view) && !anyAdding) {
     checkKeysInBackground();
   }
   renderChrome();
@@ -1697,6 +1765,8 @@ function go(v) {
   if (view === "g-add" && v !== "g-add" && $("#gTyped")) grammar.gui.typedDraft = $("#gTyped").value;
   if (view === "k-add" && v !== "k-add" && $("#kTyped")) gkui.gui.typedDraft = $("#kTyped").value;
   if (view === "k-add" && v !== "k-add" && $("#kTopic")) gkui.gui.topicDraft = $("#kTopic").value;
+  if (view === "m-add" && v !== "m-add" && $("#mTyped")) qui.gui.typedDraft = $("#mTyped").value;
+  if (view === "m-add" && v !== "m-add" && $("#mTopic")) qui.gui.topicDraft = $("#mTopic").value;
   const sec = sectionOf(v);
   if (sec && sec !== ui.section) ui.section = sec;
   if (sec && settings().lastSection !== sec) store.update((s) => (s.settings.lastSection = sec), { touchesData: false });
@@ -2004,7 +2074,7 @@ const actions = {
   },
 };
 
-Object.assign(actions, grammar.actions, gkui.actions);
+Object.assign(actions, grammar.actions, gkui.actions, qui.actions);
 
 document.addEventListener("click", (e) => {
   const nav = e.target.closest("[data-nav]");
@@ -2027,6 +2097,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("change", async (e) => {
   if (await grammar.onChange(e)) return;
   if (await gkui.onChange(e)) return;
+  if (await qui.onChange(e)) return;
   const t = e.target;
   if (t.dataset.input === "files") {
     const files = [...t.files];
@@ -2130,6 +2201,7 @@ document.addEventListener("change", async (e) => {
 document.addEventListener("input", (e) => {
   if (grammar.onInput(e)) return;
   if (gkui.onInput(e)) return;
+  if (qui.onInput(e)) return;
   if (e.target.id === "search") {
     ui.search = e.target.value;
     render();
@@ -2139,6 +2211,7 @@ document.addEventListener("input", (e) => {
 document.addEventListener("submit", (e) => {
   if (grammar.onSubmit(e)) return;
   if (gkui.onSubmit(e)) return;
+  if (qui.onSubmit(e)) return;
   if (e.target.id !== "editForm") return;
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -2247,14 +2320,15 @@ let updatePending = false;
 
 /** Nothing in progress that a reload would interrupt. */
 const safeToReload = () =>
-  !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !grammar.busy() && !gkui.busy() && !$("#overlay").classList.contains("open");
+  !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !grammar.busy() && !gkui.busy() && !qui.busy() && !$("#overlay").classList.contains("open");
 
 /** Reload into the newest version, keeping typed words. Returns true if the page is reloading. */
 function updateNow() {
   const typed = $("#typed")?.value ?? ui.typedDraft;
   const gTyped = $("#gTyped")?.value ?? grammar.gui.typedDraft;
   const kTyped = $("#kTyped")?.value ?? gkui.gui.typedDraft;
-  return reloadForUpdate({ typed, gTyped, kTyped, view });
+  const mTyped = $("#mTyped")?.value ?? qui.gui.typedDraft;
+  return reloadForUpdate({ typed, gTyped, kTyped, mTyped, view });
 }
 
 async function checkForUpdate() {
@@ -2280,14 +2354,15 @@ window.addEventListener("unhandledrejection", (e) => {
   if (draft?.typed) ui.typedDraft = draft.typed;
   if (draft?.gTyped) grammar.gui.typedDraft = draft.gTyped;
   if (draft?.kTyped) gkui.gui.typedDraft = draft.kTyped;
+  if (draft?.mTyped) qui.gui.typedDraft = draft.mTyped;
   if (updated) setTimeout(() => toast("✨ Updated to the latest version. If you were adding a photo or PDF, pick it again.", 6000), 600);
 }
 
 let booted = false;
 $("#view").innerHTML = `<section class="card center busy"><div class="spinner" aria-hidden="true"></div><p>Loading…</p></section>`;
 // The Word Bank (1000+ words) loads as a separate chunk; the app renders once it's ready.
-Promise.all([loadBank(), loadRuleBook(), gkui.loadBank()])
-  .catch(() => toast("Couldn't load the built-in Word Bank, Rule Book or Question Bank. Check your connection and reopen the app."))
+Promise.all([loadBank(), loadRuleBook(), gkui.loadBank(), qui.loadBook()])
+  .catch(() => toast("Couldn't load the built-in Word Bank, Rule Book, Question Bank or Formula Book. Check your connection and reopen the app."))
   .finally(() => {
     booted = true;
     render();

@@ -12,6 +12,8 @@ export const GRAMMAR_JSON = "grammar-rules.json";
 export const GRAMMAR_SHEET = "Grammar Rules";
 export const GK_JSON = "gk-questions.json";
 export const GK_SHEET = "GK Questions";
+export const QUANT_JSON = "maths-reasoning.json";
+export const QUANT_SHEET = "Maths & Reasoning";
 const TOKEN_KEY = "vv.driveToken";
 
 let gisPromise = null;

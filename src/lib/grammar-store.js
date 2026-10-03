@@ -233,6 +233,7 @@ export const exportData = () => ({
 /** What kind of VocabVault backup a parsed file is: "grammar", "vocab" or null. */
 export function backupKind(data) {
   if (!data || typeof data !== "object") return null;
+  if ((data.app === "VocabVault-Quant" || (Array.isArray(data.items) && data.items.some((i) => i && (i.kind === "formula" || "solution" in i))))) return "quant";
   if (data.app === "VocabVault-GK" || (Array.isArray(data.items) && !data.rules && !data.words)) return "gk";
   if (data.app === BACKUP_APP || Array.isArray(data.rules)) return "grammar";
   if (data.app === "VocabVault" || Array.isArray(data.words)) return "vocab";
@@ -247,6 +248,7 @@ export function importData(data, { markDirty = false, applyPrefs = false } = {})
   const kind = backupKind(data);
   if (kind === "vocab") throw new Error("This is a vocabulary backup — restore it under 📘 Vocabulary → Settings.");
   if (kind === "gk") throw new Error("This is a GK backup — restore it under 🌍 GK → Settings.");
+  if (kind === "quant") throw new Error("This is a Maths & Reasoning backup — restore it under 🧮 Maths & Reasoning → Settings.");
   if (kind !== "grammar") throw new Error("That file doesn't look like a VocabVault grammar backup.");
   const incoming = (data.rules || []).map((r) => makeRule(r)).filter((r) => !r.deleted);
   const before = state.rules;

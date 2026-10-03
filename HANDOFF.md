@@ -10,7 +10,7 @@ Paste this into a new chat to carry the project over.
 
 ## What it is
 
-A phone-friendly PWA with three parts — exam **vocabulary**, **grammar rules** and **GK** (UPSC / RBI Grade B / SSC).
+A phone-friendly PWA with four parts — exam **vocabulary**, **grammar rules**, **GK** and **maths & reasoning** (UPSC / RBI Grade B / SSC).
 Scan a page, upload a screenshot or PDF, or type words. The app keeps the hard words, writes a
 full card for each (meaning, Hindi, pronunciation, 2 sentences, exam tip), and revises them daily
 with spaced repetition. Data is stored on the device and synced to Google Drive.
@@ -86,6 +86,20 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 - AI (`gk-ai.js`): list questions (facts → questions), then cards 10 at a time with category/sub/year/month/options/
   explain/trick; `aiAnswered` marks answers the AI supplied. Cards are checked to match the question asked.
 
+## The Maths & Reasoning part
+
+- Views `m-today`, `m-add`, `m-practice`, `m-topics` in `src/quant-ui.js`; header switch 🧮; start-section option `quant`.
+- Data: localStorage `vv.quant.v1`, backup `app: "VocabVault-Quant"`, Drive `maths-reasoning.json` + "Maths & Reasoning" sheet.
+  All four stores' restore checks recognise each other's files (a quant backup also has `items`, so GK checks for it first).
+- Items: `kind` question | formula; `subject` › `topic` (quant-taxonomy.js) › `pattern` (free "question type", matched to
+  existing names by `matchPattern`); `solution` keeps line breaks; `variantOf` links a practice question to its question.
+  Duplicates: answers with different numbers are never duplicates (maths questions differ by numbers).
+- Paste format (quant-prompt.js): `## Subject › Topic`, `TYPE:`, `Q:`/`A:`/`O:`/`S:`/`F:`/`T:`, `PQ:` (practice question of the
+  last Q), `FORMULA:` cards with `F:`/`T:`/`E:`. `readQuant` gives temporary ids so PQs link; `addItems` maps them, also onto
+  an already-saved question. The Formula Book uses the same format and is checked by the tests.
+- Daily plan reuses `buildGkPlan` (with `groupOf`/`featuredOk`). Practice by type: `itemsOfPattern` (question, its practice
+  questions, …) is asked in order, not shuffled.
+
 ## Decisions worth knowing before changing things
 
 - **Practice coverage is counted per item, not per list.** `practice.asked[id]` = how many times it was practised
@@ -125,7 +139,7 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 
 ## Current state
 
-Done and live: GK part (Question Bank, current affairs by year, topic picker, balanced revision, separate backups and Drive file), Grammar Rules part (Rule Book, practice, separate backups and Drive file), other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
+Done and live: Maths & Reasoning part (Formula Book, handwritten-PDF and chat-app routes, 2 practice questions per question, same-type practice), GK part (Question Bank, current affairs by year, topic picker, balanced revision, separate backups and Drive file), Grammar Rules part (Rule Book, practice, separate backups and Drive file), other free AI services with a per-scan AI picker, self-updating app, capture + extraction, duplicate checking, word cards, daily plan and flashcards,
 practice with full coverage and weak-word repeats, the 1267-word Word Bank, daily notification,
 ⓘ full-details buttons, Google Drive sync, install button, backup/restore with a clear summary,
 one-file branding, and the Gemini key picker.

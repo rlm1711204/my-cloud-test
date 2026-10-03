@@ -183,3 +183,27 @@ E: Premchand's last completed novel (1936).
 
 Keep to facts that don't change (no current office-holders). The tests check every question when the app is built.
 Your own questions are better added in the app itself (🌍 GK → Add).
+
+---
+
+## Adding cards to the Maths & Reasoning Formula Book
+
+The Formula Book is `src/data/qformulas.js`. Add a card between the back-ticks:
+
+```
+## Quant › Percentage
+FORMULA: Percentage of a percentage
+F: x% of y% of N = (x × y × N)/10000
+T: Multiply the percentages, divide by 100 twice.
+E: 20% of 50% of 400 = 40.
+```
+
+| Letter | Means |
+|---|---|
+| `## Subject › Topic` | Quant or Reasoning, and a topic name from `src/lib/quant-taxonomy.js` |
+| `FORMULA:` | the card's name |
+| `F:` | the formula or rule (several `F:` lines are fine) |
+| `T:` | the trick — how to remember or use it fast |
+| `E:` | one small worked example |
+
+Use plain-text maths (×, ÷, √, ², π, a/b). The tests check every card when the app is built.
