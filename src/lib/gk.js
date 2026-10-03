@@ -2,7 +2,7 @@
 // no AI is available (Q/A pairs, numbered MCQs with options and "Ans:", one-line "question? answer",
 // "term – answer", and plain facts). Pure functions; unit-tested.
 import { todayISO } from "./words.js";
-import { ALL_CATEGORIES, CA, OTHER, TAXONOMY, CA_TOPICS, classify, subsOf } from "./gk-taxonomy.js";
+import { ALL_CATEGORIES, CA, OTHER, PLACES, TAXONOMY, CA_TOPICS, classify, subsOf } from "./gk-taxonomy.js";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 const str = (v, max = 1000) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -25,7 +25,7 @@ export function placeOf(input, now = new Date()) {
     if (!(sub in CA_TOPICS)) sub = classify(`${text} recently`, { now }).sub;
     return { category, sub, year: year || classify(`${text} recently`, { now }).year };
   }
-  if (category === OTHER) return { category, sub: sub || "General", year: 0 };
+  if (category === OTHER || category === PLACES) return { category, sub: sub || "General", year: 0 };
   if (!subsOf(category).includes(sub)) {
     // Best chapter inside the given subject.
     const c = classify(text, { now });
@@ -47,6 +47,7 @@ export function makeItem(input = {}, now = new Date()) {
     explain: str(input.explain, 800),
     trick: str(input.trick, 500),
     ...placeOf(input, now),
+    place: str(input.place, 100), // Places Visited: the place (its level is `sub`)
     month: clampInt(input.month, 0, 12, 0),
     tags: (Array.isArray(input.tags) ? input.tags : []).map((t) => str(t, 40)).filter(Boolean).slice(0, 6),
     difficulty: clampInt(input.difficulty, 1, 5, 3),

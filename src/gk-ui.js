@@ -5,7 +5,7 @@ import { GK_KINDS, makeGkQuestion } from "./lib/gk-quiz.js";
 import { gkFromFiles, gkFromText, gkFromTopic, completeItem } from "./lib/gk-ai.js";
 import { autoCount, buildGkPrompt, buildMaterialPrompt, isTopicLike, looksStructured, readPasted, topicRange } from "./lib/gk-prompt.js";
 import { isBankId, loadBank } from "./lib/gkbank.js";
-import { ALL_TOPICS, CA, CA_TOPICS, SEP, TAXONOMY, topicKey } from "./lib/gk-taxonomy.js";
+import { ALL_TOPICS, CA, CA_TOPICS, PLACES, SEP, TAXONOMY, topicKey } from "./lib/gk-taxonomy.js";
 import { findDuplicate, isFact, itemsToCSV, makeItem, textToItems } from "./lib/gk.js";
 import { buildTree, labelOf, nodeState, toggle } from "./lib/gk-topics.js";
 import { placeTitle, placeTrail } from "./lib/area.js";
@@ -16,7 +16,10 @@ import { AllProvidersFailed, hasAI } from "./lib/engine.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
 
 const STAGE_LABEL = { new: "New", learning: "Learning", mastered: "Mastered" };
-const ICON = (cat) => (cat === CA ? "📰" : TAXONOMY[cat]?.icon || "📁");
+const ICON = (cat) => (cat === CA ? "📰" : cat === PLACES ? "📍" : TAXONOMY[cat]?.icon || "📁");
+/** Where a question is filed, in words: "CA 2026 · Sports", "Palayamkottai › Tamil Nadu · History", "Polity · Parliament". */
+const placeLabel = (it) =>
+  it.category === CA ? `CA ${it.year} · ${it.sub}` : it.category === PLACES ? `${it.place ? `${it.place} › ` : ""}${it.sub}${it.tags?.[1] ? ` · ${it.tags[1]}` : ""}` : `${it.category} · ${it.sub}`;
 const LIST_SHOWN = 120;
 
 export function createGkUI(ctx) {
@@ -51,7 +54,7 @@ export function createGkUI(ctx) {
       .map(([k, l]) => `<option value="${k}" ${value === k ? "selected" : ""}>${l} (${gk.itemsFor(k).length})</option>`)
       .join("")}</select>`;
   const topicBadge = (it) =>
-    `<span class="badge topic">${ICON(it.category)} ${esc(it.category === CA ? `CA ${it.year} · ${it.sub}` : `${it.category} · ${it.sub}`)}</span>`;
+    `<span class="badge topic">${ICON(it.category)} ${esc(placeLabel(it))}</span>`;
   const infoBtn = (id) => `<button class="icon-btn info-btn" type="button" data-action="k-info" data-id="${esc(id)}" aria-label="Full question" title="Full question">ⓘ</button>`;
 
   // ---------- the question card ----------
@@ -370,6 +373,7 @@ export function createGkUI(ctx) {
   const topicOptions = (it) => {
     const cur = it.category === CA ? `${CA}|${it.sub}` : `${it.category}|${it.sub}`;
     const opts = [
+      ...(it.category === PLACES ? [[cur, `📍 ${PLACES} › ${it.place ? `${it.place} › ` : ""}${it.sub}`]] : []),
       ...ALL_TOPICS.map((t) => [`${t.category}|${t.sub}`, `${t.category} › ${t.sub}`]),
       ...Object.keys(CA_TOPICS).map((sub) => [`${CA}|${sub}`, `Current Affairs › ${sub}`]),
     ];
@@ -636,7 +640,7 @@ export function createGkUI(ctx) {
       <div class="progress"><span style="width:${(q.i / q.queue.length) * 100}%"></span></div>
       <article class="card quiz-card">
         <p class="eyebrow">${esc(cur.label)}${cur.retry ? ` <span class="badge learning">again</span>` : ""}</p>
-        ${it ? `<p class="small muted">${ICON(it.category)} ${esc(it.category === CA ? `Current Affairs ${it.year} · ${it.sub}` : `${it.category} · ${it.sub}`)}</p>` : ""}
+        ${it ? `<p class="small muted">${ICON(it.category)} ${esc(it.category === CA ? `Current Affairs ${it.year} · ${it.sub}` : placeLabel(it))}</p>` : ""}
         <div class="quiz-prompt gk-prompt">${esc(cur.prompt)}</div>
         ${cur.kind === "tf" ? `<p class="claim">Answer: <b>${esc(cur.claim)}</b></p>` : ""}
         ${

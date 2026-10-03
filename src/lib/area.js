@@ -2,7 +2,7 @@
 // (zonal council) — sorted into subjects (history, geography & rivers, soils & agriculture, economy, polity…) and tagged
 // by exam depth (SSC → UPSC → RBI). This file is pure (unit-tested): place names from a geocoder's address, the four
 // levels, the AI instruction and the copy-paste prompt, reading a pasted answer, and turning notes into GK questions.
-import { CA, TAXONOMY } from "./gk-taxonomy.js";
+import { PLACES } from "./gk-taxonomy.js";
 import { questionSimilarity } from "./gk.js";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
@@ -24,22 +24,19 @@ export const EXAMS = {
 };
 export const EXAM_TAGS = Object.keys(EXAMS);
 
-/**
- * Subjects of the notes: [name, icon, what to cover, GK subject, default GK chapter]. The GK subject and chapter are
- * used when notes are added to the GK questions (the chapter is refined from the note's words).
- */
+/** Subjects of the notes: [name, icon, what to cover]. */
 export const SECTIONS = [
-  ["History", "🏛️", "dynasties and rulers, battles, inscriptions and archaeological sites, colonial period, freedom struggle events", "History", "Modern India"],
-  ["Art & Culture", "🎭", "temples and architecture, festivals, dance, music, literature, crafts and GI-tagged products, UNESCO sites", "History", "Art & Culture"],
-  ["Personalities", "👤", "freedom fighters, rulers, poets, reformers, scientists and others born or active here", "Static GK", "Personalities & Titles"],
-  ["Geography & Rivers", "🏞️", "location and borders, relief (hills, plateaus, passes, coast), rivers and their origin and tributaries, dams, lakes, waterfalls, climate and rainfall, minerals, ports", "Geography", "Indian Geography"],
-  ["Agriculture & Soils", "🌾", "soil types, fertile tracts, major crops and seasons, irrigation (canals, tanks), horticulture, plantations, livestock, fisheries", "Economy", "Agriculture"],
-  ["Economy & Industry", "🏭", "industries and clusters, major companies and PSUs, power plants, ports, transport corridors, tourism, GI products, economic rank", "Economy", "Industry & Infrastructure"],
-  ["Banking & Rural Development", "🏦", "regional rural bank, lead bank, cooperative banks, NABARD and SHG work, financial inclusion, rural schemes, MGNREGA, credit flow", "Banking & Finance", "Banking System"],
-  ["Polity & Governance", "⚖️", "formation and administration, Lok Sabha / Assembly seats, local bodies, special constitutional provisions, scheduled areas, landmark cases, inter-state issues", "Polity", "Constitution"],
-  ["Environment & Ecology", "🌿", "national parks, wildlife sanctuaries, tiger / elephant reserves, biosphere reserves, Ramsar sites, endemic species, environmental issues", "Geography", "Climate & Environment"],
-  ["Science, Energy & Defence", "🚀", "ISRO / DRDO / BARC centres, nuclear, wind and solar plants, defence bases, research institutes", "Science & Tech", "Space"],
-  ["Current Affairs", "📰", "events of the last two years: projects, schemes, awards, records, disasters, news (give the year)", CA, "National"],
+  ["History", "🏛️", "dynasties and rulers, battles, inscriptions and archaeological sites, colonial period, freedom struggle events"],
+  ["Art & Culture", "🎭", "temples and architecture, festivals, dance, music, literature, crafts and GI-tagged products, UNESCO sites"],
+  ["Personalities", "👤", "freedom fighters, rulers, poets, reformers, scientists and others born or active here"],
+  ["Geography & Rivers", "🏞️", "location and borders, relief (hills, plateaus, passes, coast), rivers and their origin and tributaries, dams, lakes, waterfalls, climate and rainfall, minerals, ports"],
+  ["Agriculture & Soils", "🌾", "soil types, fertile tracts, major crops and seasons, irrigation (canals, tanks), horticulture, plantations, livestock, fisheries"],
+  ["Economy & Industry", "🏭", "industries and clusters, major companies and PSUs, power plants, ports, transport corridors, tourism, GI products, economic rank"],
+  ["Banking & Rural Development", "🏦", "regional rural bank, lead bank, cooperative banks, NABARD and SHG work, financial inclusion, rural schemes, MGNREGA, credit flow"],
+  ["Polity & Governance", "⚖️", "formation and administration, Lok Sabha / Assembly seats, local bodies, special constitutional provisions, scheduled areas, landmark cases, inter-state issues"],
+  ["Environment & Ecology", "🌿", "national parks, wildlife sanctuaries, tiger / elephant reserves, biosphere reserves, Ramsar sites, endemic species, environmental issues"],
+  ["Science, Energy & Defence", "🚀", "ISRO / DRDO / BARC centres, nuclear, wind and solar plants, defence bases, research institutes"],
+  ["Current Affairs", "📰", "events of the last two years: projects, schemes, awards, records, disasters, news (give the year)"],
 ];
 export const SECTION_NAMES = SECTIONS.map((s) => s[0]);
 const GROUPS = [
@@ -378,37 +375,24 @@ export function readAreaNotes(text) {
 }
 
 // ---------- into GK questions ----------
-const subsRe = new Map();
-function chapterOf(category, fallback, text) {
-  const subs = TAXONOMY[category]?.subs;
-  if (!subs) return fallback;
-  let best = fallback;
-  let score = 0;
-  for (const [sub, src] of Object.entries(subs)) {
-    if (!subsRe.has(src)) subsRe.set(src, new RegExp(src, "gi"));
-    const hits = (String(text).match(subsRe.get(src)) || []).length;
-    if (hits > score) (best = sub), (score = hits);
-  }
-  return best;
-}
-
 /**
- * GK question inputs (for gk-store addItems) from the notes of one level. Notes with a question become questions (the
- * note is the explanation); notes without one become facts to remember.
+ * GK question inputs (for gk-store addItems) from the notes of one level, filed under their own head:
+ * Places Visited › <place> › <level> (e.g. "Places Visited › Palayamkottai, Tirunelveli › Tamil Nadu"), not under the
+ * common subjects. The subject and exam tag go in the tags. Notes with a question become questions (the note is the
+ * explanation); notes without one become facts to remember.
  */
-export function notesToGkInputs(notes, levelTitle, now = new Date()) {
+export function notesToGkInputs(notes, levelTitle, placeName) {
   return notes.map((n) => {
-    const [, , , category, chapter] = SECTIONS.find((x) => x[0] === n.section) || SECTIONS[0];
-    const text = `${n.note} ${n.q} ${n.a}`;
-    const isCA = category === CA;
     const base = {
-      category,
-      sub: isCA ? "National" : chapterOf(category, chapter, text),
-      year: isCA ? n.year || now.getFullYear() : 0,
-      tags: ["My area", str(levelTitle, 40), n.exam],
+      category: PLACES,
+      sub: str(levelTitle, 80),
+      place: str(placeName || levelTitle, 100),
+      year: 0,
+      tags: ["My area", n.section, n.exam],
       source: `My area · ${str(levelTitle, 80)}`,
       difficulty: n.exam === "SSC" ? 2 : n.exam === "UPSC" ? 4 : 3,
     };
-    return n.q && n.a ? { ...base, q: n.q, a: n.a, options: n.options, explain: n.note } : { ...base, q: n.note, a: "" };
+    const note = n.year ? `(${n.year}) ${n.note}` : n.note;
+    return n.q && n.a ? { ...base, q: n.q, a: n.a, options: n.options, explain: note } : { ...base, q: note, a: "" };
   });
 }

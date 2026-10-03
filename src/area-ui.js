@@ -159,9 +159,10 @@ export function createAreaUI(ctx, gkui) {
     const lvl = area && levelsOf(area.place).find((l) => l.key === key);
     const notes = area?.levels[key]?.notes || [];
     if (!lvl || !notes.length) return [];
-    const { added, skipped } = gk.addItems(notesToGkInputs(notes, lvl.name));
+    const { added, skipped } = gk.addItems(notesToGkInputs(notes, lvl.name, placeTitle(area.place)));
     ctx.afterChange();
-    if (!quiet) toast(`${plural(added.length, "question")} saved to your GK ✓${skipped.length ? ` (${skipped.length} already there)` : ""} — they come back in Today's revision and Practice.`, 6000);
+    if (!quiet)
+      toast(`${plural(added.length, "question")} saved under 📍 Places Visited › ${placeTitle(area.place)} ✓${skipped.length ? ` (${skipped.length} already there)` : ""} — they come back in Today's revision and Practice.`, 7000);
     const byQ = new Map(gk.liveItems().map((i) => [i.q, i]));
     return [...added.map((i) => i.id), ...skipped.map((s) => s.id || byQ.get(s.q)?.id).filter(Boolean)];
   }
@@ -268,7 +269,7 @@ export function createAreaUI(ctx, gkui) {
         )}</p>
         <div class="row wrap">
           ${withQ ? `<button class="btn small primary" type="button" data-action="area-quiz" data-key="${lvl.key}">🎯 Quiz me (${withQ})</button>` : ""}
-          <button class="btn small" type="button" data-action="area-save" data-key="${lvl.key}">➕ Save to my GK questions</button>
+          <button class="btn small" type="button" data-action="area-save" data-key="${lvl.key}">➕ Save under Places Visited</button>
         </div>
         <details class="area-tools"><summary class="small">More: remake, prompt, paste</summary><div class="row wrap">${tools}</div></details>
       </article>

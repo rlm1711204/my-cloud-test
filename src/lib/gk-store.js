@@ -5,7 +5,7 @@ import { stage } from "./srs.js";
 import { addDays } from "./srs.js";
 import { todayISO } from "./words.js";
 import { BANK_PREFIX, bankLoaded, bankRecord, isBankId } from "./gkbank.js";
-import { CA, SEP, topicKey } from "./gk-taxonomy.js";
+import { CA, PLACES, SEP, topicKey } from "./gk-taxonomy.js";
 import { answerKey, findDuplicate, makeItem, mergeItems } from "./gk.js";
 
 const KEY = "vv.gk.v1";
@@ -44,6 +44,10 @@ function blank() {
 
 let state = load();
 const listeners = new Set();
+if (state.moved) {
+  delete state.moved;
+  save();
+}
 
 function load() {
   try {
@@ -53,6 +57,9 @@ function load() {
     s.practice = normalize(raw.practice);
     s.items = (s.items || []).map((i) => makeItem(i));
     s.areas = Array.isArray(s.areas) ? s.areas.filter((a) => a && a.id && a.place) : [];
+    const before = s.items;
+    s.items = s.items.map((i) => toPlaces(i, s.areas));
+    if (s.items.some((i, k) => i !== before[k])) s.moved = true; // saved once below
     s.version = DATA_VERSION;
     return s;
   } catch {
@@ -275,6 +282,18 @@ export function todaysPlan() {
 }
 
 // ---------- My Area ----------
+/**
+ * My Area notes saved by the first version were filed under the common subjects (tags ["My area", level, exam]);
+ * they now live under Places Visited › place › level.
+ */
+function toPlaces(it, areas) {
+  if (it.category === PLACES || it.tags?.[0] !== "My area" || !String(it.source).startsWith("My area · ")) return it;
+  const level = String(it.source).slice("My area · ".length);
+  const area = areas.find((a) => ["local", "district", "state", "region"].some((k) => a.place?.[k] && level.startsWith(a.place[k]))) ?? null;
+  const placeName = area ? area.place.local || area.place.district || area.place.state || area.place.region : level;
+  const subject = { History: "History", Geography: "Geography & Rivers", Economy: "Economy & Industry", Polity: "Polity & Governance", "Banking & Finance": "Banking & Rural Development", "Science & Tech": "Science, Energy & Defence", "Static GK": "Personalities", [CA]: "Current Affairs" }[it.category] || it.category;
+  return makeItem({ ...it, category: PLACES, sub: level, place: placeName, year: 0, tags: ["My area", subject, it.tags[2] || ""].filter(Boolean) });
+}
 const sameAreaPlace = (a, b) => ["local", "district", "state", "region"].every((k) => String(a?.[k] || "").toLowerCase() === String(b?.[k] || "").toLowerCase());
 
 /** The place shown on the My Area screen (the last one opened), or null. */

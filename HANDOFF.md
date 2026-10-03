@@ -91,8 +91,10 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   level names (`makePlace`: a district HQ city becomes "neighbourhood, city" so the town level isn't the district again;
   region = zonal council from `regionOf`). Notes per level come from `areaNotes` (two aiTask calls: people/polity
   subjects, then land/economy) or the copied `buildAreaPrompt` + `readAreaNotes`. Stored in gk-store `state.areas`
-  (exported/imported with the GK backup, merged by id or same place). `notesToGkInputs` files notes under GK
-  chapters with tags ["My area", level, exam]; "Quiz me" saves then calls `gkui.quizOn(ids)`. The screen asks for the
+  (exported/imported with the GK backup, merged by id or same place). `notesToGkInputs` files notes under their own
+  head `PLACES` ("Places Visited"): `place` = the place's name, `sub` = the level, tags ["My area", subject, exam];
+  `topicKey` gives "Places Visited › place › level". gk-store `toPlaces` moves notes saved by the first version
+  (filed under common subjects) on load; "Quiz me" saves then calls `gkui.quizOn(ids)`. The screen asks for the
   location by itself only the first time (no saved place).
 
 ## The Maths and Reasoning parts

@@ -83,20 +83,24 @@ describe("My Area: notes", () => {
     expect(sectionOf("Tirunelveli district")).toBe("");
   });
 
-  it("turns notes into GK questions filed under the right subject and chapter", () => {
+  it("saves notes under their own head: Places Visited › place › level, with the subject and exam in the tags", async () => {
+    const { topicKey } = await import("../src/lib/gk-taxonomy.js");
     const notes = cleanNotes([
       { section: "Geography & Rivers", exam: "SSC", note: "The Thamirabarani rises in the Pothigai hills.", q: "Where does the Thamirabarani river rise?", a: "Pothigai hills", options: ["Nilgiris", "Palani hills", "Javadi hills"] },
-      { section: "Current Affairs", exam: "UPSC", note: "Floods in Tirunelveli in 2024.", q: "Flood year?", a: "2024", options: [], year: 2024 },
+      { section: "Current Affairs", exam: "UPSC", note: "Floods hit Tirunelveli in December.", q: "Which month did floods hit Tirunelveli?", a: "December", options: [], year: 2024 },
       { section: "Banking & Rural Development", exam: "RBI", note: "Tamil Nadu Grama Bank is the regional rural bank of the area.", q: "", a: "" },
       { section: "nonsense", exam: "xyz", note: "The Kattabomman memorial fort is at Panchalankurichi near Ottapidaram.", q: "", a: "" },
     ]);
     expect(notes.map((n) => n.section)).toEqual(["History", "Geography & Rivers", "Banking & Rural Development", "Current Affairs"]);
-    expect(notes.find((n) => /Kattabomman/.test(n.note))).toMatchObject({ section: "History", exam: "SSC" });
-    const items = notesToGkInputs(notes, "Tirunelveli district").map((x) => makeItem(x));
+    expect(notes[0].exam).toBe("SSC");
+    const items = notesToGkInputs(notes, "Tirunelveli district", "Palayamkottai, Tirunelveli").map((x) => makeItem(x));
     const river = items.find((i) => /Thamirabarani/.test(i.q));
-    expect(river).toMatchObject({ category: "Geography", sub: "Rivers, Lakes & Dams", a: "Pothigai hills", explain: "The Thamirabarani rises in the Pothigai hills.", source: "My area · Tirunelveli district" });
-    expect(river.tags).toEqual(["My area", "Tirunelveli district", "SSC"]);
-    expect(items.find((i) => /Flood/.test(i.q))).toMatchObject({ category: "Current Affairs", year: 2024 });
-    expect(items.find((i) => /Grama Bank/.test(i.q))).toMatchObject({ category: "Banking & Finance", a: "" }); // a fact to remember
+    expect(river).toMatchObject({ category: "Places Visited", sub: "Tirunelveli district", place: "Palayamkottai, Tirunelveli", a: "Pothigai hills", source: "My area · Tirunelveli district" });
+    expect(river.tags).toEqual(["My area", "Geography & Rivers", "SSC"]);
+    expect(topicKey(river)).toBe("Places Visited › Palayamkottai, Tirunelveli › Tirunelveli district");
+    expect(items.find((i) => /floods/i.test(i.q))).toMatchObject({ category: "Places Visited", explain: "(2024) Floods hit Tirunelveli in December." });
+    expect(items.find((i) => /Grama Bank/.test(i.q))).toMatchObject({ category: "Places Visited", a: "" }); // a fact to remember
+    expect(new Set(items.map(topicKey)).size).toBe(1); // never spread over History / Geography / Economy…
   });
+
 });

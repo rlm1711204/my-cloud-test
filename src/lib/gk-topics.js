@@ -1,7 +1,7 @@
 // The GK topic tree as a structure of keys ("Polity", "Polity › Constitution", "Current Affairs › 2026",
 // "Current Affairs › 2026 › Sports") and the logic for ticking / unticking any node for practice.
 // Pure functions; unit-tested.
-import { CA, SEP, SUBJECTS, topicKey } from "./gk-taxonomy.js";
+import { CA, PLACES, SEP, SUBJECTS, topicKey } from "./gk-taxonomy.js";
 
 /** Parent → children map for the topics that actually have questions. */
 export function buildTree(items) {
@@ -27,7 +27,7 @@ export function buildTree(items) {
   for (const [k, set] of children) out.set(k, [...set].sort(order));
   return out;
 }
-const rank = (subject) => (subject === CA ? -1 : SUBJECTS.includes(subject) ? SUBJECTS.indexOf(subject) : 99);
+const rank = (subject) => (subject === CA ? -2 : subject === PLACES ? -1 : SUBJECTS.includes(subject) ? SUBJECTS.indexOf(subject) : 99);
 
 export const labelOf = (key) => key.split(SEP).at(-1);
 const ancestors = (key) => key.split(SEP).slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join(SEP));

@@ -5,6 +5,8 @@
 export const SEP = " › ";
 export const CA = "Current Affairs";
 export const OTHER = "Other";
+/** Notes from 📍 My Area: their own head, by place visited → level (town, district, state, region). */
+export const PLACES = "Places Visited";
 
 /**
  * Subjects with their chapters. Each chapter has keywords (regular expressions, case-insensitive) used by
@@ -198,11 +200,12 @@ const STRONG = {
 };
 
 export const SUBJECTS = Object.keys(TAXONOMY);
-export const ALL_CATEGORIES = [...SUBJECTS, CA, OTHER];
+export const ALL_CATEGORIES = [...SUBJECTS, CA, PLACES, OTHER];
 
 /** The key for a question's place in the tree. */
 export function topicKey(item) {
   if (item.category === CA) return [CA, item.year || "Undated", item.sub || "Other"].join(SEP);
+  if (item.category === PLACES) return [PLACES, item.place || "Other places", item.sub || "General"].join(SEP);
   return [item.category || OTHER, item.sub || "General"].join(SEP);
 }
 
