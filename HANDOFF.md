@@ -79,6 +79,14 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 
 ## Decisions worth knowing before changing things
 
+- **Practice coverage is counted per item, not per list.** `practice.asked[id]` = how many times it was practised
+  (all three parts). `pickSession` always takes the least-asked items first (never-asked first, random within a tier,
+  weak items spread through the session), so practising one topic, a level filter or another source ("Mixed" vs
+  "My words") still counts, and finishing a session early never skips anything. "Round N" = every item asked at
+  least N−1 times. Older data (`rounds: {source: {round, seen}}`) is converted by `normalize()` on load and merge.
+- **A practice answer is also a revision** (`practiceReview` in srs.js): wrong → back tomorrow (once a day); right on
+  an item that is due → "good" and ticked on Today's list. Right on a new or not-yet-due item changes nothing.
+
 - **Gemini keys go in the `x-goog-api-key` header.** Google's newer `AQ.` keys fail as a `?key=`
   URL parameter. Several keys can be saved; they are tried in order, a key that hits its limit
   rests 10 minutes, and a key can be picked by hand on the Add screen.

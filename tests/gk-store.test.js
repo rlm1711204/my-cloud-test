@@ -3,7 +3,7 @@ import * as gk from "../src/lib/gk-store.js";
 import * as vocab from "../src/lib/store.js";
 import * as grammar from "../src/lib/grammar-store.js";
 import { loadBank } from "../src/lib/gkbank.js";
-import { pickSession, recordAnswer } from "../src/lib/practice.js";
+import { coverage, pickSession, recordAnswer } from "../src/lib/practice.js";
 import { topicKey, CA } from "../src/lib/gk-taxonomy.js";
 import { cloze } from "../src/lib/gk-quiz.js";
 
@@ -50,24 +50,16 @@ describe("GK store", () => {
   it("practice sessions mix topics, and rounds cover EVERY question before any repeats", () => {
     const pool = gk.itemsFor("bank", { forPractice: true });
     let practice = gk.get().practice;
-    const asked = new Set();
+    const seq = [];
     let firstSessionTopics = null;
-    let rounds = 0;
-    for (let s = 0; s < 40 && asked.size < pool.length; s++) {
-      const { ids, roundOf, practice: p } = pickSession(pool, practice, "bank", 20, Math.random, (id) => topicKey(pool.find((x) => x.id === id)));
+    for (let s = 0; s < 40 && seq.length < pool.length + 20; s++) {
+      const { ids } = pickSession(pool, practice, "bank", 20, Math.random, (id) => topicKey(pool.find((x) => x.id === id)));
       firstSessionTopics ??= new Set(ids.map((id) => topicKey(pool.find((x) => x.id === id))));
-      practice = p;
-      for (const id of ids) {
-        if (roundOf[id] === 1) {
-          expect(asked.has(id)).toBe(false); // no repeats within the first round
-          asked.add(id);
-        }
-        practice = recordAnswer(practice, "bank", id, true, { round: roundOf[id] });
-      }
-      rounds = practice.rounds.bank.round;
+      for (const id of ids) (seq.push(id), (practice = recordAnswer(practice, "bank", id, true)));
     }
-    expect(asked.size).toBe(pool.length); // every question asked once in round 1
-    expect(rounds).toBeLessThanOrEqual(2); // the last session may start round 2
+    // Every question is asked once before any question is asked a second time.
+    expect(new Set(seq.slice(0, pool.length)).size).toBe(pool.length);
+    expect(coverage(pool, practice, "bank").round).toBe(2);
     expect(firstSessionTopics.size).toBeGreaterThanOrEqual(15); // 20 questions from 15+ different chapters
   });
 

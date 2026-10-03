@@ -20,6 +20,7 @@ Every day you get a **Word of the Day** plus **10 words to memorise** (you can c
 | 🃏 **Flashcards** | Forgot / Hard / Knew it / Easy. Words come back after 1 → 3 → 7 → 14 → 30 → 60 days |
 | 🎯 **Practice** | Word → meaning, Word → Hindi, Meaning → word, fill in the blank, synonyms, antonyms. Every word is asked once per round before any repeats; wrong answers come back a few questions later and in later sessions until answered right twice in a row |
 | ☁️ **Google Drive** | `VocabVault/vocab-master.json` (the app's data) plus a **"Vocab Master List" Google Sheet** you can open, filter or print. Syncs across phone and laptop |
+| 🔁 **Nothing left out** | Practice remembers how many times each word, rule and question has been asked — across topics, levels and sources — and always asks the least-practised ones first. A practice answer also counts as revision: a wrong answer comes back tomorrow, a right answer on a due item ticks it off Today |
 | 📤 **Extras** | Share the Word of the Day to WhatsApp, 🔥 streak counter, CSV export for Excel, backup/restore, dark mode, works offline |
 
 ## 📗 Grammar Rules (the second part)

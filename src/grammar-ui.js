@@ -6,7 +6,7 @@ import { rulesFromFiles, rulesFromText, completeRule } from "./lib/grammar-ai.js
 import { isAdvanced, isBookId, loadRuleBook } from "./lib/rulebook.js";
 import { TOPICS, borrowFromBook, findSimilarRule, makeRule, needsDetails, ruleKey, rulesToCSV, textToRules, SAME_RULE } from "./lib/rules.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
-import { review, stage, stats, streak } from "./lib/srs.js";
+import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
 import { todayISO } from "./lib/words.js";
 import { AllProvidersFailed, hasAI } from "./lib/engine.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
@@ -368,17 +368,13 @@ export function createGrammarUI(ctx) {
     const source = p.practiceSource;
     const pool = practicePool(source);
     let ids;
-    let roundOf = {};
     if (weakOnly) {
       ids = weakWords(pool, gs.get().practice).map((r) => r.id).slice(0, Number(p.practiceSize));
     } else {
-      const picked = pickSession(pool, gs.get().practice, source, Number(p.practiceSize) || 15);
-      ids = picked.ids;
-      roundOf = picked.roundOf;
-      gs.update((s) => (s.practice = picked.practice), { touchesData: false });
+      ids = pickSession(pool, gs.get().practice, source, Number(p.practiceSize) || 15).ids;
     }
     if (!ids.length) return toast("Nothing to practise here yet.");
-    gui.quiz = { kind, source, queue: ids, roundOf, i: 0, picked: null, revealed: false, score: 0, answered: 0, wrong: [], requeued: new Set(), pool };
+    gui.quiz = { kind, source, queue: ids, i: 0, picked: null, revealed: false, score: 0, answered: 0, wrong: [], requeued: new Set(), pool };
     gui.quiz.current = questionFor(gui.quiz, false);
     render();
     window.scrollTo(0, 0);
@@ -812,9 +808,18 @@ export function createGrammarUI(ctx) {
       else {
         q.wrong.push(cur.ruleId);
         q.queue = requeue(q.queue, q.i, cur.ruleId, q.requeued);
-        gs.updateRule(cur.ruleId, (r) => review(r, "again"));
       }
-      gs.update((s) => (s.practice = recordAnswer(s.practice, q.source, cur.ruleId, correct, { round: q.roundOf[cur.ruleId] })), { touchesData: false });
+      // The answer also counts as a revision: wrong → back tomorrow; right on a due rule → moves on.
+      const rule = gs.byId(cur.ruleId);
+      const revised = rule && practiceReview(rule, correct);
+      if (revised) gs.updateRule(cur.ruleId, () => revised);
+      gs.update(
+        (s) => {
+          s.practice = recordAnswer(s.practice, q.source, cur.ruleId, correct);
+          if (revised && s.daily?.date === todayISO() && s.daily.ids.includes(cur.ruleId) && !s.daily.done[cur.ruleId]) s.daily.done[cur.ruleId] = correct ? "good" : "again";
+        },
+        { touchesData: false },
+      );
       gs.markActive();
       render();
     },

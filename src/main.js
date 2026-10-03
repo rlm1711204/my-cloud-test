@@ -8,9 +8,9 @@ import { GEMINI_AUTO, checkKey, geminiKeysOf, keyStatus, knownModels, looksLikeG
 import { filesToSources, filesToText } from "./lib/extract.js";
 import { candidatesFromText, difficultyFromLevel, isEasy, levelOf, loadLevels } from "./lib/difficulty.js";
 import { enrichFree } from "./lib/freedict.js";
-import { review, stage, stats, streak } from "./lib/srs.js";
+import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
 import { isBankId, loadBank } from "./lib/bank.js";
-import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
+import { coverage, markAsked, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import * as notify from "./lib/notify.js";
 import * as install from "./lib/install.js";
 import { brand } from "./brand.js";
@@ -1136,7 +1136,9 @@ function questionFor(q, pool, retry = false) {
     const kinds = q.kind === "mixed" || retry ? shuffle(ALL_KINDS) : [q.kind, ...shuffle(ALL_KINDS)];
     const made = w && kinds.map((k) => makeQuestion(w, k, pool)).find(Boolean);
     if (made) return { ...made, retry };
-    q.queue.splice(q.i, 1); // not enough details for any question: skip
+    // Not enough details for any question: skip it, but count it as asked so it can't hold up coverage.
+    if (w) store.update((s) => (s.practice = markAsked(s.practice, w.id)), { touchesData: false });
+    q.queue.splice(q.i, 1);
   }
   return null;
 }
@@ -1148,16 +1150,12 @@ function startQuiz(kind, { weakOnly = false } = {}) {
   if (pool.length < 4) return toast("Need at least 4 words with meanings for practice.");
   const size = Number(st.practiceSize) || 20;
   let ids;
-  let roundOf = {};
   if (weakOnly) {
     ids = shuffle(weakWords(pool, store.get().practice).map((w) => w.id)).slice(0, size);
   } else {
-    const picked = pickSession(pool, store.get().practice, source, size);
-    ids = picked.ids;
-    roundOf = picked.roundOf;
-    store.update((s) => (s.practice = picked.practice));
+    ids = pickSession(pool, store.get().practice, source, size).ids;
   }
-  ui.quiz = { kind, source, queue: ids, roundOf, i: 0, picked: null, score: 0, answered: 0, wrong: [], requeued: new Set(), pool };
+  ui.quiz = { kind, source, queue: ids, i: 0, picked: null, score: 0, answered: 0, wrong: [], requeued: new Set(), pool };
   ui.quiz.current = questionFor(ui.quiz, pool);
   if (!ui.quiz.current) {
     ui.quiz = null;
@@ -1799,12 +1797,16 @@ const actions = {
     else {
       q.wrong.push(cur.wordId);
       q.queue = requeue(q.queue, q.i, cur.wordId, q.requeued); // ask again a few questions later
-      store.updateWord(cur.wordId, (w) => review(w, "again"));
     }
+    // The answer also counts as a revision: wrong → back tomorrow; right on a due word → moves on.
+    const w = store.byId(cur.wordId);
+    const revised = w && practiceReview(w, correct);
+    if (revised) store.updateWord(cur.wordId, () => revised);
     store.update((s) => {
-      s.practice = recordAnswer(s.practice, q.source, cur.wordId, correct, { round: q.roundOf[cur.wordId] });
+      s.practice = recordAnswer(s.practice, q.source, cur.wordId, correct);
       const today = todayISO();
       if (!s.activity.includes(today)) s.activity.push(today);
+      if (revised && s.daily?.date === today && s.daily.ids.includes(cur.wordId) && !s.daily.done[cur.wordId]) s.daily.done[cur.wordId] = correct ? "good" : "again";
     });
     render();
   },

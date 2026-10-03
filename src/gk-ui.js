@@ -8,7 +8,7 @@ import { ALL_TOPICS, CA, CA_TOPICS, SEP, TAXONOMY, topicKey } from "./lib/gk-tax
 import { findDuplicate, isFact, itemsToCSV, makeItem, textToItems } from "./lib/gk.js";
 import { buildTree, labelOf, nodeState, toggle } from "./lib/gk-topics.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
-import { review, stage, stats, streak } from "./lib/srs.js";
+import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
 import { todayISO } from "./lib/words.js";
 import { AllProvidersFailed, hasAI } from "./lib/engine.js";
 import { filesToSources, filesToText } from "./lib/extract.js";
@@ -374,17 +374,13 @@ export function createGkUI(ctx) {
     const source = p.practiceSource;
     let pool = topics ? gk.itemsFor(source).filter((i) => topics.some((t) => topicKey(i) === t || topicKey(i).startsWith(t + SEP))) : gk.itemsFor(source, { forPractice: true });
     let ids;
-    let roundOf = {};
     if (weakOnly) ids = weakWords(pool, gk.get().practice).map((i) => i.id).slice(0, Number(p.practiceSize));
     else {
       const byId = new Map(pool.map((i) => [i.id, i]));
-      const picked = pickSession(pool, gk.get().practice, source, Number(p.practiceSize) || 20, Math.random, (id) => topicKey(byId.get(id)));
-      ids = picked.ids;
-      roundOf = picked.roundOf;
-      gk.update((s) => (s.practice = picked.practice), { touchesData: false });
+      ids = pickSession(pool, gk.get().practice, source, Number(p.practiceSize) || 20, Math.random, (id) => topicKey(byId.get(id))).ids;
     }
     if (!ids.length) return toast("Nothing to practise in these topics.");
-    gui.quiz = { kind, source, queue: ids, roundOf, i: 0, picked: null, revealed: false, score: 0, answered: 0, wrong: [], requeued: new Set(), pool };
+    gui.quiz = { kind, source, queue: ids, i: 0, picked: null, revealed: false, score: 0, answered: 0, wrong: [], requeued: new Set(), pool };
     gui.quiz.current = questionFor(gui.quiz, false);
     if (view() !== "k-practice") go("k-practice");
     else render();
@@ -807,9 +803,17 @@ export function createGkUI(ctx) {
       else {
         q.wrong.push(cur.itemId);
         q.queue = requeue(q.queue, q.i, cur.itemId, q.requeued);
-        gk.updateItem(cur.itemId, (i) => review(i, "again"));
       }
-      gk.update((s) => (s.practice = recordAnswer(s.practice, q.source, cur.itemId, correct, { round: q.roundOf[cur.itemId] })), { touchesData: false });
+      // The answer also counts as a revision: wrong → back tomorrow; right on a due question → moves on.
+      const revised = it && practiceReview(it, correct);
+      if (revised) gk.updateItem(cur.itemId, () => revised);
+      gk.update(
+        (s) => {
+          s.practice = recordAnswer(s.practice, q.source, cur.itemId, correct);
+          if (revised && s.daily?.date === todayISO() && s.daily.ids.includes(cur.itemId) && !s.daily.done[cur.itemId]) s.daily.done[cur.itemId] = correct ? "good" : "again";
+        },
+        { touchesData: false },
+      );
       if (it) gk.markTopic(it);
       render();
     },

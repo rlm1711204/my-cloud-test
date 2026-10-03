@@ -18,6 +18,18 @@ export function stage(w) {
 }
 
 /**
+ * A practice answer counted as a revision. Wrong → "again" (back tomorrow; once a day is enough).
+ * Right on an item that is due → "good" (so it moves on as if revised on Today). Right on a new or
+ * not-yet-due item changes nothing. Returns the updated item, or null when nothing changes.
+ */
+export function practiceReview(w, correct, today = todayISO()) {
+  const reviewedToday = Boolean(w.lastReviewed) && todayISO(new Date(w.lastReviewed)) === today;
+  if (!correct) return reviewedToday && w.box <= 1 && w.due > today ? null : review(w, "again", today);
+  if (stage(w) === "new" || w.due > today) return null;
+  return review(w, "good", today);
+}
+
+/**
  * Apply a review result. grade: "again" (forgot), "hard", "good" (knew it), "easy".
  * Returns an updated copy of the word.
  */

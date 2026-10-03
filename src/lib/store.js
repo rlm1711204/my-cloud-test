@@ -1,7 +1,7 @@
 // App state persisted in localStorage (works offline); the synced part mirrors Google Drive.
 import { DEFAULT_MODEL } from "./ai.js";
 import { BANK_PREFIX, bankLoaded, bankRecord, isBankId, progressOf } from "./bank.js";
-import { emptyPractice, mergePractice } from "./practice.js";
+import { emptyPractice, mergePractice, normalize } from "./practice.js";
 import { buildDailyPlan } from "./srs.js";
 import { buildIndex, makeWord, mergeWordLists, todayISO, wordKey } from "./words.js";
 
@@ -42,7 +42,7 @@ function blank() {
     activity: [], // dates with at least one review (for the streak)
     daily: null, // {date, wotd, ids, done: {id: grade}}
     bank: {}, // Word Bank revision progress: id -> {box, due, reviews, lapses, lastReviewed, starred, updatedAt}
-    practice: emptyPractice(), // practice rounds & weak words (see practice.js)
+    practice: emptyPractice(), // how often each word was practised & weak words (see practice.js)
     settings: { ...DEFAULT_SETTINGS },
     drive: { folderId: null, fileId: null, sheetId: null, lastSync: null },
     dirty: false, // local changes not yet uploaded
@@ -61,7 +61,7 @@ function load() {
       ...raw,
       settings: { ...DEFAULT_SETTINGS, ...raw.settings, notify: { ...DEFAULT_SETTINGS.notify, ...raw.settings?.notify } },
     };
-    s.practice = { ...emptyPractice(), ...raw.practice };
+    s.practice = normalize(raw.practice);
     s.words = (s.words || []).map((w) => makeWord(w));
     // Older versions kept one Gemini key; move it into the list.
     if (s.settings.geminiKey) {

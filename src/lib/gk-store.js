@@ -1,6 +1,6 @@
 // GK data, kept apart from vocabulary and grammar: its own storage key, backup file and Google Drive file.
 // Revision is planned so every subject, chapter and question comes round periodically (see todaysPlan).
-import { emptyPractice, interleave, mergePractice } from "./practice.js";
+import { emptyPractice, interleave, mergePractice, normalize } from "./practice.js";
 import { stage } from "./srs.js";
 import { addDays } from "./srs.js";
 import { todayISO } from "./words.js";
@@ -48,7 +48,7 @@ function load() {
     const raw = typeof localStorage === "undefined" ? null : JSON.parse(localStorage.getItem(KEY) || "null");
     if (!raw) return blank();
     const s = { ...blank(), ...raw, prefs: { ...DEFAULT_PREFS, ...raw.prefs } };
-    s.practice = { ...emptyPractice(), ...raw.practice };
+    s.practice = normalize(raw.practice);
     s.items = (s.items || []).map((i) => makeItem(i));
     s.version = DATA_VERSION;
     return s;
@@ -173,16 +173,18 @@ export function addBankItemToMine(id) {
 // ---------- the topic tree with progress ----------
 /**
  * Counts for the topic tree: for every subject, chapter (and Current Affairs year → topic): how many
- * questions, how many seen in the current practice round, mastered, weak and due.
+ * questions, how many asked in the current practice round, mastered, weak and due.
  */
 export function topicTree(items, practice = state.practice, source = state.prefs.practiceSource, today = todayISO()) {
-  const round = practice.rounds?.[source] ?? { round: 1, seen: {} };
+  const { asked } = normalize(practice);
+  // "Covered this round" = asked more often than the least-practised question in the list.
+  const base = items.length ? Math.min(...items.map((it) => asked[it.id] ?? 0)) : 0;
   const tree = new Map();
   const bump = (key, it) => {
     if (!tree.has(key)) tree.set(key, { key, total: 0, covered: 0, mastered: 0, weak: 0, due: 0, fresh: 0 });
     const n = tree.get(key);
     n.total += 1;
-    if (round.seen[it.id] === round.round) n.covered += 1;
+    if ((asked[it.id] ?? 0) > base) n.covered += 1;
     if (stage(it) === "mastered") n.mastered += 1;
     if (stage(it) === "new") n.fresh += 1;
     if (practice.weak?.[it.id]?.need) n.weak += 1;

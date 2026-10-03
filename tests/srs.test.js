@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays, buildDailyPlan, review, stage, stats, streak } from "../src/lib/srs.js";
+import { practiceReview } from "../src/lib/srs.js";
 import { makeWord } from "../src/lib/words.js";
 
 const T = "2026-09-30";
@@ -68,5 +69,25 @@ describe("streak and stats", () => {
   it("summarises stages", () => {
     const s = stats([mk("a"), mk("b", { box: 2, reviews: 2, due: T }), mk("c", { deleted: true })], T);
     expect(s).toMatchObject({ total: 2, new: 1, learning: 1, due: 1 });
+  });
+});
+
+describe("practice answers count as revision", () => {
+  const T = "2026-10-03";
+  const base = { box: 0, reviews: 0, lapses: 0, due: T, lastReviewed: null };
+  it("right on a due item moves it on; right on a new or not-due item changes nothing", () => {
+    const due = { ...base, box: 2, reviews: 3, due: "2026-10-01" };
+    const r = practiceReview(due, true, T);
+    expect(r.box).toBe(3);
+    expect(r.due > T).toBe(true);
+    expect(practiceReview(base, true, T)).toBe(null);
+    expect(practiceReview({ ...due, due: "2026-10-09" }, true, T)).toBe(null);
+  });
+  it("wrong sends it back to tomorrow, once a day", () => {
+    const w = { ...base, box: 4, reviews: 6, due: "2026-11-01" };
+    const r = practiceReview(w, false, T);
+    expect(r.box).toBe(1);
+    expect(r.due).toBe("2026-10-04");
+    expect(practiceReview({ ...r, lastReviewed: new Date(`${T}T12:00:00`).toISOString() }, false, T)).toBe(null);
   });
 });

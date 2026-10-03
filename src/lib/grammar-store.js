@@ -1,6 +1,6 @@
 // Grammar Rules data: kept completely apart from the vocabulary data — its own storage key, its own backup
 // file and its own Google Drive file — so either part can be backed up, restored or reset on its own.
-import { emptyPractice, mergePractice } from "./practice.js";
+import { emptyPractice, mergePractice, normalize } from "./practice.js";
 import { buildDailyPlan } from "./srs.js";
 import { todayISO } from "./words.js";
 import { BOOK_PREFIX, bookRecord, isAdvanced, isBookId, ruleBookLoaded } from "./rulebook.js";
@@ -47,7 +47,7 @@ function load() {
     const raw = typeof localStorage === "undefined" ? null : JSON.parse(localStorage.getItem(KEY) || "null");
     if (!raw) return blank();
     const s = { ...blank(), ...raw, prefs: { ...DEFAULT_PREFS, ...raw.prefs } };
-    s.practice = { ...emptyPractice(), ...raw.practice };
+    s.practice = normalize(raw.practice);
     s.rules = (s.rules || []).map((r) => makeRule(r));
     s.version = DATA_VERSION;
     return s;
