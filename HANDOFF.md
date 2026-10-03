@@ -86,6 +86,15 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
 - AI (`gk-ai.js`): list questions (facts → questions), then cards 10 at a time with category/sub/year/month/options/
   explain/trick; `aiAnswered` marks answers the AI supplied. Cards are checked to match the question asked.
 
+- **📍 My Area** (`k-area`, src/area-ui.js): geolocation → `placeAt` (locate.js: Nominatim reverse, BigDataCloud
+  fallback; coordinates rounded to ~100 m, never saved) or a typed place (`findPlace`) → a confirm form with the four
+  level names (`makePlace`: a district HQ city becomes "neighbourhood, city" so the town level isn't the district again;
+  region = zonal council from `regionOf`). Notes per level come from `areaNotes` (two aiTask calls: people/polity
+  subjects, then land/economy) or the copied `buildAreaPrompt` + `readAreaNotes`. Stored in gk-store `state.areas`
+  (exported/imported with the GK backup, merged by id or same place). `notesToGkInputs` files notes under GK
+  chapters with tags ["My area", level, exam]; "Quiz me" saves then calls `gkui.quizOn(ids)`. The screen asks for the
+  location by itself only the first time (no saved place).
+
 ## The Maths and Reasoning parts
 
 - Two separate parts from one implementation: `createQuantUI(ctx, part)` (src/quant-ui.js) with prefix `m` (views `m-today`…)

@@ -54,7 +54,8 @@ general-knowledge questions:
 | ☀️ **Today** | Question of the Day + N questions, **spread across topics**: due revisions first, then new questions taking turns between chapters, starting with the chapters you have not revised for longest. A "Not revised for a while" card lists the stalest chapters with a one-tap practice button |
 | 🎯 **Practice** | Multiple choice, True or false, Recall (and fill-the-gap for facts). **Untick any subject, chapter or Current Affairs year** (optionally for Today too). Every selected question is asked once per round before any repeats, chapters are interleaved, and wrong answers come back until right twice in a row |
 | 🗺️ **Topics (coverage map)** | Subject → chapter (Current Affairs → year → topic) with how much of each was covered this round, mastered, weak and due. Search, edit, star, "Complete with AI", practise one chapter, CSV export |
-| 💾 **Separate data** | Own backup file and own Drive file (`gk-questions.json` + a "GK Questions" sheet). Restoring twice never duplicates |
+| 📍 **My Area** | Exam notes about the place you are in. It asks for your location (or type a place), confirms **four levels — your town / taluk, district, state and region** (zonal council: South India, North-East India…) — and writes notes for each, sorted into **History, Art & Culture, Personalities, Geography & Rivers, Agriculture & Soils, Economy & Industry, Banking & Rural Development, Polity & Governance, Environment & Ecology, Science/Energy/Defence and Current Affairs**. Every note is tagged **SSC** (one-line fact), **UPSC** (deeper link) or **RBI** (economy & rural angle), shown in that order, with a filter; each has a question with options. Without an AI key: copy the prompt into Gemini/ChatGPT and paste its answer. "Quiz me" practises a level; "Save to my GK questions" files the notes under the right chapters for Today's revision. Several places can be kept (home town, posting) |
+| 💾 **Separate data** | Own backup file and own Drive file (`gk-questions.json` + a "GK Questions" sheet). Restoring twice never duplicates; My Area notes travel with it |
 
 ## 🔢 Maths and 🧩 Reasoning (two separate parts)
 
@@ -180,6 +181,10 @@ src/
   lib/gk-topics.js   Topic tree and tick/untick logic for practice
   lib/gk-quiz.js     GK question types (MCQ, true/false, recall, fill-the-gap)
   lib/gk-ai.js       GK prompts: list questions, then write cards with topic, year, options and a trick
+  area-ui.js         GK → 📍 My Area screen (location, the four levels, notes by subject and exam, quiz / save)
+  lib/area.js        My Area: place names → levels, regions (zonal councils), AI instruction, copy prompt, paste reader
+  lib/area-ai.js     My Area notes with AI (two requests per level)
+  lib/locate.js      Phone location → place names (OpenStreetMap Nominatim, BigDataCloud fallback)
   lib/gkbank.js      Question Bank parser + checker (data in src/data/gk1-4.js)
   quant-ui.js        Maths and Reasoning screens (one module, two instances: prefix m- and r-)
   lib/quant-taxonomy.js Subjects/topics + offline classifier · lib/mathtext.js LaTeX → plain maths

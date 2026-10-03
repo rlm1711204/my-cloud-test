@@ -34,6 +34,8 @@ function blank() {
     bank: {}, // Question Bank progress: id -> {box, due, reviews, lapses, lastReviewed, starred, updatedAt}
     practice: emptyPractice(),
     topicSeen: {}, // topic key -> last date any question of it was revised (for balancing)
+    areas: [], // "My Area" notes: [{id, place, levels: {local|district|state|region: {notes, by, madeAt}}, createdAt, updatedAt}]
+    areaId: null, // the place shown on the My Area screen
     prefs: { ...DEFAULT_PREFS },
     drive: { fileId: null, sheetId: null, lastSync: null },
     dirty: false,
@@ -50,6 +52,7 @@ function load() {
     const s = { ...blank(), ...raw, prefs: { ...DEFAULT_PREFS, ...raw.prefs } };
     s.practice = normalize(raw.practice);
     s.items = (s.items || []).map((i) => makeItem(i));
+    s.areas = Array.isArray(s.areas) ? s.areas.filter((a) => a && a.id && a.place) : [];
     s.version = DATA_VERSION;
     return s;
   } catch {
@@ -139,7 +142,7 @@ export function addItems(list) {
   for (const input of list) {
     const it = makeItem(input);
     const dup = findDuplicate(it, [...existing, ...added]);
-    if (dup) skipped.push({ q: it.q, existing: dup.q });
+    if (dup) skipped.push({ q: it.q, existing: dup.q, id: dup.id });
     else added.push(it);
   }
   if (added.length) update((s) => (s.items = mergeItems(s.items, added)));
@@ -271,6 +274,55 @@ export function todaysPlan() {
   return state.daily;
 }
 
+// ---------- My Area ----------
+const sameAreaPlace = (a, b) => ["local", "district", "state", "region"].every((k) => String(a?.[k] || "").toLowerCase() === String(b?.[k] || "").toLowerCase());
+
+/** The place shown on the My Area screen (the last one opened), or null. */
+export const currentArea = () => (state.areaId === "__new__" ? null : (state.areas.find((a) => a.id === state.areaId) ?? state.areas[0] ?? null));
+
+/** Save a place (a new one, or the same place again keeps its notes) and show it. Returns the area. */
+export function saveAreaPlace(place) {
+  const now = new Date().toISOString();
+  let area = state.areas.find((a) => sameAreaPlace(a.place, place));
+  update((s) => {
+    if (!area) {
+      area = { id: `area-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, place, levels: {}, createdAt: now, updatedAt: now };
+      s.areas.unshift(area);
+    }
+    s.areaId = area.id;
+  });
+  return area;
+}
+
+/** Change the place names of a saved place (notes of a level whose name changed are dropped). */
+export function editAreaPlace(id, place) {
+  update((s) => {
+    const a = s.areas.find((x) => x.id === id);
+    if (!a) return;
+    for (const k of ["local", "district", "state", "region"]) if (String(a.place[k] || "") !== String(place[k] || "")) delete a.levels[k];
+    a.place = place;
+    a.updatedAt = new Date().toISOString();
+  });
+}
+
+export function setAreaNotes(id, key, notes, by = "") {
+  update((s) => {
+    const a = s.areas.find((x) => x.id === id);
+    if (!a) return;
+    a.levels[key] = { notes, by, madeAt: new Date().toISOString() };
+    a.updatedAt = new Date().toISOString();
+  });
+}
+
+export const showArea = (id) => update((s) => (s.areaId = id), { touchesData: false });
+
+export function deleteArea(id) {
+  update((s) => {
+    s.areas = s.areas.filter((a) => a.id !== id);
+    if (s.areaId === id) s.areaId = s.areas[0]?.id ?? null;
+  });
+}
+
 /** Current Affairs years present in a list, newest first. */
 export const caYears = (items) => [...new Set(items.filter((i) => i.category === CA).map((i) => i.year))].sort((a, b) => b - a);
 
@@ -285,6 +337,7 @@ export const exportData = () => ({
   bank: state.bank,
   practice: state.practice,
   topicSeen: state.topicSeen,
+  areas: state.areas,
   prefs: state.prefs,
 });
 
@@ -332,6 +385,12 @@ export function importData(data, { markDirty = false, applyPrefs = false } = {})
       }
       for (const [k, d] of Object.entries(data.topicSeen || {})) if (!s.topicSeen[k] || d > s.topicSeen[k]) s.topicSeen[k] = d;
       s.practice = mergePractice(s.practice, data.practice);
+      for (const a of Array.isArray(data.areas) ? data.areas : []) {
+        if (!a?.id || !a.place) continue;
+        const i = s.areas.findIndex((x) => x.id === a.id || sameAreaPlace(x.place, a.place));
+        if (i < 0) s.areas.push(a);
+        else if (String(a.updatedAt) > String(s.areas[i].updatedAt)) s.areas[i] = { ...a, id: s.areas[i].id };
+      }
       if (applyPrefs && data.prefs) {
         s.prefs = { ...s.prefs, ...Object.fromEntries(Object.entries(data.prefs).filter(([k]) => k in DEFAULT_PREFS)) };
         s.daily = null;

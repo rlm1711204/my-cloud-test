@@ -23,6 +23,7 @@ import { createGrammarUI } from "./grammar-ui.js";
 import * as gk from "./lib/gk-store.js";
 import { itemsToCSV } from "./lib/gk.js";
 import { createGkUI } from "./gk-ui.js";
+import { createAreaUI } from "./area-ui.js";
 import { maths as mathsStore, reasoning as reasonStore } from "./lib/quant-stores.js";
 import { onSaveError } from "./lib/quant-store.js";
 import { qItemsToCSV } from "./lib/quant.js";
@@ -1593,6 +1594,12 @@ const gkui = createGkUI({
   },
 });
 
+// GK → 📍 My Area: exam notes about where you are.
+const areaui = createAreaUI(
+  { $, esc, toast, plural, render: () => render(), go: (v) => go(v), view: () => view, openOverlay, closeOverlay, settings, keyPicker, afterChange: () => (updateSyncChip(), scheduleAutoSync()) },
+  gkui,
+);
+
 // ---------- the Maths and Reasoning parts (one module, two instances) ----------
 const quantCtx = {
   $,
@@ -1800,6 +1807,7 @@ const VIEWS = {
   settings: viewSettings,
   ...grammar.views,
   ...gkui.views,
+  ...areaui.views,
   ...Object.assign({}, ...QPARTS.map((q) => q.ui.views)),
 };
 
@@ -2138,7 +2146,7 @@ const actions = {
   },
 };
 
-Object.assign(actions, grammar.actions, gkui.actions, ...QPARTS.map((q) => q.ui.actions));
+Object.assign(actions, grammar.actions, gkui.actions, areaui.actions, ...QPARTS.map((q) => q.ui.actions));
 
 document.addEventListener("click", (e) => {
   const nav = e.target.closest("[data-nav]");
@@ -2161,6 +2169,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("change", async (e) => {
   if (await grammar.onChange(e)) return;
   if (await gkui.onChange(e)) return;
+  if (areaui.onChange(e)) return;
   for (const q of QPARTS) if (await q.ui.onChange(e)) return;
   const t = e.target;
   if (t.dataset.input === "files") {
@@ -2385,7 +2394,7 @@ let updatePending = false;
 
 /** Nothing in progress that a reload would interrupt. */
 const safeToReload = () =>
-  !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !grammar.busy() && !gkui.busy() && !QPARTS.some((q) => q.ui.busy()) && !$("#overlay").classList.contains("open");
+  !ui.busy && !ui.session && !ui.quiz && !ui.candidates && !grammar.busy() && !gkui.busy() && !areaui.busy() && !QPARTS.some((q) => q.ui.busy()) && !$("#overlay").classList.contains("open");
 
 /** Reload into the newest version, keeping typed words. Returns true if the page is reloading. */
 function updateNow() {

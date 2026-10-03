@@ -552,3 +552,25 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .crop-box .h[data-h="br"] { right: 0; bottom: 0; cursor: nwse-resize; }
 .fig-actions { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .fig-actions p { margin: 0 0 6px; }
+
+/* GK → My Area */
+.area-entry { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer; font: inherit; color: var(--ink); border: 1px solid var(--line); }
+.area-entry:hover { border-color: var(--primary); }
+.area-entry > span:nth-child(2) { flex: 1; min-width: 0; }
+.area-levels button { display: grid; gap: 2px; justify-items: center; padding: 8px 2px; font-size: .78rem; }
+.area-levels small { font-weight: 700; color: var(--ink-2); }
+.chips .chip { border: 0; cursor: pointer; font: 600 .82rem var(--sans); color: var(--ink); padding: 5px 12px; }
+.chips .chip.on { background: var(--primary); color: #fff; }
+.area-sec { padding: 0; }
+.area-sec > summary { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; cursor: pointer; list-style: none; }
+.area-sec > summary::-webkit-details-marker { display: none; }
+.area-notes { list-style: none; margin: 0; padding: 0 14px 10px; }
+.area-notes > li { padding: 9px 0; border-top: 1px solid var(--line); line-height: 1.45; }
+.area-q { margin-top: 4px; font-size: .9rem; }
+.area-q summary { cursor: pointer; color: var(--ink-2); }
+.area-q p { margin: 4px 0 0 18px; }
+.area-tools summary { cursor: pointer; color: var(--ink-2); margin-top: 6px; }
+.badge.exam { font-size: .68rem; padding: 1px 6px; vertical-align: 1px; }
+.badge.exam.ssc { background: var(--ok-soft); color: var(--ok); }
+.badge.exam.upsc { background: var(--primary-soft); color: var(--primary); }
+.badge.exam.rbi { background: var(--saffron-soft); color: var(--saffron); }

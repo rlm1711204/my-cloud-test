@@ -8,6 +8,7 @@ import { isBankId, loadBank } from "./lib/gkbank.js";
 import { ALL_TOPICS, CA, CA_TOPICS, SEP, TAXONOMY, topicKey } from "./lib/gk-taxonomy.js";
 import { findDuplicate, isFact, itemsToCSV, makeItem, textToItems } from "./lib/gk.js";
 import { buildTree, labelOf, nodeState, toggle } from "./lib/gk-topics.js";
+import { placeTitle, placeTrail } from "./lib/area.js";
 import { coverage, pickSession, recordAnswer, requeue, weakWords } from "./lib/practice.js";
 import { practiceReview, review, stage, stats, streak } from "./lib/srs.js";
 import { todayISO } from "./lib/words.js";
@@ -69,6 +70,14 @@ export function createGkUI(ctx) {
   }
   const cardHead = (it) => `<div class="rule-head">${topicBadge(it)}${it.bank ? ` <span class="badge bank">Question Bank</span>` : ""}${it.starred ? ' <span class="star">★</span>' : ""}</div>`;
 
+  /** The way into 📍 My Area (exam notes about where you are). */
+  function areaEntry() {
+    const a = gk.currentArea() || gk.get().areas[0];
+    const n = a ? Object.values(a.levels || {}).reduce((t, l) => t + (l.notes?.length || 0), 0) : 0;
+    return `<button class="card area-entry" type="button" data-nav="k-area"><span class="big-ico">📍</span><span><b>My Area${a ? ` · ${esc(placeTitle(a.place))}` : ""}</b>
+      <span class="muted small block">${a ? `${esc(placeTrail(a.place))}${n ? ` · ${plural(n, "note")}` : ""}` : "Exam notes about where you are: town, district, state and region — SSC to UPSC and RBI"}</span></span><span>›</span></button>`;
+  }
+
   // ---------- Today ----------
   function staleTopics(n = 3) {
     const pool = gk.itemsFor(prefs().dailySource);
@@ -91,7 +100,8 @@ export function createGkUI(ctx) {
             <button class="btn primary" type="button" data-action="k-set-source" data-src="mixed">🌍 Start with the built-in Question Bank (${gk.bankItems().length} questions)</button>
             <button class="btn" type="button" data-nav="k-add">➕ Add your own questions</button>
           </div>
-        </section>`;
+        </section>
+        ${areaEntry()}`;
     }
     const plan = gk.todaysPlan();
     const qotd = gk.byId(plan.wotd);
@@ -107,6 +117,7 @@ export function createGkUI(ctx) {
         <div class="streak" title="Days in a row with GK revision">🔥 ${streak(st.activity)}</div>
       </section>
       <div class="source-line"><label>Questions from ${sourceSelect("dailySource", source)}</label></div>
+      ${areaEntry()}
       <section class="stats">
         <div><b>${s.total}</b><span>questions</span></div>
         <div><b>${s.due}</b><span>due</span></div>
@@ -572,10 +583,10 @@ export function createGkUI(ctx) {
       }`;
   }
 
-  function startQuiz(kind, { weakOnly = false, topics = null } = {}) {
+  function startQuiz(kind, { weakOnly = false, topics = null, only = null } = {}) {
     const p = prefs();
-    const source = p.practiceSource;
-    let pool = topics ? gk.itemsFor(source).filter((i) => topics.some((t) => topicKey(i) === t || topicKey(i).startsWith(t + SEP))) : gk.itemsFor(source, { forPractice: true });
+    const source = only ? "mine" : p.practiceSource;
+    let pool = only ? gk.liveItems().filter((i) => only.has(i.id)) : topics ? gk.itemsFor(source).filter((i) => topics.some((t) => topicKey(i) === t || topicKey(i).startsWith(t + SEP))) : gk.itemsFor(source, { forPractice: true });
     let ids;
     if (weakOnly) ids = weakWords(pool, gk.get().practice).map((i) => i.id).slice(0, Number(p.practiceSize));
     else {
@@ -717,6 +728,7 @@ export function createGkUI(ctx) {
       ${search}
       ${crumbs}
       ${!node ? `<p class="muted small">Coverage map — the bar shows questions asked in this practice round (light) and mastered (dark).</p>` : ""}
+      ${!node ? areaEntry() : ""}
       ${
         kids.length
           ? `<ul class="topic-list">${kids
@@ -1212,5 +1224,7 @@ export function createGkUI(ctx) {
     },
     loadBank,
     isBankId,
+    /** Practise just these saved questions (e.g. the notes of one level of My Area). */
+    quizOn: (ids) => startQuiz("mixed", { only: new Set(ids) }),
   };
 }
