@@ -4,7 +4,7 @@ const calls = [];
 let reply = async () => ({ words: [], provider: "Gemini", skipped: [] });
 vi.mock("../src/lib/engine.js", async (orig) => ({ ...(await orig()), aiTask: (s, task) => (calls.push(task), reply(task)) }));
 
-const { gkFromFiles, gkFromText } = await import("../src/lib/gk-ai.js");
+const { gkFromFiles, gkFromText, gkFromTopic } = await import("../src/lib/gk-ai.js");
 const { AllProvidersFailed } = await import("../src/lib/engine.js");
 const S = { exam: "rbi" };
 const isList = (task) => task.schema.properties.items.items.required.length === 3;
@@ -31,7 +31,11 @@ describe("GK AI", () => {
       isList(task)
         ? { words: [{ q: "Who was appointed X in 2026?", a: "Y", options: [] }], provider: "Groq", skipped: [] }
         : { words: [card("Who was appointed X in 2026?", "Y", { category: "Current Affairs", sub: "Appointments", year: 2026, month: 3 })], provider: "Groq", skipped: [] };
-    const notes = "In March 2026, Y was appointed as X. The appointment was announced by the ministry after a long selection process involving several candidates from the banking sector and public life.";
+    const notes =
+      "In March 2026, Y was appointed as X. The appointment was announced by the ministry after a long selection process.\n" +
+      "Several candidates from the banking sector and public life were considered.\n" +
+      "The term is for three years, and the post was vacant for two months before the appointment was made.\n" +
+      "Y earlier headed a large public-sector bank.";
     const r = await gkFromText(S, notes);
     expect(calls.map(isList)).toEqual([true, false]);
     expect(r.items[0]).toMatchObject({ category: "Current Affairs", year: 2026, month: 3, sub: "Appointments" });
@@ -56,5 +60,74 @@ describe("GK AI", () => {
       throw new AllProvidersFailed([{ name: "Gemini", reason: "limit" }]);
     };
     await expect(gkFromFiles(S, [{ kind: "image", name: "p", mediaType: "image/jpeg", data: "x" }], "p")).rejects.toBeInstanceOf(AllProvidersFailed);
+  });
+});
+
+describe("GK AI: questions on a topic", () => {
+  const isPlan = (task) => "point" in task.schema.properties.items.items.properties;
+  const pointsOf = (task) => [...task.text.matchAll(/^- (.+) \((\d)\)$/gm)].map((m) => [m[1], Number(m[2])]);
+
+  it("covers EVERY item of a range: Articles 124 to 147 → one point per Article, written in batches", async () => {
+    reply = async (task) => {
+      if (isPlan(task)) {
+        expect(task.text).toMatch(/EVERY item from 124 to 147 as its own point \(24 points\)/);
+        const pts = Array.from({ length: 24 }, (_, i) => ({ point: `Article ${124 + i}`, questions: 1 }));
+        return { words: [...pts, { point: "Overview: Part V Chapter IV", questions: 3 }], provider: "Gemini", skipped: [] };
+      }
+      const words = pointsOf(task).flatMap(([p, n]) =>
+        Array.from({ length: n }, (_, k) => card(`What does ${p} provide for (fact ${k + 1})?`, `${p} answer ${k + 1}`, { category: "Polity", sub: "Judiciary" })),
+      );
+      return { words, provider: "Gemini", skipped: [] };
+    };
+    const r = await gkFromTopic(S, "Articles 124 to 147", "auto", null);
+    const asked = calls.filter((t) => !isPlan(t)).flatMap(pointsOf).map(([p]) => p);
+    for (let a = 124; a <= 147; a++) expect(asked).toContain(`Article ${a}`);
+    expect(calls.filter((t) => !isPlan(t)).every((t) => pointsOf(t).reduce((n, [, k]) => n + k, 0) <= 12)).toBe(true);
+    expect(r.items.length).toBe(27);
+    expect(r.items.every((i) => i.category === "Polity" && i.sub === "Judiciary" && !i.aiAnswered)).toBe(true);
+    expect(r.notes.join(" ")).toMatch(/27 questions .* covering 25 of 25 points/);
+  });
+
+  it("with a set number, groups neighbouring items so none is dropped", async () => {
+    reply = async (task) =>
+      isPlan(task)
+        ? { words: Array.from({ length: 24 }, (_, i) => ({ point: `Article ${124 + i}`, questions: 1 })), provider: "Gemini", skipped: [] }
+        : { words: pointsOf(task).map(([p]) => card(`About ${p}?`, p)), provider: "Gemini", skipped: [] };
+    const r = await gkFromTopic(S, "Articles 124 to 147", "10", null);
+    expect(calls[0].text).toMatch(/group neighbouring items/);
+    const pts = calls.slice(1).flatMap(pointsOf).map(([p]) => p);
+    expect(pts).toHaveLength(8); // 24 Articles, 3 per question
+    expect(pts.join(" / ")).toContain("Article 147");
+    expect(r.items).toHaveLength(8);
+  });
+
+  it("a typed topic or one sentence gets a full set; a pasted answer is read with no AI call", async () => {
+    reply = async (task) =>
+      isPlan(task)
+        ? { words: [{ point: "Harappan towns", questions: 2 }, { point: "Harappan seals", questions: 1 }], provider: "Gemini", skipped: [] }
+        : { words: [card("Which Harappan site had a dockyard?", "Lothal"), card("Great Bath was found at?", "Mohenjo-daro"), card("Harappan seals were mostly made of?", "Steatite")], provider: "Gemini", skipped: [] };
+    const r = await gkFromText(S, "Harappan civilisation");
+    expect(calls.map(isPlan)).toEqual([true, false]);
+    expect(r.items).toHaveLength(3);
+
+    calls.length = 0;
+    const pasted = "## History › Ancient India\nQ: Which Harappan site had a dockyard?\nA: Lothal\nO: Kalibangan; Banawali; Dholavira\nE: In Gujarat.\nT: Lothal = Loads of boats.\n\nQ: Who discovered Harappa?\nA: Daya Ram Sahni";
+    reply = async () => ({ words: [card("Who discovered Harappa?", "Daya Ram Sahni", { category: "History", sub: "Ancient India" })], provider: "Gemini", skipped: [] });
+    const p = await gkFromText(S, pasted);
+    expect(calls).toHaveLength(1); // only the incomplete second question goes to the AI
+    expect(p.items[0]).toMatchObject({ q: "Which Harappan site had a dockyard?", a: "Lothal", category: "History", sub: "Ancient India", trick: "Lothal = Loads of boats." });
+    expect(p.items[1]).toMatchObject({ a: "Daya Ram Sahni", trick: "Remember it." });
+  });
+
+  it("keeps what was written when the AI stops part-way, and says what is missing", async () => {
+    let n = 0;
+    reply = async (task) => {
+      if (isPlan(task)) return { words: Array.from({ length: 20 }, (_, i) => ({ point: `Point p${i}`, questions: 1 })), provider: "Gemini", skipped: [] };
+      if ((n += 1) > 1) throw new AllProvidersFailed([{ name: "Gemini", reason: "limit" }]);
+      return { words: pointsOf(task).map(([p]) => card(`Q on ${p}?`, p)), provider: "Gemini", skipped: [] };
+    };
+    const r = await gkFromTopic(S, "Some topic", "auto", null);
+    expect(r.items).toHaveLength(12);
+    expect(r.notes.join(" ")).toMatch(/8 point\(s\) were not covered/);
   });
 });

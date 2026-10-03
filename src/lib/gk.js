@@ -77,7 +77,7 @@ const tokens = (s) =>
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ")
       .split(/\s+/)
-      .filter((w) => w.length > 1 && !STOP.has(w)),
+      .filter((w) => (w.length > 1 || /\d/.test(w)) && !STOP.has(w)), // single digits count: "Schedule 1" ≠ "Schedule 2"
   );
 export const answerKey = (a) => String(a || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 

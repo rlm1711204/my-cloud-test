@@ -2,7 +2,8 @@
 // question cards, flashcards, practice quiz, editor and backups. main.js owns the shell and passes `ctx`.
 import * as gk from "./lib/gk-store.js";
 import { GK_KINDS, makeGkQuestion } from "./lib/gk-quiz.js";
-import { gkFromFiles, gkFromText, completeItem } from "./lib/gk-ai.js";
+import { gkFromFiles, gkFromText, gkFromTopic, completeItem } from "./lib/gk-ai.js";
+import { autoCount, buildGkPrompt, isTopicLike, looksStructured, readPasted, topicRange } from "./lib/gk-prompt.js";
 import { isBankId, loadBank } from "./lib/gkbank.js";
 import { ALL_TOPICS, CA, CA_TOPICS, SEP, TAXONOMY, topicKey } from "./lib/gk-taxonomy.js";
 import { findDuplicate, isFact, itemsToCSV, makeItem, textToItems } from "./lib/gk.js";
@@ -24,6 +25,9 @@ export function createGkUI(ctx) {
     busy: null,
     candidates: null,
     typedDraft: "",
+    topicDraft: "",
+    topicCount: "auto",
+    copied: false, // the prompt was copied: show what to do next
     quiz: null,
     session: null,
     search: "",
@@ -167,15 +171,93 @@ export function createGkUI(ctx) {
           <span class="big-ico">🖼️</span><b>Upload screenshot / PDF</b><span>Monthly current affairs PDFs work too</span>
         </label>
       </div>
-      <article class="card">
-        <h3>✍️ Type or paste questions</h3>
-        <p class="muted small">Any of these formats: <code>Q: … A: …</code> · <code>Capital of Japan - Tokyo</code> ·
+      ${topicCard(ai)}
+      <article class="card" id="kPasteCard">
+        <h3>✍️ Type or paste questions${gui.copied ? " — paste the AI's answer here" : ""}</h3>
+        ${
+          gui.copied
+            ? `<p class="tip"><strong>Next step</strong>Paste the prompt in Gemini or ChatGPT, copy its <b>whole</b> answer, paste it below and tap the button. Every question is read with its topic, options, explanation and trick.</p>`
+            : ""
+        }
+        <p class="muted small">Any of these formats: <code>Q: … A: …</code> (an AI's answer from the copied prompt) · <code>Capital of Japan - Tokyo</code> ·
         <code>Who wrote Godan? Premchand</code> · numbered MCQs with <code>(a) … (b) …</code> and <code>Ans: (b)</code> ·
-        or plain facts and news${ai ? " (AI turns them into questions)" : ""}.</p>
+        or plain facts and news${ai ? " (AI turns every fact into a question; a single topic or sentence gets a full set of questions)" : ""}.</p>
         <textarea id="kTyped" rows="7" placeholder="1. Who founded the Indian National Congress?&#10;(a) Dadabhai Naoroji (b) A. O. Hume (c) W. C. Bonnerjee (d) Tilak&#10;Ans: (b)&#10;&#10;Capital of Australia - Canberra&#10;&#10;In 2026, India hosted …">${esc(gui.typedDraft)}</textarea>
         <button class="btn primary block" type="button" data-action="k-typed">Check & prepare questions</button>
       </article>
       <p class="muted small">Questions you already have are recognised even when worded differently, and never added twice.</p>`;
+  }
+
+  const COUNT_CHOICES = [
+    ["auto", "Auto — cover everything"],
+    ["10", "10 questions"],
+    ["20", "20 questions"],
+    ["30", "30 questions"],
+    ["50", "50 questions"],
+  ];
+
+  function topicCard(ai) {
+    const r = topicRange(gui.topicDraft);
+    return `
+      <article class="card">
+        <h3>💡 Questions on a topic</h3>
+        <p class="muted small">Write a topic, a range or one fact — every part of it gets its own questions. A range like
+        <i>Articles 124 to 147</i> gets at least one question for every Article.</p>
+        <textarea id="kTopic" rows="2" placeholder="e.g. Articles 124 to 147 (Supreme Court) · Harappan civilisation · RBI monetary policy tools · Nobel Prizes 2025">${esc(gui.topicDraft)}</textarea>
+        <label class="field">How many
+          <select id="kCount">${COUNT_CHOICES.map(([v, l]) => `<option value="${v}" ${gui.topicCount === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+        </label>
+        <p class="muted small" id="kTopicHint">${r ? `Range found: ${r.from}–${r.to} (${r.size} items) → Auto makes about ${autoCount(gui.topicDraft)} questions.` : ""}</p>
+        <div class="stack">
+          ${ai ? `<button class="btn primary block" type="button" data-action="k-topic-make">🤖 Make the questions here</button>` : ""}
+          <button class="btn block" type="button" data-action="k-copy-prompt">📋 Copy prompt for Gemini / ChatGPT</button>
+        </div>
+        <p class="muted small">${ai ? "Or use" : "No AI key needed:"} copy the prompt, paste it in
+          <a href="https://gemini.google.com/app" target="_blank" rel="noopener">Gemini</a> or
+          <a href="https://chatgpt.com/" target="_blank" rel="noopener">ChatGPT</a>, then paste its answer in the box below.</p>
+      </article>`;
+  }
+
+  async function copyPrompt() {
+    const topic = ($("#kTopic")?.value ?? gui.topicDraft).trim();
+    gui.topicDraft = topic;
+    if (!topic) return toast("Write a topic first (e.g. Articles 124 to 147).");
+    const text = buildGkPrompt({ topic, count: gui.topicCount });
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      /* clipboard blocked: show it to copy by hand */
+    }
+    gui.copied = true;
+    if (ok) {
+      toast("Prompt copied ✓ — paste it in Gemini or ChatGPT", 5000);
+      render();
+      $("#kPasteCard")?.scrollIntoView({ block: "start" });
+    } else {
+      openOverlay(`
+        <div class="sheet-bar"><h3>Copy this prompt</h3><button class="icon-btn" type="button" data-action="close" aria-label="Close">✕</button></div>
+        <p class="muted small">Press and hold in the box → Select all → Copy. Then paste it in Gemini or ChatGPT.</p>
+        <textarea id="kPromptText" rows="14" readonly>${esc(text)}</textarea>`);
+      $("#kPromptText")?.select();
+    }
+  }
+
+  async function handleTopic() {
+    const topic = ($("#kTopic")?.value ?? gui.topicDraft).trim();
+    gui.topicDraft = topic;
+    if (!topic) return toast("Write a topic first (e.g. Articles 124 to 147).");
+    setBusy(`Planning questions on “${topic.slice(0, 60)}”…`);
+    try {
+      const res = await gkFromTopic(settings(), topic, gui.topicCount, setBusy);
+      gui.busy = null;
+      showCandidates(res.items, res);
+    } catch (e) {
+      gui.busy = null;
+      toast(e instanceof AllProvidersFailed ? `The AI couldn't make questions right now: ${e.message}. Try “Copy prompt” instead.` : e.message || String(e), 8000);
+    }
+    if (view() === "k-add") render();
   }
 
   const topicOptions = (it) => {
@@ -242,6 +324,7 @@ export function createGkUI(ctx) {
   }
 
   async function freeItems(text, source) {
+    if (looksStructured(text)) return readPasted(text).map((x) => ({ ...x, source: source === "Typed" ? "Pasted" : source }));
     return textToItems(text).map((x) => ({ ...x, source }));
   }
 
@@ -296,8 +379,17 @@ export function createGkUI(ctx) {
           ai = { usedBy: [], notes: [e.message], failed: 0 };
         }
       }
+      if (!items && isTopicLike(text, textToItems(text))) {
+        // Free mode can't write questions itself: offer the copy-prompt route with this topic.
+        gui.busy = null;
+        gui.topicDraft = text.trim();
+        toast("That looks like a topic. Tap “📋 Copy prompt” and paste it in Gemini or ChatGPT to get a full set of questions.", 8000);
+        if (view() === "k-add") render();
+        return;
+      }
       items ??= await freeItems(text, "Typed");
       gui.busy = null;
+      if (gui.copied && items.length) gui.copied = false;
       showCandidates(items, ai);
     } catch (e) {
       gui.busy = null;
@@ -740,6 +832,8 @@ export function createGkUI(ctx) {
       }
     },
     "k-typed": () => handleTyped(),
+    "k-topic-make": () => handleTopic(),
+    "k-copy-prompt": () => copyPrompt(),
     "k-cancel": () => {
       gui.candidates = null;
       render();
@@ -898,6 +992,10 @@ export function createGkUI(ctx) {
       render();
       return true;
     }
+    if (t.id === "kCount") {
+      gui.topicCount = t.value;
+      return true;
+    }
     if (t.dataset.kcand != null) {
       gui.candidates.items[Number(t.dataset.kcand)].selected = t.checked;
       render();
@@ -919,6 +1017,13 @@ export function createGkUI(ctx) {
   }
 
   function onInput(e) {
+    if (e.target.id === "kTopic") {
+      gui.topicDraft = e.target.value;
+      const r = topicRange(gui.topicDraft);
+      const hint = $("#kTopicHint");
+      if (hint) hint.textContent = r ? `Range found: ${r.from}–${r.to} (${r.size} items) → Auto makes about ${autoCount(gui.topicDraft)} questions.` : "";
+      return true;
+    }
     if (e.target.id === "kSearch") {
       gui.search = e.target.value;
       render();

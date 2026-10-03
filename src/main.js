@@ -342,6 +342,7 @@ function checkKeysInBackground() {
     if ($("#typed")) ui.typedDraft = $("#typed").value;
     if ($("#gTyped")) grammar.gui.typedDraft = $("#gTyped").value;
     if ($("#kTyped")) gkui.gui.typedDraft = $("#kTyped").value;
+    if ($("#kTopic")) gkui.gui.topicDraft = $("#kTopic").value;
     const y = window.scrollY;
     render();
     window.scrollTo(0, y);
@@ -1671,6 +1672,7 @@ function go(v) {
   if (view === "add" && v !== "add" && $("#typed")) ui.typedDraft = $("#typed").value;
   if (view === "g-add" && v !== "g-add" && $("#gTyped")) grammar.gui.typedDraft = $("#gTyped").value;
   if (view === "k-add" && v !== "k-add" && $("#kTyped")) gkui.gui.typedDraft = $("#kTyped").value;
+  if (view === "k-add" && v !== "k-add" && $("#kTopic")) gkui.gui.topicDraft = $("#kTopic").value;
   const sec = sectionOf(v);
   if (sec && sec !== ui.section) ui.section = sec;
   if (sec && settings().lastSection !== sec) store.update((s) => (s.settings.lastSection = sec), { touchesData: false });

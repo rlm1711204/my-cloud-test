@@ -74,6 +74,11 @@ scripts/brand-build.mjs   generates the icon + manifest from brand.js at build t
   round, topics interleaved). `prefs.excluded` holds left-out topic keys; `gk-topics.js` handles ticking/unticking.
 - Question Bank `src/data/gk1-4.js` (311 questions), ids `qb:<slug>`, progress-only storage like the Word Bank. No current
   affairs on purpose.
+- Questions on a topic (`gkFromTopic` in gk-ai.js): a plan step lists the points (every item of a numbered range, see
+  `topicRange` in gk-prompt.js), then cards are written 12 at a time with the questions so far passed as "do not repeat".
+  A single typed line with no answer takes this route too. `buildGkPrompt` makes the copy-paste prompt for chat AIs;
+  `readPasted` reads its answer (Q:/A:/O:/E:/T: under "## Subject › Chapter" headings, forgiving bold/numbering) plus any
+  other formats around it. Complete pasted questions need no AI call.
 - AI (`gk-ai.js`): list questions (facts → questions), then cards 10 at a time with category/sub/year/month/options/
   explain/trick; `aiAnswered` marks answers the AI supplied. Cards are checked to match the question asked.
 
