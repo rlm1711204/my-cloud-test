@@ -217,6 +217,11 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 
 /* ---------- word card ---------- */
 .whead { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.whead > div:first-child { flex: 1; min-width: 0; }
+.wword.fit { white-space: nowrap; overflow-wrap: normal; }
+.wword.fit.wrap { white-space: normal; overflow-wrap: break-word; }
+.whead.stack { flex-wrap: wrap; }
+.whead.stack > div:first-child { flex-basis: 100%; }
 .wword { font: 700 1.5rem/1.15 var(--serif); margin: 4px 0; overflow-wrap: anywhere; }
 .whead.big .wword { font-size: 2.1rem; }
 .wsub { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--ink-2); font-size: .9rem; }

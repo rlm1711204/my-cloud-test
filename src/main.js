@@ -132,11 +132,50 @@ const ui = {
 const infoBtn = (id, label = "Full details") =>
   `<button class="icon-btn info-btn" type="button" data-action="info" data-id="${esc(id)}" aria-label="${esc(label)}" title="${esc(label)}">ⓘ</button>`;
 
+/**
+ * Big headwords stay on one line: the font shrinks just enough for the word to fit beside its buttons (down to a
+ * readable minimum). A long phrase that still doesn't fit wraps between words, never inside a word.
+ */
+function fitHeadwords(root = document) {
+  const over = (el) => el.scrollWidth > el.clientWidth + 1;
+  const shrink = (el, base, min) => {
+    let size = over(el) ? Math.max(min, Math.floor((base * el.clientWidth) / el.scrollWidth)) : base;
+    el.style.fontSize = `${size}px`;
+    while (over(el) && size > min) el.style.fontSize = `${--size}px`;
+  };
+  for (const el of root.querySelectorAll(".wword.fit")) {
+    const head = el.closest(".whead");
+    el.style.fontSize = "";
+    el.classList.remove("wrap");
+    head?.classList.remove("stack");
+    if (!el.clientWidth) continue; // hidden (e.g. the back of a flashcard): fitted when shown
+    const base = parseFloat(getComputedStyle(el).fontSize);
+    const phrase = /\s/.test(el.textContent.trim());
+    // A phrase may wrap between its words; a single word may shrink further so it is never split.
+    shrink(el, base, Math.min(base, phrase ? 22 : 15));
+    if (!over(el)) continue;
+    if (!phrase && head) {
+      // A very long single word: give it the full width and put the buttons on the next row.
+      head.classList.add("stack");
+      el.style.fontSize = "";
+      shrink(el, base, Math.min(base, 15));
+      if (!over(el)) continue;
+    }
+    el.classList.add("wrap");
+  }
+}
+document.fonts?.ready.then(() => fitHeadwords()); // the serif font arriving changes widths
+let fitTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(() => fitHeadwords(), 150);
+});
+
 function wordHead(w, { big = false, info = false } = {}) {
   return `
     <div class="whead ${big ? "big" : ""}">
       <div>
-        <h2 class="wword">${esc(w.word)}${w.starred ? ' <span class="star" title="Starred">★</span>' : ""}</h2>
+        <h2 class="wword ${big ? "fit" : ""}">${esc(w.word)}${w.starred ? ' <span class="star" title="Starred">★</span>' : ""}</h2>
         <div class="wsub">
           ${w.pos ? `<span class="pos">${esc(w.pos)}</span>` : ""}
           ${w.say ? `<span class="say">${esc(w.say)}</span>` : ""}
@@ -966,6 +1005,7 @@ function openOverlay(html, { tall = false, full = false } = {}) {
   o.innerHTML = `<div class="sheet ${tall ? "tall" : ""} ${full ? "full" : ""} ${wasOpen ? "no-anim" : ""}" role="dialog" aria-modal="true">${html}</div>`;
   o.classList.add("open");
   document.body.classList.add("no-scroll");
+  fitHeadwords(o);
 }
 function closeOverlay() {
   const o = $("#overlay");
@@ -1846,6 +1886,7 @@ function render() {
   const main = $("#view");
   const searchFocused = document.activeElement?.id === "search";
   main.innerHTML = VIEWS[view]();
+  fitHeadwords(main);
   const anyAdding = ui.busy || ui.candidates || grammar.gui.busy || grammar.gui.candidates || gkui.gui.busy || gkui.gui.candidates || QPARTS.some((q) => q.ui.gui.busy || q.ui.gui.candidates);
   if (["settings", "add", "g-add", "k-add", "m-add", "r-add"].includes(view) && !anyAdding) {
     checkKeysInBackground();
